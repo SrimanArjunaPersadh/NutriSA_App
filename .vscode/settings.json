@@ -3,5 +3,7 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "mobile-preview.url": "http://localhost:8081",
+  "mobile-preview.device": "iPhone 15"
 }
