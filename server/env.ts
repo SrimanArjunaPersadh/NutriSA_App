@@ -4,6 +4,13 @@ import { config } from "dotenv";
 // EXPO_PUBLIC_* vars, so client and server share it.
 config({ path: ".env" });
 
+/**
+ * Retrieves a required environment variable.
+ *
+ * @param name - The environment variable name
+ * @returns The environment variable value
+ * @throws If the environment variable is missing or empty
+ */
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {

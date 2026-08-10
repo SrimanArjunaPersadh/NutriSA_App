@@ -14,10 +14,9 @@ import { BarsIcon, InsightIcon, TargetIcon } from "@/components/icons/FeatureIco
 type Provider = "oauth_google" | "oauth_apple"
 
 /**
- * Vertical rhythm below is traced from src/design/auth_ui_design.png. The
- * reference render is ~910pt tall against 852pt on an iPhone 15 Pro, so every
- * gap from the wordmark down is fixed and the photo area above it absorbs the
- * difference via the flex-1 spacer.
+ * Renders the branded sign-in screen with Google and Apple authentication options.
+ *
+ * @returns The sign-in screen UI.
  */
 export default function SignIn() {
   const insets = useSafeAreaInsets()
@@ -169,6 +168,15 @@ export default function SignIn() {
   )
 }
 
+/**
+ * Renders an accessible social authentication button with an icon and loading state.
+ *
+ * @param label - The button's visible and accessible label
+ * @param icon - The icon displayed beside the label
+ * @param busy - Whether to show a loading indicator instead of the label
+ * @param disabled - Whether the button cannot be pressed
+ * @param className - Additional styling classes
+ */
 function SocialButton({
   label,
   icon,
@@ -207,6 +215,12 @@ function SocialButton({
   )
 }
 
+/**
+ * Renders a feature highlight with an icon and descriptive label.
+ *
+ * @param icon - The visual icon for the feature
+ * @param label - The feature description displayed below the icon
+ */
 function Feature({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <View className="flex-1 items-center">

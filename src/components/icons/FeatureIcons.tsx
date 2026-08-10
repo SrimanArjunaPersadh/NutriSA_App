@@ -21,7 +21,11 @@ const BLOOM_OPACITY = 0.22
 
 type IconProps = { size?: number; color?: string }
 
-/** Renders `shapes` twice: a wide translucent bloom, then the crisp icon. */
+/**
+ * Renders an SVG icon with a translucent bloom effect and a crisp foreground stroke.
+ *
+ * @param shapes - Function that produces the icon shapes for a given stroke width
+ */
 function Bloomed({
   size,
   color,
@@ -41,7 +45,12 @@ function Bloomed({
   )
 }
 
-/** "Track with precision" — crosshair with a ringed centre. */
+/**
+ * Renders a crosshair icon with a ringed center.
+ *
+ * @param size - The icon size in pixels
+ * @param color - The icon stroke color
+ */
 export function TargetIcon({ size = 22, color = FEATURE_PURPLE }: IconProps) {
   return (
     <Bloomed
@@ -78,7 +87,11 @@ export function BarsIcon({ size = 22, color = FEATURE_TEAL }: IconProps) {
   )
 }
 
-/** "Make better decisions" — a display on a stand with an idea on screen. */
+/**
+ * Renders an amber monitor icon with an idea symbol, stand, and base line.
+ *
+ * @returns The rendered insight icon.
+ */
 export function InsightIcon({ size = 22, color = FEATURE_AMBER }: IconProps) {
   return (
     <Bloomed

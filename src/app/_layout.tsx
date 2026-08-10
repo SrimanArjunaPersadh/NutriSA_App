@@ -33,6 +33,11 @@ if (!publishableKey) {
 
 void SplashScreen.preventAutoHideAsync();
 
+/**
+ * Renders the application root layout with loaded fonts, authentication, safe-area support, and navigation.
+ *
+ * @returns The root application layout.
+ */
 function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Barlow_400Regular,

@@ -2,6 +2,11 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth, useClerk, useUser } from "@clerk/expo";
 
+/**
+ * Displays the authentication entry screen and signed-in NutriSA landing screen.
+ *
+ * @returns A loading indicator while authentication loads, a redirect for signed-out users, or the signed-in landing screen.
+ */
 export default function Index() {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
