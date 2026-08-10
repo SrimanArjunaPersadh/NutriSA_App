@@ -3,12 +3,9 @@ import { Redirect, Stack } from "expo-router";
 import { useAuth } from "@clerk/expo";
 
 /**
- * Keeps signed-in users out of the auth screens. Without this guard a signed-in
- * user who deep-links to /sign-in lands on a sign-in form they can't use.
+ * Manages access to authentication screens based on the current authentication state.
  *
- * `isLoaded` is checked before `isSignedIn` on purpose: Clerk needs a moment to
- * restore the session from the token cache, and reading `isSignedIn` early
- * flashes this screen on every cold start.
+ * @returns A loading placeholder while authentication initializes, a redirect for signed-in users, or the authentication screen stack.
  */
 export default function AuthLayout() {
   const { isLoaded, isSignedIn } = useAuth();

@@ -1,6 +1,11 @@
 import Svg, { Path } from "react-native-svg"
 
-/** Google's four-colour "G". Official mark — do not recolour. */
+/**
+ * Renders Google's four-color “G” logo using its official colors.
+ *
+ * @param size - The width and height of the icon in pixels.
+ * @returns The rendered Google logo.
+ */
 export function GoogleIcon({ size = 28 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">
@@ -24,7 +29,13 @@ export function GoogleIcon({ size = 28 }: { size?: number }) {
   )
 }
 
-/** Apple mark, 21×26 in the reference (glyph is taller than it is wide). */
+/**
+ * Renders an Apple logo.
+ *
+ * @param height - The rendered logo height.
+ * @param color - The logo fill color.
+ * @returns The Apple logo SVG element.
+ */
 export function AppleIcon({ height = 26, color = "#000000" }: { height?: number; color?: string }) {
   return (
     <Svg width={height * 0.814} height={height} viewBox="0 0 814 1000">
@@ -36,7 +47,13 @@ export function AppleIcon({ height = 26, color = "#000000" }: { height?: number;
   )
 }
 
-/** Small chevron after "Continue with email" — 4.6×9.2pt of ink in the reference. */
+/**
+ * Renders a right-pointing chevron icon.
+ *
+ * @param size - The icon height; its width scales proportionally.
+ * @param color - The chevron stroke color.
+ * @returns The rendered chevron icon.
+ */
 export function ChevronRight({ size = 11, color = "#1A7CFC" }: { size?: number; color?: string }) {
   return (
     <Svg width={size * 0.6} height={size} viewBox="0 0 6 10">
