@@ -6,11 +6,17 @@ useful. Full reasoning behind every decision lives in the spec:
 
 **Workflow:** one feature per branch, one fresh session per branch, all git run manually.
 
-**Status:** Phase 0 in progress · Phases 1–12 not started · v1.1 deferred
+**Status (2026-08-11):** Phase 0 all but done · Phase 1 started (deps + Clerk-mirror
+schema; engine not begun) · **Phase 3 auth shipped early and verified on device** ·
+Phases 2, 4–12 not started · v1.1 deferred
 
-**Auth summary:** Phase 2 = server-side Clerk middleware (no UI). Phase 3 = the login
-screen, Google only, free in Expo Go. Phase 12 = Apple sign-in, gated behind the $99
-Apple Developer fee. Phases 1–2 have no login screen because they have no client.
+**Auth summary — revised 2026-08-11, this supersedes the original plan.** Google **and
+Apple** both ship in Phase 3, on **one** sign-in screen, via Clerk's `useSSO()` browser
+flow in Expo Go. Apple did **not** need the $99 Apple Developer account: that fee buys
+the *native* Apple sheet (`expo-apple-authentication`), not the ability to offer Apple
+sign-in. Phase 12 is therefore a UX upgrade, not the gate on having Apple auth. Phase 2
+is still server-side Clerk middleware with no UI; Phases 1–2 have no login screen
+because they have no client.
 
 ---
 
@@ -65,13 +71,24 @@ No code. Blocks Phase 1.
       before the Expo Go binary clears Apple review — SDK 57's was still in the queue.
       `eas go` builds a personal Expo Go for a newer SDK but needs the paid Apple account,
       i.e. Phase 12. **The device decides the SDK, not `docs.expo.dev/versions/latest`.**
-- [ ] Create Clerk account (Google sign-in), copy the user id
-- [ ] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit)
-- [ ] Create Neon project, add `DATABASE_URL` to `.env`
+- [x] Create Clerk account (Google sign-in), copy the user id — development instance
+      `glowing-joey-19`, with **both** Google and Apple social connections enabled
+      (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
+- [x] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit)
+- [x] Create Neon project, add `DATABASE_URL` to `.env`
 - [ ] Confirm current macro targets — assumed **2300 kcal / 167P / 195C / 60F**
+      *(still open — see Open questions; blocks the Phase 1 migration)*
 - [ ] Set **$10/month hard spend cap** in the Anthropic Console
-- [ ] Verify `.env` is gitignored
+- [x] Verify `.env` is gitignored — `.gitignore:12`, re-confirmed 2026-08-11
 - [ ] Export the Supabase data (all 5 tables) and keep a local backup before touching anything
+
+> ⚠️ **The two env ticks above are on Sriman's word, not verified.** Reading `.env` on
+> 2026-08-11, only `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `INNGEST_DEV`
+> and `SENTRY_AUTH_TOKEN` carried values. `DATABASE_URL`, `CLERK_WEBHOOK_SIGNING_SECRET`,
+> `OPENAI_API_KEY` and the `IMAGEKIT_*` keys all read empty, and there was no
+> `MIGRATION_TARGET_USER_ID` line at all. **Nothing in Phase 1 can run without
+> `DATABASE_URL` and `MIGRATION_TARGET_USER_ID`** — check the file before starting the
+> migration rather than trusting these ticks.
 
 ---
 
@@ -82,11 +99,24 @@ byte-for-byte against the oracle. No auth, no server, no UI, no spend.
 
 ### Housekeeping
 - [x] Investigate and remove the stray `src/node_modules/` — gone as of the SDK 57 upgrade
-- [ ] Install Vitest, Drizzle, `drizzle-kit`, `@neondatabase/serverless`, `tsx`
+- [x] Install Drizzle, `drizzle-kit`, `@neondatabase/serverless`, `tsx` —
+      `drizzle-orm` 0.45.2, `drizzle-kit` 0.31.10, `@neondatabase/serverless` 1.1.0,
+      `tsx` 4.23.11. `drizzle.config.ts` points at `server/db/schema.ts`
+- [ ] **Install Vitest** — still absent from `package.json`. The `npx vitest` merge gate
+      below currently has nothing to run, so "engine suite green" cannot be satisfied
 - [ ] Create `packages/engine/` (pure TS, zero runtime deps) and `packages/shared/`
+      *(neither directory exists yet)*
 - [ ] Wire path aliases in `tsconfig.json` so client and server can both import them
+      *(`tsconfig.json` currently defines only `@/*` and `@/assets/*`)*
 
-### Schema — `db/schema.ts`
+### Schema — `server/db/schema.ts`
+
+Only one table exists so far, and it wasn't on this list: it arrived with the Clerk
+webhook work rather than the migration work. Every table below is still unwritten.
+
+- [x] `users` — Clerk mirror: `clerk_id` PK, email, first/last name, image_url,
+      created_at, updated_at. Migration `0000_young_thunderball.sql` is **generated but
+      not applied** — `drizzle-kit migrate` needs a real `DATABASE_URL`
 - [ ] `weight_logs` — id, user_id, date, weight, created_at
 - [ ] `meal_logs` — header totals + `items jsonb`, index on `(user_id, date)`
 - [ ] `custom_meals` — same header + jsonb items shape, keys aligned to `meal_logs`
