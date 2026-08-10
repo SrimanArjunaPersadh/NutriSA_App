@@ -6,11 +6,7 @@ useful. Full reasoning behind every decision lives in the spec:
 
 **Workflow:** one feature per branch, one fresh session per branch, all git run manually.
 
-**Status:** Phase 0 in progress · Phases 1–12 not started · v1.1 deferred
-
-**Auth summary:** Phase 2 = server-side Clerk middleware (no UI). Phase 3 = the login
-screen, Google only, free in Expo Go. Phase 12 = Apple sign-in, gated behind the $99
-Apple Developer fee. Phases 1–2 have no login screen because they have no client.
+**Status:** Phase 0 in progress · Phases 1–11 not started · v1.1 deferred
 
 ---
 
@@ -29,9 +25,6 @@ Copy this block into each branch's review before merging.
 - [ ] **New user-scoped table?** Add it to the POPIA deletion cascade *and* the export
       in the same branch. A table that escapes the cascade is a silent legal hole.
 - [ ] **Any real bodyweight entering a committed fixture gets −9.0kg first.**
-- [ ] **ImageKit is for stored, displayed images only.** It is never in the label-OCR
-      path. OCR photos are captured, sent to the model, and discarded — never uploaded,
-      never retained. Private keys stay server-side; only the URL endpoint reaches the client.
 - [ ] Engine test suite green before merge.
 
 ### Design tokens (fixed)
@@ -57,14 +50,6 @@ Typography: **Barlow Condensed 800 italic** for stats and titles, **Barlow 400�
 
 No code. Blocks Phase 1.
 
-- [x] **SDK 57 upgrade attempted and reverted — 2026-08-10.** It typechecked clean and
-      passed `expo-doctor` 20/20, then died on the device: *"Project is incompatible with
-      this version of Expo Go."*
-      **The lesson, which outranks the docs: App Store Expo Go supports exactly one SDK at
-      a time, and the iPhone reports SDK 54.** Newer SDKs ship on npm and in the docs long
-      before the Expo Go binary clears Apple review — SDK 57's was still in the queue.
-      `eas go` builds a personal Expo Go for a newer SDK but needs the paid Apple account,
-      i.e. Phase 12. **The device decides the SDK, not `docs.expo.dev/versions/latest`.**
 - [ ] Create Clerk account (Google sign-in), copy the user id
 - [ ] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit)
 - [ ] Create Neon project, add `DATABASE_URL` to `.env`
@@ -81,7 +66,7 @@ No code. Blocks Phase 1.
 byte-for-byte against the oracle. No auth, no server, no UI, no spend.
 
 ### Housekeeping
-- [x] Investigate and remove the stray `src/node_modules/` — gone as of the SDK 57 upgrade
+- [ ] Investigate and remove the stray `src/node_modules/` (breaks Metro later)
 - [ ] Install Vitest, Drizzle, `drizzle-kit`, `@neondatabase/serverless`, `tsx`
 - [ ] Create `packages/engine/` (pure TS, zero runtime deps) and `packages/shared/`
 - [ ] Wire path aliases in `tsconfig.json` so client and server can both import them
@@ -169,14 +154,9 @@ byte-for-byte against the oracle. No auth, no server, no UI, no spend.
 - [ ] Barlow + Barlow Condensed via `expo-font`
 - [ ] Theme module with the fixed token table — dark-first, **no light theme, no toggle**
 - [ ] Four bottom tabs: Dashboard, Nutrition, Weight, Library
-- [x] Clerk provider + secure token cache
-- [x] **Google sign-in working in Expo Go** — verified on device 2026-08-10
-- [x] **Apple sign-in working in Expo Go** — verified the same day, via Clerk browser
-      SSO. Did not need the $99 account; see the answered open question below
-- [x] Signed-out screen and sign-in flow
-- [x] Build the sign-in screen with room for a second provider button — both
-      providers shipped together, so no second pass is needed
-- [ ] Sign-out, and a signed-out state that doesn't leak cached health data
+- [ ] Clerk provider + secure token cache
+- [ ] **Google sign-in working in Expo Go** ⚠️ *unverified assumption — validate here*
+- [ ] Signed-out screen and sign-in flow
 - [ ] React Query provider + typed API client using the shared schemas
 - [ ] Shared state components: `<Empty>`, `<Loading>`, `<ErrorState>` — reused everywhere
 - [ ] Verify 44×44px targets and thumb reach on the real device, one-handed
@@ -261,8 +241,7 @@ byte-for-byte against the oracle. No auth, no server, no UI, no spend.
       (`output_config.format`), no thinking config (Haiku 4.5 has no adaptive thinking)
 - [ ] **Synchronous — documented exception to enqueue-only.** Note the reason in code.
 - [ ] Hard 15s server-side timeout (Vercel Hobby ceiling is 60s)
-- [ ] **Photo is ephemeral** — sent, extracted, discarded. Never uploaded to ImageKit,
-      never retained. ImageKit is stack, but it is not in this path — see standing rules.
+- [ ] **Photo is ephemeral** — sent, extracted, discarded. No ImageKit, no retention.
 - [ ] Write to `ai_usage` with `feature='ocr'`
 - [ ] Log OCR p50/p95 latency and failure rate to Sentry
 - [ ] **On any failure → manual entry with the photo still on screen and partial
@@ -356,35 +335,6 @@ Largest cost risk in the app.
 
 ---
 
-## Phase 12 — `apple-signin-and-dev-client`
-
-**Goal:** the second half of the stated v1 auth requirement — Google **and** Apple.
-
-Listed last because it's the first thing that costs money, not because it's least
-important. **Pull it forward the moment you pay the $99** — it has no dependency on
-Phases 4–11 and could run straight after Phase 3.
-
-- [ ] Pay the Apple Developer Program fee ($99/yr)
-- [ ] Check the current EAS free-tier build allowance at expo.dev/pricing
-      *(Expo's docs don't state it; the "15/month" figure is third-party and unverified)*
-- [ ] Configure the Sign in with Apple capability + Clerk's Apple provider
-      *(Clerk's Apple provider is already enabled and working via browser SSO as of
-      2026-08-10 — what's left here is the native capability, not the provider)*
-- [ ] `expo-apple-authentication` — **does not work in Expo Go**, needs the entitlement.
-      This is the only reason Apple still appears in Phase 12: it upgrades the working
-      browser flow to a native sheet. Apple sign-in itself already ships in Phase 3.
-- [ ] Build a custom dev client via EAS Build, install on the iPhone 15
-- [ ] Confirm Metro iteration still works against the dev client (no rebuild unless
-      native deps change — budget one build per new native dependency)
-- [ ] Apple sign-in working end to end on device
-- [ ] Both providers resolve to the same Clerk user where the email matches —
-      verify you don't end up with two accounts and a split history
-- [ ] Re-test every camera surface on the dev client (different runtime from Expo Go)
-- [ ] Apple's account-deletion requirement: confirm the Phase 11 delete flow is
-      reachable in-app, since App Store review demands it for accounts created in-app
-
----
-
 ## v1.1 — `offline-queue` (deferred)
 
 Only after v1.0 is in daily use.
@@ -409,9 +359,9 @@ Only after v1.0 is in daily use.
 | Adaptive TDEE recalc (weekly Inngest job) | 3+ weeks logging in the new app + profile fields filled |
 | Roles, tiers, sharing, admin, billing | A second real user exists |
 | E2E device tests (Maestro / Detox) | Multi-user, when regressions hurt someone who isn't you |
-| Progress photos (the *feature*) | A separate feature, still cut. **ImageKit itself is no longer deferred** — it is the decided image-optimisation and delivery layer for any stored, displayed image. What's deferred is the progress-photo feature, not the tool. **Never** used by label OCR. |
+| Progress photos / ImageKit | Separate feature; **never** used by label OCR |
 | Device-timezone support | Going international — v2 migration, clear trigger |
-| ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
+| Apple Developer Program ($99/yr) + EAS dev client | **Sign in with Apple**, or wanting NutriSA installed as its own app |
 
 ---
 
@@ -420,25 +370,7 @@ Only after v1.0 is in daily use.
 - [ ] Trend semantics across the 37-day gap — rows or calendar days? *(blocks Phase 1)*
 - [ ] Trend seed — is `tw[0] = w[0]`? *(blocks Phase 1)*
 - [ ] Confirm targets 2300/167/195/60 *(blocks Phase 1 migration)*
-- [x] **Does Clerk's Google OAuth actually work in Expo Go? Yes — verified on the
-      iPhone 15, 2026-08-10.** `useSSO()` browser flow, SDK 54, Expo Go. **Apple works
-      too, on the same free dev instance with no Apple Developer account** — Clerk's
-      *browser* SSO needs no entitlement. Only the fully native Apple sheet
-      (`expo-apple-authentication` / `useSignInWithApple`) needs the $99 account, so
-      Phase 12 is now a UX upgrade, not the gate on having Apple sign-in at all.
-- [x] **Do Native Tabs work in Expo Go on SDK 54? Yes — verified on the iPhone 15,
-      2026-08-10.** Tab bar renders with the iOS 26 liquid-glass treatment, SF Symbol
-      icons draw, and switching is native. Nothing extra to install: every native view
-      lives in `react-native-screens` 4.16.0, which is already inside the Expo Go
-      binary, and `expo-router` 6.0.24 carries an explicit 4.16-vs-4.18 icon branch
-      (`NativeTabsView.js:220`) — it was written for exactly this pairing.
-      **The tab shell does not force the $99 forward.** Two caveats for later:
-      - `sf=` icons are iOS-only. Android needs `drawable=` or `VectorIcon`, or the
-        tabs render as labels with no icons.
-      - Android renders Material 3 / Jetpack Compose navigation, not liquid glass —
-        the two platforms will not look alike, by design.
-- [ ] **Which SDK does App Store Expo Go support?** A moving external dependency that gates
-      the entire free runway. Re-check before any SDK bump; verify on the device.
+- [ ] Does Clerk's Google OAuth actually work in Expo Go? *(validate in Phase 3)*
 - [ ] Client-side engine for optimistic offline totals? *(v1.1)*
 - [ ] EAS free-tier build count — Expo's docs don't state it; check expo.dev/pricing
       when you reach the paid step

@@ -17,11 +17,9 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.NutriSA_APP"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
-      "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
@@ -34,16 +32,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ],
-      [
-        "@sentry/react-native",
-        {
-          "organization": "sriman-arjuna-persadh",
-          "project": "nutrisa"
-        }
-      ],
-      "@clerk/expo",
-      "expo-secure-store"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
