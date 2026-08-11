@@ -11,6 +11,15 @@ const app = new Hono();
 
 app.get("/health", (c) => c.json({ ok: true }));
 
+// Landing route. Without this, clicking the URL in the boot log 404s, which
+// reads as "the server is broken" when it is actually fine.
+app.get("/", (c) =>
+  c.json({
+    service: "nutrisa-api",
+    routes: ["GET /health", "POST /api/webhooks/clerk", "GET|POST|PUT /api/inngest"],
+  }),
+);
+
 /**
  * Clerk webhook receiver. Its only job is to verify the signature and enqueue —
  * the database write happens in the Inngest function so a slow or failing write
@@ -45,6 +54,7 @@ app.on(["GET", "POST", "PUT"], "/api/inngest", (c) => inngestHandler(c));
 
 honoServe({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`API listening on http://localhost:${info.port}`);
+  console.log(`  Health check    http://localhost:${info.port}/health`);
   console.log(`  Clerk webhook  POST /api/webhooks/clerk`);
   console.log(`  Inngest         ALL /api/inngest`);
 });
