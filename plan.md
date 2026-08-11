@@ -7,8 +7,11 @@ useful. Full reasoning behind every decision lives in the spec:
 **Workflow:** one feature per branch, one fresh session per branch, all git run manually.
 
 **Status (2026-08-11):** Phase 0 all but done · Phase 1 started (deps + Clerk-mirror
-schema; engine not begun) · **Phase 3 auth shipped early and verified on device** ·
-Phases 2, 4–12 not started · v1.1 deferred
+schema **applied to Neon**; engine not begun) · **Phase 3 auth shipped early and verified
+on device** · **Clerk → Neon sync live: `user.created` / `user.updated` / `user.deleted`
+via Inngest in dev mode, verified end to end on real accounts** · Phase 11 is part-ticked
+as a result, but its cascade only covers `users` because no other user-scoped table exists
+yet · Phases 2, 4–12 otherwise not started · v1.1 deferred
 
 **Auth summary — revised 2026-08-11, this supersedes the original plan.** Google **and
 Apple** both ship in Phase 3, on **one** sign-in screen, via Clerk's `useSSO()` browser
@@ -115,8 +118,21 @@ Only one table exists so far, and it wasn't on this list: it arrived with the Cl
 webhook work rather than the migration work. Every table below is still unwritten.
 
 - [x] `users` — Clerk mirror: `clerk_id` PK, email, first/last name, image_url,
-      created_at, updated_at. Migration `0000_young_thunderball.sql` is **generated but
-      not applied** — `drizzle-kit migrate` needs a real `DATABASE_URL`
+      created_at, updated_at. Migration `0000_young_thunderball.sql` **applied to Neon
+      2026-08-11**; the table had been empty until then, so the sync job would have
+      failed on its first real signup
+
+#### Clerk → Neon sync (arrived with the webhook work, not the migration work)
+- [x] Hono webhook route verifies the Svix signature and enqueues; the DB write happens
+      in Inngest so a slow write can't time out Clerk's delivery. Unsigned POST → 400,
+      verified from the public internet
+- [x] Inngest running **dev-mode only** — no `INNGEST_EVENT_KEY`, no `INNGEST_SIGNING_KEY`;
+      introspection reports `mode: dev`, `has_event_key: false`, `has_signing_key: false`
+- [x] `user.created` → upsert. **Verified end to end on two real Google accounts,
+      2026-08-11** — correct emails and avatars, replay lands on one row not two
+- [x] `user.updated` → same upsert, shared helper so the two paths cannot drift
+- [x] `user.deleted` → row removed; see the Phase 11 cascade below
+- [x] ngrok bound to a permanent free-plan domain, so Clerk's endpoint URL is set once
 - [ ] `weight_logs` — id, user_id, date, weight, created_at
 - [ ] `meal_logs` — header totals + `items jsonb`, index on `(user_id, date)`
 - [ ] `custom_meals` — same header + jsonb items shape, keys aligned to `meal_logs`
@@ -373,12 +389,17 @@ Largest cost risk in the app.
 - [ ] Privacy notice covering: what's collected, why, retention, the two rights
 - [ ] **Export** — all data, machine-readable, all tables incl. chat
 - [ ] Export offered at the point of deletion ("download before you delete")
-- [ ] Clerk `user.deleted` webhook → Inngest cascade job
+- [x] Clerk `user.deleted` webhook → Inngest cascade job — `sync-clerk-user-deleted`
+      shipped 2026-08-11 with the create/update sync
 - [ ] Cascade deletes: `weight_logs`, `meal_logs`, `water_logs`, `targets`, `profiles`,
       `chat_conversations`, `chat_messages`, `ai_usage`, `foods WHERE user_id = <user>`
+      — **still open: none of these tables exist yet.** The job currently deletes the
+      only user-scoped table there is (`users`). Each table above must be added to the
+      cascade in the branch that creates it
 - [ ] Global foods (`user_id IS NULL`) survive — verify explicitly
-- [ ] Cascade job is **idempotent** — a retried partial delete completes, doesn't error
-- [ ] Comment the job as the single authority on user-data tables
+- [x] Cascade job is **idempotent** — a retried partial delete completes, doesn't error.
+      Verified against Neon: first delete removes 1 row, replay removes 0 and does not throw
+- [x] Comment the job as the single authority on user-data tables
 - [ ] Type-to-confirm gate before deletion, with "this cannot be undone"
 - [ ] Test the full round trip on a throwaway Clerk user: create → log → export → delete
       → confirm zero rows remain and global foods are intact

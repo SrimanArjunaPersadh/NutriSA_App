@@ -4,7 +4,12 @@ import { serve as inngestServe } from "inngest/hono";
 import { verifyWebhook } from "@clerk/backend/webhooks";
 
 import { env } from "./env";
-import { clerkUserCreated, inngest } from "./inngest/client";
+import {
+  clerkUserCreated,
+  clerkUserDeleted,
+  clerkUserUpdated,
+  inngest,
+} from "./inngest/client";
 import { functions } from "./inngest/functions";
 
 const app = new Hono();
@@ -36,14 +41,32 @@ app.post("/api/webhooks/clerk", async (c) => {
     return c.text("Verification failed", 400);
   }
 
-  if (evt.type === "user.created") {
-    await inngest.send(
-      clerkUserCreated.create(
-        { user: evt.data },
-        // Svix's message id dedupes redeliveries of the same event.
-        { id: c.req.header("svix-id") },
-      ),
-    );
+  // Svix's message id dedupes redeliveries of the same event.
+  const opts = { id: c.req.header("svix-id") };
+
+  switch (evt.type) {
+    case "user.created":
+      await inngest.send(clerkUserCreated.create({ user: evt.data }, opts));
+      break;
+
+    case "user.updated":
+      await inngest.send(clerkUserUpdated.create({ user: evt.data }, opts));
+      break;
+
+    case "user.deleted":
+      // The deleted-object stub types `id` as optional. Without one there is
+      // nothing to delete, so drop it rather than fail the delivery and have
+      // Clerk retry a payload that can never succeed.
+      if (evt.data.id) {
+        await inngest.send(
+          clerkUserDeleted.create({ user: { id: evt.data.id } }, opts),
+        );
+      } else {
+        console.warn("Clerk user.deleted arrived with no id; ignoring");
+      }
+      break;
+
+    // Any other subscribed event is verified and acknowledged, never acted on.
   }
 
   return c.text("OK", 200);

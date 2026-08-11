@@ -21,6 +21,22 @@ export const clerkUserCreated = eventType("clerk/user.created", {
 });
 
 /**
+ * Same payload as `user.created` — Clerk sends the whole user on every update,
+ * not a diff — so both events land on the same upsert.
+ */
+export const clerkUserUpdated = eventType("clerk/user.updated", {
+  schema: z.object({ user: clerkUserSchema }),
+});
+
+/**
+ * `user.deleted` carries a deleted-object stub, not a user: an id and a
+ * `deleted` flag, nothing else. The id is all the cascade needs.
+ */
+export const clerkUserDeleted = eventType("clerk/user.deleted", {
+  schema: z.object({ user: z.object({ id: z.string() }) }),
+});
+
+/**
  * Dev-only client. With no INNGEST_EVENT_KEY / INNGEST_SIGNING_KEY set, the SDK
  * talks to the local Inngest dev server on http://127.0.0.1:8288
  * (`npm run inngest:dev`). Production keys are deliberately out of scope.
