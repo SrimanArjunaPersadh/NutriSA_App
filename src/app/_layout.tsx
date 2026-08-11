@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Sentry from "@sentry/react-native";
 import { ClerkProvider } from "@clerk/expo";
@@ -53,6 +54,13 @@ function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <SafeAreaProvider>
+        {/*
+          Set once at the root rather than per screen. The app is dark only, so
+          the status bar is always light — left to `auto` it follows the phone's
+          system appearance and renders black-on-black for anyone whose iPhone
+          is in light mode.
+        */}
+        <StatusBar style="light" />
         <Stack
           screenOptions={{
             headerShown: false,
