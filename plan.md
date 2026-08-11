@@ -77,7 +77,9 @@ No code. Blocks Phase 1.
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
-- [x] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit)
+- [ ] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit) —
+      **un-ticked 2026-08-11: the line is still not in `.env`.** It was ticked on trust
+      and never was true. Phase 1's migration cannot run without it
 - [x] Create Neon project, add `DATABASE_URL` to `.env`
 - [ ] Confirm current macro targets — assumed **2300 kcal / 167P / 195C / 60F**
       *(still open — see Open questions; blocks the Phase 1 migration)*
@@ -85,13 +87,12 @@ No code. Blocks Phase 1.
 - [x] Verify `.env` is gitignored — `.gitignore:12`, re-confirmed 2026-08-11
 - [ ] Export the Supabase data (all 5 tables) and keep a local backup before touching anything
 
-> ⚠️ **The two env ticks above are on Sriman's word, not verified.** Reading `.env` on
-> 2026-08-11, only `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `INNGEST_DEV`
-> and `SENTRY_AUTH_TOKEN` carried values. `DATABASE_URL`, `CLERK_WEBHOOK_SIGNING_SECRET`,
-> `OPENAI_API_KEY` and the `IMAGEKIT_*` keys all read empty, and there was no
-> `MIGRATION_TARGET_USER_ID` line at all. **Nothing in Phase 1 can run without
-> `DATABASE_URL` and `MIGRATION_TARGET_USER_ID`** — check the file before starting the
-> migration rather than trusting these ticks.
+> ⚠️ **`.env` re-read 2026-08-11, later the same day.** `DATABASE_URL` and
+> `CLERK_WEBHOOK_SIGNING_SECRET` are now filled in and both are proven working — the
+> migration applied and real Clerk deliveries verified against the signature. Still
+> **empty**: `OPENAI_API_KEY`, `UNSPLASH_*`, `IMAGEKIT_*`. Still **absent entirely**:
+> `MIGRATION_TARGET_USER_ID`, which is why the tick above was removed.
+> **Phase 1's migration cannot run until that line exists.**
 
 ---
 
@@ -185,7 +186,10 @@ webhook work rather than the migration work. Every table below is still unwritte
 
 **Goal:** a Hono API on Vercel where reading another user's data is structurally impossible.
 
-- [ ] Scaffold Hono app, deploy to Vercel, confirm it responds
+- [ ] Scaffold Hono app, deploy to Vercel, confirm it responds — *scaffold exists and
+      responds locally (`server/index.ts`: `/`, `/health`, the Clerk webhook, the Inngest
+      handler). **Not deployed** — it runs on localhost behind ngrok, which is dev-only
+      by design. The Vercel half is untouched*
 - [ ] Clerk middleware: verify session token → produce a `UserScope`
 - [ ] Scoped query layer — data functions **cannot be called** without a `UserScope`
 - [ ] Confirm no route reads `user_id` from a body, param, or header
@@ -211,9 +215,14 @@ webhook work rather than the migration work. Every table below is still unwritte
 
 **Goal:** signed in, on the phone, four tabs, correct dark identity. Free — Expo Go only.
 
-- [ ] Install Expo Go on the iPhone 15, confirm `expo start` connects over LAN
-- [ ] Barlow + Barlow Condensed via `expo-font`
-- [ ] Theme module with the fixed token table — dark-first, **no light theme, no toggle**
+- [x] Install Expo Go on the iPhone 15, confirm `expo start` connects over LAN —
+      sign-in exercised on the device 2026-08-10/11
+- [x] Barlow + Barlow Condensed via `expo-font` — all five faces loaded in
+      `src/app/_layout.tsx`, splash held until they land
+- [x] Theme module with the fixed token table — dark-first, **no light theme, no toggle**.
+      Lives in `tailwind.config.js` as NativeWind colour tokens rather than a separate
+      module. Two deliberate deviations from the table above: `ok`/`danger` are the token
+      names for Green/Red, and a `link` blue `#1A7CFC` was added for inline text links
 - [ ] Four bottom tabs: Dashboard, Nutrition, Weight, Library
 - [x] Clerk provider + secure token cache
 - [x] **Google sign-in working in Expo Go** — verified on device 2026-08-10
@@ -222,7 +231,10 @@ webhook work rather than the migration work. Every table below is still unwritte
 - [x] Signed-out screen and sign-in flow
 - [x] Build the sign-in screen with room for a second provider button — both
       providers shipped together, so no second pass is needed
-- [ ] Sign-out, and a signed-out state that doesn't leak cached health data
+- [ ] Sign-out, and a signed-out state that doesn't leak cached health data — *sign-out
+      itself works (button on the placeholder home screen), but the second half is
+      unproven: there is no health data and no React Query cache to leak yet. Re-check
+      when the API client lands*
 - [ ] React Query provider + typed API client using the shared schemas
 - [ ] Shared state components: `<Empty>`, `<Loading>`, `<ErrorState>` — reused everywhere
 - [ ] Verify 44×44px targets and thumb reach on the real device, one-handed
