@@ -1,9 +1,18 @@
 import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg"
 
+import { colors } from "@/design/tokens"
+
 /**
  * The three value-prop icons under the auth buttons. Geometry is traced from
- * src/design/auth_ui_design.png; colours are sampled from the same file. These
- * are decorative, so they deliberately do not reuse the reserved macro tokens.
+ * src/design/auth_ui_design.png.
+ *
+ * **The colours no longer are.** They were sampled straight off the reference,
+ * on the reasoning that decorative icons should not borrow the reserved macro
+ * tokens. In practice that put three colours in the app that each sat a few
+ * points from Protein, Fats and Amber and were in no token table — near-misses
+ * read as sloppiness, not as separation. Snapped to the real tokens on
+ * chore/tokens-and-doc-hygiene; the sampled values are in that diff if the
+ * reference ever needs re-checking.
  *
  * The reference draws each icon with a coloured bloom around it. That is done
  * here by stroking the same shapes twice — a wide translucent pass under a
@@ -11,9 +20,9 @@ import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg"
  * transparent SVG and which web renders as a rectangle.
  */
 
-export const FEATURE_PURPLE = "#B07CF6"
-export const FEATURE_TEAL = "#5FE3C6"
-export const FEATURE_AMBER = "#F9B81A"
+export const FEATURE_PURPLE = colors.protein
+export const FEATURE_TEAL = colors.fats
+export const FEATURE_AMBER = colors.amber
 
 const STROKE = 1.7
 const BLOOM = 5

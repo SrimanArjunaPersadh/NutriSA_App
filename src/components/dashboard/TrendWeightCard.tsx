@@ -4,6 +4,7 @@ import { Card, CardLabel } from "@/components/dashboard/Card"
 import { ProgressRing } from "@/components/dashboard/ProgressRing"
 import { TrendArrow } from "@/components/icons/UiIcons"
 import { trendWeight } from "@/components/dashboard/design-fixture"
+import { colors } from "@/design/tokens"
 
 const RING_SIZE = 92
 const RING_STROKE = 7
@@ -19,7 +20,7 @@ const RING_STROKE = 7
  */
 export function TrendWeightCard() {
   const losing = trendWeight.direction === "down"
-  const deltaColor = losing ? "#22C55E" : "#FF3B30"
+  const deltaColor = losing ? colors.ok : colors.danger
 
   return (
     <Card>
@@ -45,7 +46,7 @@ export function TrendWeightCard() {
             <Text className="ml-[5px] font-barlow text-[16px] text-white/70">vs last week</Text>
           </View>
 
-          <Text className="mt-[6px] font-barlow text-[16px] text-[#8A8F98]">
+          <Text className="mt-[6px] font-barlow text-[16px] text-textSecondary">
             {trendWeight.remaining} to goal ({trendWeight.goal})
           </Text>
         </View>
@@ -57,7 +58,7 @@ export function TrendWeightCard() {
             size={RING_SIZE}
             strokeWidth={RING_STROKE}
             progress={trendWeight.progress}
-            color="#0066FF"
+            color={colors.primary}
           >
             <View className="flex-row items-baseline">
               <Text className="font-display text-[34px] leading-[38px] text-white">
@@ -65,7 +66,7 @@ export function TrendWeightCard() {
               </Text>
               <Text className="font-barlow-bold text-[15px] text-white">%</Text>
             </View>
-            <Text className="font-barlow-medium text-[9px] tracking-[0.8px] text-[#8A8F98]">
+            <Text className="font-barlow-medium text-[9px] tracking-[0.8px] text-textSecondary">
               OF THE WAY
             </Text>
           </ProgressRing>

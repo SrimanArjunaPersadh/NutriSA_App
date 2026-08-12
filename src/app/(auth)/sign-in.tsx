@@ -10,8 +10,25 @@ import { useSSO } from "@clerk/expo"
 import bgImage from "@/design/auth_screen_bg.webp"
 import { AppleIcon, GoogleIcon } from "@/components/icons/BrandIcons"
 import { BarsIcon, InsightIcon, TargetIcon } from "@/components/icons/FeatureIcons"
+import { colors, withAlpha } from "@/design/tokens"
 
 type Provider = "oauth_google" | "oauth_apple"
+
+/**
+ * The scrim over the photo. Five stops, opacity climbing to near-opaque at the
+ * bottom so the buttons and terms sit on flat ground rather than on the image.
+ *
+ * The base is `authGradientBase`, not `ground` — two points darker, sampled
+ * from the reference. `as const` because LinearGradient's `colors` prop wants a
+ * tuple of at least two, and a mapped array widens to string[].
+ */
+const SCRIM = [
+  withAlpha(colors.authGradientBase, 0.26),
+  withAlpha(colors.authGradientBase, 0.38),
+  withAlpha(colors.authGradientBase, 0.74),
+  withAlpha(colors.authGradientBase, 0.9),
+  withAlpha(colors.authGradientBase, 0.96),
+] as const
 
 /**
  * Vertical rhythm below is traced from src/design/auth_ui_design.png. The
@@ -71,13 +88,7 @@ export default function SignIn() {
 
       <Image source={bgImage} contentFit="cover" className="absolute inset-0 h-full w-full" />
       <LinearGradient
-        colors={[
-          "rgba(9,11,16,0.26)",
-          "rgba(9,11,16,0.38)",
-          "rgba(9,11,16,0.74)",
-          "rgba(9,11,16,0.90)",
-          "rgba(9,11,16,0.96)",
-        ]}
+        colors={SCRIM}
         locations={[0, 0.2, 0.4, 0.58, 1]}
         // Explicit start/end — the default axis is horizontal.
         start={{ x: 0, y: 0 }}
@@ -196,7 +207,9 @@ function SocialButton({
       <View className="h-[28px] w-[28px] items-center justify-center">{icon}</View>
       {busy ? (
         <View className="flex-1 items-center">
-          <ActivityIndicator color="#000000" />
+          {/* Named colour, not a hex — the button is white and the spinner
+              pairs with the `text-black` label it replaces. */}
+          <ActivityIndicator color="black" />
         </View>
       ) : (
         <Text className="flex-1 text-center font-barlow-semibold text-[17px] text-black">

@@ -2,6 +2,8 @@ import { View } from "react-native";
 import { Redirect, Stack } from "expo-router";
 import { useAuth } from "@clerk/expo";
 
+import { colors } from "@/design/tokens";
+
 /**
  * Keeps signed-in users out of the auth screens. Without this guard a signed-in
  * user who deep-links to /sign-in lands on a sign-in form they can't use.
@@ -20,7 +22,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: "#0D0F14" },
+        contentStyle: { backgroundColor: colors.ground },
       }}
     />
   );

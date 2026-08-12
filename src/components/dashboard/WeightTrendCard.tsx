@@ -5,6 +5,7 @@ import Svg, { Circle, Line, Polyline, Text as SvgText } from "react-native-svg"
 import { Card, CardLabel } from "@/components/dashboard/Card"
 import { ChevronDown } from "@/components/icons/UiIcons"
 import { weightTrend, type ChartPoint } from "@/components/dashboard/design-fixture"
+import { colors } from "@/design/tokens"
 
 const PAD_LEFT = 30 // gutter for the kg labels
 const PAD_RIGHT = 10
@@ -13,11 +14,12 @@ const PLOT_HEIGHT = 150
 const X_LABEL_BASELINE = PAD_TOP + PLOT_HEIGHT + 22
 const CHART_HEIGHT = X_LABEL_BASELINE + 8
 
-const AXIS = "#8A8F98"
-const DOT = "#6E7686"
-const TREND = "#0066FF"
-const PROJECTION = "#F59E0B"
-const GOAL = "#22C55E"
+// react-native-svg takes colour values, not classNames — see src/design/tokens.ts.
+const AXIS = colors.textSecondary
+const DOT = colors.dotMuted
+const TREND = colors.primary
+const PROJECTION = colors.amber
+const GOAL = colors.ok
 const AXIS_FONT = "Barlow_400Regular"
 
 /**
@@ -63,7 +65,7 @@ function RangePicker() {
       accessibilityRole="button"
       accessibilityLabel={`Chart range: ${weightTrend.selectedRange}`}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      className="h-[36px] flex-row items-center rounded-[9px] border border-[#2A2F3B] bg-secondary px-[12px] active:opacity-80"
+      className="h-[36px] flex-row items-center rounded-[9px] border border-buttonBorder bg-secondary px-[12px] active:opacity-80"
     >
       <Text className="font-barlow-medium text-[16px] text-white">
         {weightTrend.selectedRange}

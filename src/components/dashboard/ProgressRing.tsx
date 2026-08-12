@@ -1,6 +1,8 @@
 import { View } from "react-native"
 import Svg, { Circle } from "react-native-svg"
 
+import { colors } from "@/design/tokens"
+
 /**
  * The donut used by both the "of the way" ring and the four macro rings.
  *
@@ -27,7 +29,7 @@ export function ProgressRing({
   strokeWidth,
   progress,
   color,
-  trackColor = "#252A35",
+  trackColor = colors.ringTrack,
   children,
 }: ProgressRingProps) {
   const centre = size / 2

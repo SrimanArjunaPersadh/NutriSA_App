@@ -15,9 +15,19 @@ export type Macros = {
 }
 
 /**
- * One logged item. Keys match the `items` jsonb written by the migration
- * (`{name, qty, kcal, pro, carb, fat}`) once mapped, so there is a single
- * translation point rather than the abbreviations leaking through the engine.
+ * One logged item, in the engine's own shape.
+ *
+ * ⚠️ **These are not the keys in the database.** The `items` jsonb on
+ * `meal_logs` and `custom_meals` uses `{name, qty, kcal, pro, carb, fat}` —
+ * the migration preserved the old app's abbreviations verbatim rather than
+ * rewriting 38 rows of history. The engine uses `{kcal, protein, carbs, fat}`,
+ * so `pro` → `protein` and `carb` → `carbs` on every read.
+ *
+ * That translation is owned by the Phase 2 zod mapping layer in
+ * `packages/shared/`, **which does not exist yet**. Until it does, nothing may
+ * hand a jsonb row to this engine directly: three of the four keys would come
+ * through as `undefined` and `dayTotals` would return `NaN` for every macro
+ * except calories, silently, with no throw anywhere.
  */
 export type LoggedItem = Macros
 

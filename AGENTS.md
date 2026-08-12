@@ -62,7 +62,10 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 - The `unstable-` import path is correct and expected — Native Tabs is still alpha and the
   API is subject to change, and it changed between SDK 54 and 55. Check the **SDK 54** docs
   for the current shape before editing the tab layout; do not copy another SDK's API.
-- Native Tabs under Expo Go on SDK 54 is **unverified** — see the open question in `plan.md`.
+- Native Tabs under Expo Go on SDK 54 is **verified** — on the iPhone 15, 2026-08-10. The
+  bar renders with the iOS 26 liquid-glass treatment and SF Symbols draw; every native view
+  it needs is already inside the Expo Go binary via `react-native-screens` 4.16.0. See the
+  answered open question in `plan.md` for the two Android caveats.
 - If a design need appears to require a JS tab bar, that is a question for Sriman, not a
   decision to make in code.
 

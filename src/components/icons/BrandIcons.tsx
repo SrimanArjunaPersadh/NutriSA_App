@@ -1,5 +1,11 @@
 import Svg, { Path } from "react-native-svg"
 
+import { colors } from "@/design/tokens"
+
+// The Google and Apple hexes below are the only hex literals allowed under
+// src/ outside tokens.ts — they are third-party brand marks with specified
+// colours, not theme values. tests/no-hex-literals.test.ts allowlists this file.
+
 /** Google's four-colour "G". Official mark — do not recolour. */
 export function GoogleIcon({ size = 28 }: { size?: number }) {
   return (
@@ -37,7 +43,7 @@ export function AppleIcon({ height = 26, color = "#000000" }: { height?: number;
 }
 
 /** Small chevron after "Continue with email" — 4.6×9.2pt of ink in the reference. */
-export function ChevronRight({ size = 11, color = "#1A7CFC" }: { size?: number; color?: string }) {
+export function ChevronRight({ size = 11, color = colors.link }: { size?: number; color?: string }) {
   return (
     <Svg width={size * 0.6} height={size} viewBox="0 0 6 10">
       <Path

@@ -3,6 +3,8 @@ import { Redirect } from "expo-router"
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs"
 import { useAuth } from "@clerk/expo"
 
+import { colors } from "@/design/tokens"
+
 /**
  * The signed-in shell. Four tabs, always the platform-native tab bar — see
  * AGENTS.md; the JavaScript `Tabs` and @react-navigation/bottom-tabs are both
@@ -25,10 +27,11 @@ import { useAuth } from "@clerk/expo"
  * session from the token cache bounces the user to sign-in on every cold start.
  */
 
-const GROUND = "#0D0F14"
-const ACTIVE = "#0066FF"
-const INACTIVE = "#8A8F98"
-const HAIRLINE = "#1E222B"
+// NativeTabs takes colour values, not classNames — see src/design/tokens.ts.
+const GROUND = colors.ground
+const ACTIVE = colors.primary
+const INACTIVE = colors.textSecondary
+const HAIRLINE = colors.hairline
 
 export default function TabsLayout() {
   const { isLoaded, isSignedIn } = useAuth()

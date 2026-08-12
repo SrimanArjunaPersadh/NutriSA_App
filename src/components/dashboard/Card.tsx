@@ -15,7 +15,7 @@ export function Card({
 }) {
   return (
     <View
-      className={`rounded-[16px] border border-[#20242D] bg-card px-[16px] py-[18px] ${className}`}
+      className={`rounded-[16px] border border-cardBorder bg-card px-[16px] py-[18px] ${className}`}
     >
       {children}
     </View>
@@ -25,7 +25,7 @@ export function Card({
 /** The tracked, uppercase caption each card opens with. */
 export function CardLabel({ children }: { children: string }) {
   return (
-    <Text className="font-barlow-semibold text-[13px] tracking-[1.2px] text-[#8A8F98]">
+    <Text className="font-barlow-semibold text-[13px] tracking-[1.2px] text-textSecondary">
       {children}
     </Text>
   )

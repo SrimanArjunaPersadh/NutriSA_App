@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "NutriSA_APP",
+    "name": "NutriSA",
     "slug": "NutriSA_APP",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,13 +12,13 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0D0F14",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.NutriSA_APP"
+      "package": "com.srimanpersadh.nutrisa"
     },
     "web": {
       "bundler": "metro",
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#0D0F14",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

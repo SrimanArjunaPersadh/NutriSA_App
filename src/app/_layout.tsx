@@ -19,6 +19,8 @@ import {
 } from "@expo-google-fonts/barlow";
 import { BarlowCondensed_800ExtraBold_Italic } from "@expo-google-fonts/barlow-condensed";
 
+import { colors } from "@/design/tokens";
+
 Sentry.init({
   dsn: "https://bdb95a636040e72d8b779057d72a2549@o4511882881007616.ingest.us.sentry.io/4511883769085952",
   sendDefaultPii: false,
@@ -64,7 +66,7 @@ function RootLayout() {
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: "#0D0F14" },
+            contentStyle: { backgroundColor: colors.ground },
           }}
         />
       </SafeAreaProvider>

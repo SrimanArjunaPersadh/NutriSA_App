@@ -11,6 +11,8 @@
  * offset does not apply.
  */
 
+import { colors } from "@/design/tokens"
+
 // ---------------------------------------------------------------------------
 // Trend weight
 // ---------------------------------------------------------------------------
@@ -61,7 +63,7 @@ export const macros: MacroRing[] = [
     value: "1,870",
     remaining: "430 kcal left",
     progress: 1870 / 2300,
-    color: "#0066FF",
+    color: colors.primary,
   },
   {
     key: "protein",
@@ -70,7 +72,7 @@ export const macros: MacroRing[] = [
     unit: "g",
     remaining: "119 g left",
     progress: 48 / 167,
-    color: "#A78BFA",
+    color: colors.protein,
   },
   {
     key: "carbs",
@@ -79,7 +81,7 @@ export const macros: MacroRing[] = [
     unit: "g",
     remaining: "93 g left",
     progress: 102 / 195,
-    color: "#FCD34D",
+    color: colors.carbs,
   },
   {
     key: "fat",
@@ -88,7 +90,7 @@ export const macros: MacroRing[] = [
     unit: "g",
     remaining: "38 g left",
     progress: 22 / 60,
-    color: "#2DD4BF",
+    color: colors.fats,
   },
 ]
 
@@ -188,3 +190,62 @@ export const weightTrend = {
   ranges: ["30 days", "90 days", "1 year"],
   selectedRange: "30 days",
 }
+
+// ---------------------------------------------------------------------------
+// Insights & analytics
+// ---------------------------------------------------------------------------
+
+export type Insight = {
+  key: string
+  title: string
+  /** The window the figure covers, shown under the title. */
+  period: string
+  /** Pre-formatted. No component rounds for display. */
+  value: string
+  unit: string
+  /** Oldest first. Normalised by the sparkline — the scale is not shown. */
+  series: number[]
+  color: string
+}
+
+/**
+ * The two tiles in the Insights row.
+ *
+ * Two deliberate departures from `home_screen_ui2.png`, which is a competitor
+ * screenshot rather than a NutriSA mock:
+ *
+ * - **The figures are ours, not its.** Weight trend reads 89.4 kg, the same
+ *   number `trendWeight.current` shows two cards above it. The reference says
+ *   56.1, and a dashboard that disagrees with itself by 33 kg is worse than one
+ *   that does not match a screenshot.
+ * - **The weight series falls.** The reference's climbs. Ours has to fall,
+ *   because the card above it says 0.6 kg down against last week — and the
+ *   colour follows from that, not from the reference's palette.
+ *
+ * On colour: the reference tints the two sparklines coral and purple, which is
+ * decoration. Here expenditure is `primary` because that is already the
+ * calories colour on the macro rings, and weight trend is `ok` because the
+ * trend is falling and green means loss. A rising trend would have to be
+ * `danger`, which is a mapping the real component has to make from the goal
+ * once it takes live data — see the note in TrendWeightCard.
+ */
+export const insights: Insight[] = [
+  {
+    key: "expenditure",
+    title: "Expenditure",
+    period: "Last 7 Days",
+    value: "1,587",
+    unit: "kcal",
+    series: [1602, 1588, 1596, 1579, 1591, 1583, 1587],
+    color: colors.primary,
+  },
+  {
+    key: "weight-trend",
+    title: "Weight Trend",
+    period: "Last 7 Days",
+    value: "89.4",
+    unit: "kg",
+    series: [90.0, 89.9, 89.8, 89.7, 89.61, 89.53, 89.4],
+    color: colors.ok,
+  },
+]

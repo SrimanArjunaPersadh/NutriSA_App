@@ -10,7 +10,12 @@ useful. Full reasoning behind every decision lives in the spec:
 migration complete** — all 11 tables live in Neon, the 38-row history migrated and verified,
 73 engine tests green · **the trend algorithm was corrected from per-row to per-calendar-day
 after checking it against the real data; the spec's stated hypothesis was wrong** ·
-**Phase 3 auth shipped early and verified on device** · Clerk → Neon sync live via Inngest
+**Phase 3 auth shipped early and verified on device — the rest of Phase 3 has not.** Sign-in
+(Google and Apple), the token cache, the four native tabs and the fonts are all on the
+iPhone and working; **four items remain open**: the React Query provider and typed client,
+the shared `<Empty>` / `<Loading>` / `<ErrorState>` components, the sign-out cache-leak
+re-check (it cannot be done until there is health data to leak), and the 44×44 / thumb-reach
+pass on device. Read "Phase 3" as "auth", not as the phase · Clerk → Neon sync live via Inngest
 in dev mode · the POPIA cascade is now structural — every user-scoped table cascades from
 `users` · Water tracking cut from v1 · the fourth tab is **AI Assistant**, not Library —
 the library became a screen inside Nutrition (2026-08-12) · Phases 2, 4–12 not started ·
@@ -501,9 +506,16 @@ Largest cost risk in the app.
       shipped 2026-08-11 with the create/update sync
 - [ ] Cascade deletes: `weight_logs`, `meal_logs`, `water_logs`, `targets`, `profiles`,
       `chat_conversations`, `chat_messages`, `ai_usage`, `foods WHERE user_id = <user>`
-      — **still open: none of these tables exist yet.** The job currently deletes the
-      only user-scoped table there is (`users`). Each table above must be added to the
-      cascade in the branch that creates it
+      — **still open, but not for the reason this line used to give.** It said "none of
+      these tables exist yet"; that was written before the migration and is wrong as of
+      2026-08-12 — **all 11 tables are live in Neon**, and every user-scoped one carries a
+      cascading FK to `users.clerk_id`. The remaining work is in the Inngest job, which
+      still deletes only the `users` row: the per-table deletes above have to be added to
+      it, and `foods` needs its `WHERE user_id = <user>` so global rows survive.
+      Postgres' `ON DELETE CASCADE` would in fact clear the child rows on its own, so the
+      explicit deletes are there to make the POPIA guarantee legible and testable in one
+      place rather than inferred from the schema — see the job's comment, which is the
+      single authority on user-data tables
 - [ ] Global foods (`user_id IS NULL`) survive — verify explicitly
 - [x] Cascade job is **idempotent** — a retried partial delete completes, doesn't error.
       Verified against Neon: first delete removes 1 row, replay removes 0 and does not throw
