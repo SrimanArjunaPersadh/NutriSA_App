@@ -51,7 +51,8 @@
     "prettier-plugin-tailwindcss": "^0.5.14",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.11",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.10"
   },
   "scripts": {
     "start": "expo start",
@@ -59,11 +60,14 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "server": "tsx watch server/index.ts",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "migrate:supabase": "tsx scripts/migrate-supabase-to-neon.ts",
+    "migrate:supabase:dry": "tsx scripts/migrate-supabase-to-neon.ts --dry-run"
   },
   "private": true
 }

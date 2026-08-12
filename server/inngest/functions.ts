@@ -92,15 +92,26 @@ export const syncClerkUserUpdated = inngest.createFunction(
  * POPIA deletion cascade. Clerk is the identity authority, so a user removed
  * there must leave nothing behind here.
  *
- * `users` is currently the only user-scoped table, which makes this one delete
- * the whole cascade. **Every new user-scoped table must be removed here in the
- * same branch that adds it** (AGENTS.md) — either by a foreign key with
- * `onDelete: 'cascade'` pointing at `users.clerk_id`, or by an explicit delete
- * added to this function. A table that escapes the cascade is a silent legal
+ * **This one delete removes everything.** Every user-scoped table carries a
+ * foreign key to `users.clerk_id` with `onDelete: 'cascade'` (see the `userId()`
+ * helper in server/db/schema.ts), so Postgres removes `weight_logs`,
+ * `meal_logs`, `custom_meals`, `water_logs`, `targets`, `profiles`,
+ * `chat_conversations`, `chat_messages`, `ai_usage` and the user's own `foods`
+ * rows in the same transaction. That is deliberate: the cascade lives at the
+ * one layer nothing can bypass, rather than in a list here that a new table
+ * could quietly fail to join.
+ *
+ * **A new user-scoped table must use `userId()`** (AGENTS.md). One that invents
+ * its own `user_id` column escapes the cascade, and that is a silent legal
  * hole, not a tidy-up for later.
  *
- * Deleting a row that isn't there is a no-op rather than an error, so a
- * replayed or duplicated delete is safe.
+ * Global `foods` rows (`user_id IS NULL`) match no user and survive — they are
+ * the shared food database, not personal data. Phase 11 verifies that
+ * explicitly.
+ *
+ * The returned count is the number of `users` rows removed, which is 1 or 0 —
+ * not the number of rows the cascade took with it. Deleting a row that isn't
+ * there is a no-op rather than an error, so a replayed delete is safe.
  */
 export const syncClerkUserDeleted = inngest.createFunction(
   {

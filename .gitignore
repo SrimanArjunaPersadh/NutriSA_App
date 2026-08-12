@@ -35,6 +35,12 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Real health data — the Supabase export and any local backup of it.
+# Weight and meal history is personal health data under POPIA. It is read by
+# the migration script and by the trend oracle test, and it must never reach
+# git: a commit is public the moment the repo is, and history is forever.
+data/
+
 # typescript
 *.tsbuildinfo
 

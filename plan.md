@@ -6,12 +6,15 @@ useful. Full reasoning behind every decision lives in the spec:
 
 **Workflow:** one feature per branch, one fresh session per branch, all git run manually.
 
-**Status (2026-08-11):** Phase 0 all but done · Phase 1 started (deps + Clerk-mirror
-schema **applied to Neon**; engine not begun) · **Phase 3 auth shipped early and verified
-on device** · **Clerk → Neon sync live: `user.created` / `user.updated` / `user.deleted`
-via Inngest in dev mode, verified end to end on real accounts** · Phase 11 is part-ticked
-as a result, but its cascade only covers `users` because no other user-scoped table exists
-yet · Phases 2, 4–12 otherwise not started · v1.1 deferred
+**Status (2026-08-12):** Phase 0 done bar the Anthropic spend cap · **Phase 1 engine and
+migration complete** — all 11 tables live in Neon, the 38-row history migrated and verified,
+73 engine tests green · **the trend algorithm was corrected from per-row to per-calendar-day
+after checking it against the real data; the spec's stated hypothesis was wrong** ·
+**Phase 3 auth shipped early and verified on device** · Clerk → Neon sync live via Inngest
+in dev mode · the POPIA cascade is now structural — every user-scoped table cascades from
+`users` · Water tracking cut from v1 · the fourth tab is **AI Assistant**, not Library —
+the library became a screen inside Nutrition (2026-08-12) · Phases 2, 4–12 not started ·
+v1.1 deferred
 
 **Auth summary — revised 2026-08-11, this supersedes the original plan.** Google **and
 Apple** both ship in Phase 3, on **one** sign-in screen, via Clerk's `useSSO()` browser
@@ -77,22 +80,24 @@ No code. Blocks Phase 1.
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
-- [ ] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit) —
-      **un-ticked 2026-08-11: the line is still not in `.env`.** It was ticked on trust
-      and never was true. Phase 1's migration cannot run without it
+- [x] Add `MIGRATION_TARGET_USER_ID` to `.env` (never hard-code, never commit) —
+      **added and verified 2026-08-12.** Checked by shape (`user_` + 20+ chars), not on
+      trust: this item was previously ticked on trust while the line did not exist
 - [x] Create Neon project, add `DATABASE_URL` to `.env`
-- [ ] Confirm current macro targets — assumed **2300 kcal / 167P / 195C / 60F**
-      *(still open — see Open questions; blocks the Phase 1 migration)*
+- [x] Confirm current macro targets — **2300 kcal / 167P / 195C / 60F, confirmed by
+      Sriman 2026-08-12.** No longer an assumption; this is what the migration seeds the
+      first `targets` row with
 - [ ] Set **$10/month hard spend cap** in the Anthropic Console
 - [x] Verify `.env` is gitignored — `.gitignore:12`, re-confirmed 2026-08-11
-- [ ] Export the Supabase data (all 5 tables) and keep a local backup before touching anything
+- [x] Export the Supabase data and keep a local backup — **4 tables exported 2026-08-12**
+      to `data/supabase_export/` (gitignored). The 5th, `water_logs`, was not exported
+      because the feature was cut
 
-> ⚠️ **`.env` re-read 2026-08-11, later the same day.** `DATABASE_URL` and
-> `CLERK_WEBHOOK_SIGNING_SECRET` are now filled in and both are proven working — the
-> migration applied and real Clerk deliveries verified against the signature. Still
-> **empty**: `OPENAI_API_KEY`, `UNSPLASH_*`, `IMAGEKIT_*`. Still **absent entirely**:
-> `MIGRATION_TARGET_USER_ID`, which is why the tick above was removed.
-> **Phase 1's migration cannot run until that line exists.**
+> ⚠️ **`.env` re-read 2026-08-12.** `DATABASE_URL`, `CLERK_WEBHOOK_SIGNING_SECRET` and
+> `MIGRATION_TARGET_USER_ID` are all present and all three are proven working — the
+> migration ran against Neon and Clerk deliveries verify against the signature. Still
+> **empty**: `OPENAI_API_KEY`, `UNSPLASH_*`, `IMAGEKIT_*`. None of those block anything
+> before Phase 7.
 
 ---
 
@@ -106,17 +111,24 @@ byte-for-byte against the oracle. No auth, no server, no UI, no spend.
 - [x] Install Drizzle, `drizzle-kit`, `@neondatabase/serverless`, `tsx` —
       `drizzle-orm` 0.45.2, `drizzle-kit` 0.31.10, `@neondatabase/serverless` 1.1.0,
       `tsx` 4.23.11. `drizzle.config.ts` points at `server/db/schema.ts`
-- [ ] **Install Vitest** — still absent from `package.json`. The `npx vitest` merge gate
-      below currently has nothing to run, so "engine suite green" cannot be satisfied
-- [ ] Create `packages/engine/` (pure TS, zero runtime deps) and `packages/shared/`
-      *(neither directory exists yet)*
-- [ ] Wire path aliases in `tsconfig.json` so client and server can both import them
-      *(`tsconfig.json` currently defines only `@/*` and `@/assets/*`)*
+- [x] **Install Vitest** — 4.1.10, `vitest.config.mts` scopes the run to
+      `packages/**/*.test.ts` only. `npm test` is the gate
+- [x] Create `packages/engine/` (pure TS, zero runtime deps) — **`packages/shared/` not
+      created**: it holds the zod schemas both sides import, and there is no API to write
+      contracts for until Phase 2. Creating it empty now would just be a directory
+- [x] Wire path aliases in `tsconfig.json` so client and server can both import them —
+      `@engine` and `@engine/*`. Runtime resolution verified under `tsx` (the server's
+      runtime); Metro resolves it via the same `tsconfigPaths` support that already
+      serves `@/*`, **unverified on device** because nothing imports it yet
 
 ### Schema — `server/db/schema.ts`
 
-Only one table exists so far, and it wasn't on this list: it arrived with the Clerk
-webhook work rather than the migration work. Every table below is still unwritten.
+All 11 tables are live in Neon as of 2026-08-12. `users` arrived earlier with the Clerk
+webhook work; the rest landed in migration `0001`, plus a `note` column in `0002`.
+
+Every user-scoped table below carries a cascading foreign key to `users.clerk_id` via the
+`userId()` helper, which is what makes the Phase 11 deletion cascade structural rather
+than a list somebody has to remember to update.
 
 - [x] `users` — Clerk mirror: `clerk_id` PK, email, first/last name, image_url,
       created_at, updated_at. Migration `0000_young_thunderball.sql` **applied to Neon
@@ -134,51 +146,114 @@ webhook work rather than the migration work. Every table below is still unwritte
 - [x] `user.updated` → same upsert, shared helper so the two paths cannot drift
 - [x] `user.deleted` → row removed; see the Phase 11 cascade below
 - [x] ngrok bound to a permanent free-plan domain, so Clerk's endpoint URL is set once
-- [ ] `weight_logs` — id, user_id, date, weight, created_at
-- [ ] `meal_logs` — header totals + `items jsonb`, index on `(user_id, date)`
-- [ ] `custom_meals` — same header + jsonb items shape, keys aligned to `meal_logs`
-- [ ] `foods` — **nullable** user_id, `source` enum, per100/per_unit, barcode
-- [ ] `foods` constraint: `UNIQUE NULLS NOT DISTINCT (user_id, barcode) WHERE barcode IS NOT NULL`
-- [ ] `water_logs` — id, user_id, date, cups, created_at
-- [ ] `targets` — effective-dated, `UNIQUE (user_id, valid_from)`, **no `valid_to`**
-- [ ] `profiles` — all fields nullable
-- [ ] `chat_conversations` / `chat_messages`
-- [ ] `ai_usage` — token columns + `cost_usd numeric(12,6)` + `rate_version`, index `(user_id, ts)`
-- [ ] Generate and apply migrations against Neon
+- [x] `weight_logs` — id, user_id, date, weight, created_at. Added `UNIQUE (user_id, date)`
+      beyond the spec: the trend takes one step per row, so a duplicate day double-steps
+      the series and every value after it is quietly wrong
+- [x] `meal_logs` — header totals + `items jsonb`, index on `(user_id, date)`
+- [x] `custom_meals` — same header + jsonb items shape, keys aligned to `meal_logs`
+- [x] `foods` — **nullable** user_id, `source` enum, per100/per_unit, barcode.
+      `CHECK` enforces exactly one of per100 / per_unit
+- [x] `foods` constraint — same semantics, written as a partial unique index on
+      `coalesce(user_id, '')`. `NULLS NOT DISTINCT` cannot be combined with a `WHERE`
+      clause through Drizzle's builder; folding NULL to a sentinel is equivalent because
+      the empty string is not a possible Clerk id. **Phase 7 still has to prove it stops
+      duplicate global barcodes against real Postgres**
+- [x] `water_logs` — id, user_id, date, cups, created_at, `UNIQUE (user_id, date)`
+- [x] `targets` — effective-dated, `UNIQUE (user_id, valid_from)`, **no `valid_to`**
+- [x] `profiles` — all fields nullable
+- [x] `profiles.goal_weight_kg` — **not in the original spec.** Found missing 2026-08-12
+      while working out what the dashboard needs: "1.4 kg to goal", the "% of the way"
+      ring and the chart's goal line all depend on it and none could be computed without
+      it. Migration `0003_shiny_blue_marvel.sql` **applied 2026-08-12** — confirmed
+      against Neon (4 migrations recorded, column present). **No row populates it yet:
+      `profiles` is empty, so the goal weight is absent, not zero.** Deliberately not
+      effective-dated, unlike
+      `targets`; the starting weight is not stored because it is the first trend point
+- [x] `chat_conversations` / `chat_messages`
+- [x] `ai_usage` — token columns + `cost_usd numeric(12,6)` + `rate_version`, index `(user_id, ts)`
+- [x] Generate and apply migrations against Neon — `0001_amused_stark_industries.sql`
+      **applied 2026-08-12**. Verified by reading Neon back, not on trust: 11 tables
+      present, all empty except `users` (1 row, the Clerk mirror); the partial unique
+      index on `coalesce(user_id, '')` and the `foods_one_basis` CHECK both exist; 10
+      cascading FKs point at `users` (the 11th cascade is `chat_messages` →
+      `chat_conversations`)
 
 ### Engine — `packages/engine/`
-- [ ] `time.ts` — `currentLoggingDay()`, `isValidLogDate()` (no future, none before first log)
-- [ ] `trend.ts` — `trendWeightSeries()`, `tw[i] = round(0.1*w[i] + 0.9*tw[i-1], 2)`
-- [ ] `macros.ts` — `dayTotals()`, `remainingMacros()`
-- [ ] `targets.ts` — `resolveTargetForDate()` (greatest `valid_from <= date`)
-- [ ] `cost.ts` — `computeUsageCost()` + versioned rate table
-- [ ] Confirm rounding is half-up and float-safe (scale → round → unscale)
+- [x] `time.ts` — `currentLoggingDay()`, `checkLogDate()` / `isValidLogDate()`, plus
+      `logMonth()` for the Phase 9 SAST-month budget gate
+- [x] `trend.ts` — `trendWeightSeries()`, `tw[i] = round(0.1*w[i] + 0.9*tw[i-1], 2)`,
+      plus `trendChangeOverDays()` (trend-to-trend, never raw-to-raw)
+- [x] `macros.ts` — `dayTotals()`, `remainingMacros()`, `macroProgress()`
+- [x] `targets.ts` — `resolveTargetForDate()` (greatest `valid_from <= date`)
+- [x] `goal.ts` — **not in the original spec's module list**, added 2026-08-12 for the
+      dashboard. `goalProgress()` drives the "% of the way" ring (clamped at 1, unlike the
+      macro rings — past the goal is arrival, not information) and `projectTrend()` draws
+      the dashed amber line and computes the goal ETA the spec asks for. Rate is measured
+      over 14 days, not the 7 the dashboard displays: 7 is right to *show* but too noisy
+      to extrapolate weeks from. Returns no ETA when the rate points away from the goal,
+      is flat, or lands more than a year out — verified against the real series, where a
+      95 kg goal correctly gets no date at the current +0.49 kg/week
+- [x] `cost.ts` — `computeUsageCost()` + versioned rate table. Sonnet 5 entered at the
+      **standard** $3/$15, not the $2/$10 intro rate that lapses 2026-08-31
+- [x] Confirm rounding is half-up and float-safe (scale → round → unscale) — `round.ts`.
+      **If the oracle fails, this is the first knob to turn**: `Math.round(x*100)/100`
+      and `Number(x.toFixed(2))` disagree on an exact half, and the trend feeds each
+      rounded value forward
 
 ### ⚠️ Resolve first, before anything else
-- [ ] **Does the trend iterate over logged rows or calendar days?** Across the 37-day gap
-      (2026-06-17 → 2026-07-24) that's 1 step vs 37 and the answers diverge wildly
-- [ ] Confirm the seed: is `tw[0] = w[0]`?
+- [x] **Does the trend iterate over logged rows or calendar days? — CALENDAR DAYS.
+      Resolved 2026-08-12, and it contradicted the spec.** The spec's stated hypothesis
+      was per-row. Computing both readings from the 38 migrated rows put the final trend
+      at **98.25 kg per row vs 98.84 kg per calendar day**; Sriman confirmed the old app
+      showed 98.84. `trend.ts` was rewritten to step per day, carrying the last known
+      weight forward on days with no weigh-in. Across the 37-day gap that is 37 steps,
+      not one. **This is why the item said "resolve first": everything downstream would
+      have been confidently wrong by 0.59 kg.**
+- [x] Confirm the seed: is `tw[0] = w[0]`? — **yes.** Held under the per-day reading and
+      reproduces 98.84 exactly; a different seed does not.
 
 ### Migration — `scripts/migrate-supabase-to-neon.ts`
-- [ ] Read `MIGRATION_TARGET_USER_ID` from `.env`
-- [ ] Migrate 38 `weight_logs` — preserve both `date` and `created_at` (they diverge)
-- [ ] Migrate 38 `meal_logs` — parse `ings_json` text → jsonb, rename column to `items`,
+- [x] Read `MIGRATION_TARGET_USER_ID` from `.env`
+- [x] Migrate 38 `weight_logs` — preserve both `date` and `created_at`. **They diverge on
+      30 of the 38 rows**, so collapsing them would have re-dated most of the history
+- [x] Migrate 38 `meal_logs` — parse `ings_json` text → jsonb, rename column to `items`,
       keep object keys `{name, qty, kcal, pro, carb, fat}` identical
-- [ ] **Migrate `qty` verbatim as a string. Do not parse, do not "fix".**
-- [ ] Migrate 4 `custom_meals` — align to the same jsonb key shape
-- [ ] Migrate 11 `custom_foods` → `foods` with `source='manual'`, barcodes preserved
-- [ ] Migrate 1 `water_logs` row
-- [ ] Stamp every row across all five tables with the Clerk user_id
-- [ ] Seed one `targets` row at `valid_from` = earliest logged date
-- [ ] Add a `--dry-run` mode that reports counts and writes nothing
+- [x] **Migrate `qty` verbatim as a string. Do not parse, do not "fix".** The script
+      aborts if a `qty` is ever not a string; 0 non-string values in Neon afterwards
+- [x] Migrate 4 `custom_meals` — align to the same jsonb key shape. Reading the export
+      caught a missing `note` column, added in migration 0002 before the run
+- [x] Migrate 11 `custom_foods` → `foods` with `source='manual'`, barcodes preserved —
+      11 unique barcodes, 0 rows failing the exactly-one-of per100/per_unit rule
+- [~] ~~Migrate 1 `water_logs` row~~ — **cut 2026-08-12, Sriman's call.** Water tracking
+      is out of v1, so the single row is not migrated and was never exported
+- [x] Stamp every row with the Clerk user_id, read from `.env` — four tables, water cut
+- [x] Seed one `targets` row at `valid_from` = **2026-05-05**, the earliest logged day
+- [x] Add a `--dry-run` mode that reports counts and writes nothing — `npm run
+      migrate:supabase:dry`. Inserts also retry transport failures: a batch died on a
+      `fetch failed` mid-run, which is a dropped connection, not a data problem
 
 ### Verification — the merge gate
-- [ ] Engine suite green: trend, macros, remaining, target resolution, SAST boundary
-      (incl. the 00:40 case), back-date bounds, cost calc
-- [ ] **Trend series reproduces byte-for-byte from the 38 rows now in Neon** —
-      not Supabase, not a fixture. Including the post-gap row.
-- [ ] Any committed fixture carries the −9.0kg offset
-- [ ] Row counts match source: 38 / 38 / 4 / 11 / 1
+- [x] Engine suite green: trend, macros, remaining, target resolution, SAST boundary
+      (incl. the 00:40 case), back-date bounds, cost calc — **64 tests, all passing.**
+      This does *not* include the oracle below, which has no data to run against yet
+- [x] **Trend series reproduces from the 38 rows now in Neon** — with an important
+      correction to what this item could ever have meant. **There is no stored ground
+      truth**: the exported `weight_logs` carries only `id, date, weight, created_at`, so
+      the old app's computed trend was never persisted and "byte-for-byte" had no second
+      side. What settled it instead: both readings were computed from the migrated rows
+      (98.25 kg per logged row vs **98.84 kg per calendar day**, 0.59 kg apart) and
+      Sriman confirmed the old app showed 98.84. The engine was rewritten accordingly and
+      now reproduces 98.84 exactly from Neon.
+      `trend-oracle.test.ts` locks all 92 days in as a regression guard.
+      ⚠️ **It guards against future drift; it does not prove the algorithm was already
+      right on 2026-08-12.** Only the old implementation's source could do that —
+      see Open questions.
+- [x] Any committed fixture carries the −9.0kg offset — `__fixtures__/trend-oracle.ts`.
+      The generator asserts the shift is exact at all 92 steps, so the offset series
+      guards the same shape as the real one
+- [x] Row counts match source: **38 / 38 / 4 / 11** (weight, meals, saved meals, foods),
+      confirmed by querying Neon 2026-08-12, plus the 1 seeded `targets` row.
+      Was 38/38/4/11/1 — the water row is cut, see above
 
 ---
 
@@ -197,7 +272,7 @@ webhook work rather than the migration work. Every table below is still unwritte
 - [ ] `POST /meal-logs` — accepts client UUIDv7, `ON CONFLICT (id) DO NOTHING`
 - [ ] `DELETE /meal-logs/:id`
 - [ ] `POST /weight-logs` + `GET /weight-logs`
-- [ ] `POST /water-logs`
+- [~] ~~`POST /water-logs`~~ — cut with the water feature, 2026-08-12
 - [ ] `GET /targets`, `POST /targets`
 - [ ] Back-date support: `date` accepted and validated, `created_at` always real instant
 - [ ] Shared zod schemas in `packages/shared/`, imported by both sides
@@ -223,7 +298,15 @@ webhook work rather than the migration work. Every table below is still unwritte
       Lives in `tailwind.config.js` as NativeWind colour tokens rather than a separate
       module. Two deliberate deviations from the table above: `ok`/`danger` are the token
       names for Green/Red, and a `link` blue `#1A7CFC` was added for inline text links
-- [ ] Four bottom tabs: Dashboard, Nutrition, Weight, Library
+- [x] Four bottom tabs: Dashboard, Nutrition, Weight, **AI Assistant** — built and
+      verified on the iPhone 2026-08-12. **Not Library**, which is what this line said
+      and what the design mock shows: Sriman chose the AI Assistant as the fourth tab.
+      Library moved inside Nutrition rather than being dropped — see Phase 6.
+      Native Tabs via `expo-router/unstable-native-tabs`, SDK 54 API (`Icon` / `Label`
+      imported alongside `NativeTabs`, not the compound form of SDK 55+).
+      SF Symbols on iOS; **Android renders labels with no icons** because SDK 54's `Icon`
+      wants an Android drawable resource and this project has none — a config-plugin job,
+      not a blocker while iPhone is the target
 - [x] Clerk provider + secure token cache
 - [x] **Google sign-in working in Expo Go** — verified on device 2026-08-10
 - [x] **Apple sign-in working in Expo Go** — verified the same day, via Clerk browser
@@ -256,7 +339,8 @@ webhook work rather than the migration work. Every table below is still unwritte
 - [ ] Save a new food to `foods` with `source='manual'` from the entry flow
 - [ ] Edit and delete a logged meal
 - [ ] Back-date a meal to a past day
-- [ ] Water tracking — one integer per day, tap to increment
+- [~] ~~Water tracking — one integer per day, tap to increment~~ — **cut from v1
+      2026-08-12.** See the deferred backlog for the re-add trigger
 - [ ] Client mints UUIDv7 for every new row
 - [ ] All four states on every new surface
 - [ ] **Time yourself: manual log start → saved, under 10 seconds**
@@ -272,7 +356,8 @@ webhook work rather than the migration work. Every table below is still unwritte
 - [ ] Trend chart — trend line is the hero, raw points are secondary
 - [ ] **Raw daily weight is never presented as progress** — visually subordinate
 - [ ] Current trend weight + change over 7 / 30 days, green for loss, red for gain
-- [ ] Weekly rate of loss (engine-computed)
+- [ ] Weekly rate of loss (engine-computed) — *engine half done: `projectTrend().ratePerWeek`.
+      The Weight tab that shows it is still Phase 5*
 - [ ] Empty state before the first weigh-in; gap handling matches engine semantics
 - [ ] Edit / delete a weight entry
 - [ ] Verify the chart against the migrated 38-row series — numbers must match the engine
@@ -281,7 +366,16 @@ webhook work rather than the migration work. Every table below is still unwritte
 
 ## Phase 6 — `library-and-builder`
 
-- [ ] Library tab: saved meals list, search, categories
+**Not a tab.** Decided 2026-08-12: the library is a screen pushed from the Nutrition day
+view, not a fifth destination in the tab bar. The reason is what the library is *for* —
+you open it to log a saved meal, which is a nutrition action, so it belongs one tap from
+the day view rather than across the tab bar. This also keeps the bar at four with the
+AI Assistant in the fourth slot.
+
+- [ ] Entry point on the Nutrition day view — the control that opens the library. Owned
+      by this phase, not Phase 4: the day view ships before the library exists, so the
+      link has to arrive with the thing it links to
+- [ ] Library screen: saved meals list, search, categories
 - [ ] Meal builder: compose from `foods` rows, live engine-computed running totals
 - [ ] Save a composed meal to `custom_meals`
 - [ ] Log a saved meal to today in one or two taps
@@ -363,7 +457,9 @@ Largest cost risk in the app.
 - [ ] SSE from Hono, consumed with `expo/fetch` + `resp.body.getReader()`
 - [ ] Token-by-token render
 - [ ] Conversations persist and scroll back
-- [ ] Reachable from the Dashboard
+- [ ] Reachable — **already is: the AI Assistant is a tab as of Phase 3**, which the
+      original plan did not assume (it had chat reached from the Dashboard). What is left
+      here is filling that tab, not finding a way into it
 - [ ] Whole turn (tool call → Neon → stream) fits inside the 60s Vercel ceiling — measure it
 
 ### Budget — three layers
@@ -473,6 +569,7 @@ Only after v1.0 is in daily use.
 | Roles, tiers, sharing, admin, billing | A second real user exists |
 | E2E device tests (Maestro / Detox) | Multi-user, when regressions hurt someone who isn't you |
 | Progress photos (the *feature*) | A separate feature, still cut. **ImageKit itself is no longer deferred** — it is the decided image-optimisation and delivery layer for any stored, displayed image. What's deferred is the progress-photo feature, not the tool. **Never** used by label OCR. |
+| Water tracking (`water_logs`, `POST /water-logs`, the dashboard counter) | Sriman actually wants to track water. **Cut 2026-08-12.** The empty table is still in Neon and still in the deletion cascade, so re-adding it is UI plus one route — no migration needed. Say the word to drop the table instead. |
 | Device-timezone support | Going international — v2 migration, clear trigger |
 | ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
 
@@ -480,9 +577,11 @@ Only after v1.0 is in daily use.
 
 ## Open questions
 
-- [ ] Trend semantics across the 37-day gap — rows or calendar days? *(blocks Phase 1)*
-- [ ] Trend seed — is `tw[0] = w[0]`? *(blocks Phase 1)*
-- [ ] Confirm targets 2300/167/195/60 *(blocks Phase 1 migration)*
+- [x] **Trend semantics across the 37-day gap — CALENDAR DAYS.** Resolved 2026-08-12
+      against the real data; the spec's per-row hypothesis was wrong. See Phase 1.
+- [x] Trend seed — **yes, `tw[0] = w[0]`.** Confirmed 2026-08-12.
+- [x] **Confirm targets 2300/167/195/60 — confirmed 2026-08-12.** Was the mid-range of
+      the stated bands; now the real figure. Unblocks the Phase 1 migration's `targets` seed
 - [x] **Does Clerk's Google OAuth actually work in Expo Go? Yes — verified on the
       iPhone 15, 2026-08-10.** `useSSO()` browser flow, SDK 54, Expo Go. **Apple works
       too, on the same free dev instance with no Apple Developer account** — Clerk's
@@ -500,6 +599,11 @@ Only after v1.0 is in daily use.
         tabs render as labels with no icons.
       - Android renders Material 3 / Jetpack Compose navigation, not liquid glass —
         the two platforms will not look alike, by design.
+- [ ] **Does the old app's source still exist anywhere?** It is the only thing that can
+      fully close the trend risk. The per-day-vs-per-row question is settled, but the
+      anchor is one recognised number, which cannot rule out a subtler difference (where
+      exactly it rounds, how it handles the very first day) that happens to land on the
+      same 98.84. Low effort if the code is still around, worth nothing if it is gone.
 - [ ] **Which SDK does App Store Expo Go support?** A moving external dependency that gates
       the entire free runway. Re-check before any SDK bump; verify on the device.
 - [ ] Client-side engine for optimistic offline totals? *(v1.1)*
@@ -508,8 +612,12 @@ Only after v1.0 is in daily use.
 
 ## Known risks
 
-- **Trend reproduction is unproven and everything sits on it.** If Phase 1's oracle test
-  fails, nothing downstream can be trusted — recover the exact semantics from the old code.
+- **Trend reproduction — largely closed 2026-08-12, with one thread left.** The migration
+  preserved the 38 rows exactly and the engine now reproduces the confirmed 98.84 kg. But
+  the old app never stored its trend, so the anchor is a single recognised figure rather
+  than a recorded series: it pins the per-day-vs-per-row question decisively, and would
+  not catch a subtler error (a different rounding point, say) that happens to land on the
+  same final number. Recovering the old implementation's source would close it fully.
 - **OFF resolved 2 of 6 pantry items.** Manual entry speed is a product requirement.
 - **Sonnet 5 intro pricing ($2/$10) ends 2026-08-31.** Budget against $3/$15.
 - **Sonnet 5's tokenizer runs ~30% heavier** than the previous generation — measure, never

@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "goal_weight_kg" numeric(5, 2);

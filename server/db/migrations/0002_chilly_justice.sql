@@ -1,0 +1,1 @@
+ALTER TABLE "custom_meals" ADD COLUMN "note" text;

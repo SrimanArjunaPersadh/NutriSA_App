@@ -47,9 +47,12 @@ export type MacroRing = {
 }
 
 /**
- * Targets are the Phase 0 working set (2300 kcal / 167P / 195C / 60F), so each
- * `remaining` is the target minus the value and each `progress` is the value
- * over the target. Still open — see plan.md's open questions.
+ * Targets are 2300 kcal / 167P / 195C / 60F — confirmed 2026-08-12, no longer
+ * the assumed mid-range. Each `remaining` is the target minus the value and
+ * each `progress` is the value over the target.
+ *
+ * The targets are real now; the consumed figures are still traced from the
+ * design mock. Both come from the engine once Phase 4 lands.
  */
 export const macros: MacroRing[] = [
   {
