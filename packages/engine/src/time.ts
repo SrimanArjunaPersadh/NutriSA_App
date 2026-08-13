@@ -86,6 +86,48 @@ export function addDays(day: LogDay, delta: number): LogDay {
   return shifted.toISOString().slice(0, 10)
 }
 
+/**
+ * Which day of the week a `LogDay` falls on. **0 is Sunday**, 6 is Saturday —
+ * the same numbering `Date.getUTCDay()` uses, so it reads the way anyone
+ * familiar with the platform expects.
+ *
+ * The day string is parsed as plain UTC midnight rather than through
+ * `startOfLogDayUtc`, deliberately and for the same reason `isLogDay` does it:
+ * shifting into real SAST would land on 22:00 the previous day and report the
+ * wrong weekday for every date in the app.
+ *
+ * This lives here rather than in the component that draws the calendar strip
+ * because a weekday is a date calculation, and `plan.md`'s standing rule puts
+ * every one of those behind the single time authority.
+ */
+export function weekdayIndex(day: LogDay): number {
+  return new Date(`${day}T00:00:00.000Z`).getUTCDay()
+}
+
+/**
+ * The seven days of the calendar week containing `day`, oldest first.
+ *
+ * `weekStartsOn` is 0 (Sunday) by default because that is what the dashboard's
+ * strip shows. South Africa conventionally starts a week on Monday, so this is
+ * a display choice rather than a locale fact, which is exactly why it is a
+ * parameter and not a constant — pass 1 and the same function returns
+ * Monday-to-Sunday.
+ *
+ * The week is derived from the day rather than from the instant, so it inherits
+ * the SAST boundary: at 00:40 SAST the strip already shows the new day, the
+ * same way a meal logged at 00:40 belongs to it.
+ */
+export function weekOf(day: LogDay, weekStartsOn: number = 0): LogDay[] {
+  const offset = (weekdayIndex(day) - weekStartsOn + 7) % 7
+  const first = addDays(day, -offset)
+  return Array.from({ length: 7 }, (_, i) => addDays(first, i))
+}
+
+/** The day-of-month for a `LogDay`, unpadded — "27", not "27th" and not "05". */
+export function dayOfMonth(day: LogDay): number {
+  return Number(day.slice(8, 10))
+}
+
 export type LogDateBounds = {
   /** Today in SAST. Nothing may be logged after this. */
   today: LogDay

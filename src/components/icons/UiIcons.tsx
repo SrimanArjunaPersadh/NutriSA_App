@@ -113,6 +113,48 @@ export function BarcodeIcon({ size = 22, color = colors.textSecondary }: IconPro
   )
 }
 
+/**
+ * The streak flame.
+ *
+ * ## The shape was chosen by rendering it, not by eye
+ *
+ * The first attempt was a symmetric teardrop and read unmistakably as a **water
+ * drop**. What separates the two is not roundness, it is the tip: a drop tapers
+ * to a straight point, a flame hooks over and leaves a concave bite under the
+ * hook. This path has that hook, plus the small inner lick that fills the bite.
+ *
+ * Four alternatives were rasterised at 96, 34 and 16px and compared against
+ * this one. Two were rejected for reading as drops. The one that looked best
+ * large — the same outline with a hollow core, the classic two-part fire — was
+ * rejected because at 16px the core stops being a core and becomes a chip out
+ * of the bottom edge, which reads as a rendering fault rather than as fire.
+ *
+ * The lesson worth keeping: **this icon is judged at 16px, not at 96px.** Any
+ * future edit has to be checked at the small end, where nearly every detail
+ * that helps at the large end actively hurts.
+ *
+ * ## Colour and state
+ *
+ * It takes a `color` like every other icon here rather than owning its two
+ * states, because "lit" is not a property of a flame — it is a property of
+ * whether the day has been logged, which is the caller's business. Unlit is
+ * `textSecondary`, burning is `amber`.
+ *
+ * Not the 🔥 emoji, deliberately: an emoji cannot be tinted, so the unlit state
+ * could only be faked with opacity, and iOS would draw Apple's artwork while
+ * Android drew Google's — two different marks for the app's own streak symbol.
+ */
+export function FlameIcon({ size = 20, color = colors.amber }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M10.6 1.2c.5 2.9-.6 4.4-2 6-1.6 1.9-3 3.6-3 6.3a6.4 6.4 0 0 0 12.8 0c0-2.7-1.2-4.3-2.5-5.8-.6-.7-1-1.4-1.2-2.2-1 .9-1.5 2.1-1.4 3.6.1 1.1-.4 1.7-1.1 1.7-.8 0-1.3-.7-1.2-1.8.2-2.6.6-5.2-.4-7.8Z"
+        fill={color}
+      />
+    </Svg>
+  )
+}
+
 /** The AI assistant's four-pointed sparkle, with a smaller one trailing it. */
 export function SparkleIcon({ size = 22, color = colors.primary }: IconProps) {
   return (

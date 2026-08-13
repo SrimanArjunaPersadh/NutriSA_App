@@ -68,7 +68,32 @@ function RootLayout() {
             headerShown: false,
             contentStyle: { backgroundColor: colors.ground },
           }}
-        />
+        >
+          {/*
+            The streak overlay. Declared here rather than left to file-based
+            defaults because it needs three options none of the other routes
+            want, and all three have to arrive together:
+
+            - `transparentModal` keeps the dashboard mounted and visible behind
+              it, which is what makes it an overlay rather than a screen.
+            - `animation: "fade"` replaces the default slide. It resolves in
+              place instead of travelling in from the edge.
+            - `contentStyle` transparent **overrides the opaque ground set
+              above**. Without it the screen fades to a solid colour with
+              nothing behind it, and the transparent presentation buys nothing.
+
+            Every other route still registers itself from the filesystem;
+            naming one screen here does not opt the rest out.
+          */}
+          <Stack.Screen
+            name="streak"
+            options={{
+              presentation: "transparentModal",
+              animation: "fade",
+              contentStyle: { backgroundColor: "transparent" },
+            }}
+          />
+        </Stack>
       </SafeAreaProvider>
     </ClerkProvider>
   );

@@ -14,21 +14,64 @@
 import { colors } from "@/design/tokens"
 
 // ---------------------------------------------------------------------------
-// Trend weight
+// Streak
 // ---------------------------------------------------------------------------
 
-export const trendWeight = {
-  /** Smoothed bodyweight for today, kg. */
-  current: "89.4",
-  /** Change against the same day last week. `direction` picks the arrow + colour. */
-  weekChange: "0.6 kg",
-  direction: "down" as "down" | "up",
-  goal: "88.0 kg",
-  remaining: "1.4 kg",
-  /** Share of the distance from the starting weight to the goal. 0–1. */
-  progress: 0.62,
-  /** The same figure as text. Kept separate so no component rounds for display. */
-  progressLabel: "62",
+/**
+ * Consecutive days with at least one meal logged, ending today.
+ *
+ * `lit` is what decides whether the flame burns, and it is **not** the same
+ * question as `days > 0`: the streak survives until midnight on a day you have
+ * not logged yet, so a user on a 12-day run who opens the app before breakfast
+ * sees 12 with an unlit flame. That is the whole point of the overlay's "Log
+ * one meal today" line — it names the thing standing between the two states.
+ *
+ * A streak is a computed number, so when the data layer lands this comes from a
+ * `streak.ts` in `packages/engine/`, not from a `.filter().length` in a
+ * component. That module is owed and does not exist yet.
+ */
+export const streak = {
+  days: 12,
+  lit: false,
+}
+
+/**
+ * Why 12 and not the reference's 0.
+ *
+ * `home_screen_ui3.png` shows a streak of 0 with an unlit flame, which is that
+ * user's real state and is also the one state where none of this is reviewable:
+ * an empty pill, a grey flame, a "0 Day streak", and no way to see whether the
+ * lit colour or the animation is right. 12-and-unlit is the state the overlay
+ * was actually specified against — a run going, today not logged yet — so the
+ * prompt line has something to ask for and the burning flame beside it has a
+ * reason to be there.
+ *
+ * To review the other two states, edit the two fields above: `lit: true` lights
+ * the pill and the hero ring and starts the big flame breathing, and `days: 0`
+ * gives the true empty state. All three are the same code path.
+ */
+
+// ---------------------------------------------------------------------------
+// Calories left — the hero card
+// ---------------------------------------------------------------------------
+
+/**
+ * Traced from `src/design/home_screen_ui3.png`, with the figures rebased onto
+ * this project's real targets.
+ *
+ * The reference shows 2,590 against an unstated target. Ours is 2300 kcal
+ * (confirmed 2026-08-12), and the macros below still say 1,870 consumed, so
+ * "left" is 430 — the same number the macro card used to carry in its calories
+ * ring before that ring was dropped as a duplicate. The screen states it once.
+ *
+ * `progress` is the share of the target *consumed*, not the share left: the
+ * ring fills as the day fills up, which is the direction every other ring on
+ * the dashboard already turns.
+ */
+export const calories = {
+  left: "430",
+  label: "Calories left",
+  progress: 1870 / 2300,
 }
 
 // ---------------------------------------------------------------------------
@@ -55,16 +98,15 @@ export type MacroRing = {
  *
  * The targets are real now; the consumed figures are still traced from the
  * design mock. Both come from the engine once Phase 4 lands.
+ *
+ * **Three rings, not four.** Calories were the first ring here until the hero
+ * card took them over; leaving them would have put "430 kcal left" on the
+ * screen twice, in two different sizes, a card apart. The three that remain are
+ * the ones the calorie budget is spent on, and each now gets a third of the
+ * card's width instead of a quarter — which is what un-squeezes the captions
+ * the note below used to have to fight.
  */
 export const macros: MacroRing[] = [
-  {
-    key: "calories",
-    label: "CALORIES",
-    value: "1,870",
-    remaining: "430 kcal left",
-    progress: 1870 / 2300,
-    color: colors.primary,
-  },
   {
     key: "protein",
     label: "PROTEIN",
@@ -214,10 +256,12 @@ export type Insight = {
  * Two deliberate departures from `home_screen_ui2.png`, which is a competitor
  * screenshot rather than a NutriSA mock:
  *
- * - **The figures are ours, not its.** Weight trend reads 89.4 kg, the same
- *   number `trendWeight.current` shows two cards above it. The reference says
- *   56.1, and a dashboard that disagrees with itself by 33 kg is worse than one
- *   that does not match a screenshot.
+ * - **The figures are ours, not its.** Weight trend reads 89.4 kg, the value
+ *   `weightTrend.trend` ends on in the chart above it. The reference says 56.1,
+ *   and a dashboard that disagrees with itself by 33 kg is worse than one that
+ *   does not match a screenshot. (This used to anchor to `trendWeight.current`
+ *   on the old hero card, which the calories card replaced — the chart is now
+ *   the only other place the number appears, and the two still agree.)
  * - **The weight series falls.** The reference's climbs. Ours has to fall,
  *   because the card above it says 0.6 kg down against last week — and the
  *   colour follows from that, not from the reference's palette.
@@ -227,7 +271,8 @@ export type Insight = {
  * calories colour on the macro rings, and weight trend is `ok` because the
  * trend is falling and green means loss. A rising trend would have to be
  * `danger`, which is a mapping the real component has to make from the goal
- * once it takes live data — see the note in TrendWeightCard.
+ * rather than from the sign of the delta — a user gaining toward a target
+ * wants green on the way up.
  */
 export const insights: Insight[] = [
   {
