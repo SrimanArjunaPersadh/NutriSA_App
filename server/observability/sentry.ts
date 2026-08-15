@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/node"
 
 import { env } from "../env"
+import { redactParams } from "./redact"
 
 /**
  * Server-side error reporting, configured to be structurally incapable of
@@ -94,6 +95,28 @@ export function initSentry(): void {
 
     beforeSend(event) {
       if (event.request) event.request = scrubRequest(event.request)
+
+      /**
+       * The exception message is the Sentry issue **title**, so this is the
+       * most visible field on the whole event and was the least protected.
+       */
+      for (const exception of event.exception?.values ?? []) {
+        if (exception.value) exception.value = redactParams(exception.value)
+      }
+
+      // A `captureMessage` rather than an exception. Same treatment.
+      if (event.message) event.message = redactParams(event.message)
+      if (event.logentry?.message) {
+        event.logentry.message = redactParams(event.logentry.message)
+      }
+
+      /**
+       * `extra` is dropped whole rather than filtered. It is the free-for-all
+       * bag anything can attach to, so an allowlist here would be a promise
+       * about code that has not been written yet.
+       */
+      delete event.extra
+
       // The SDK attaches these only with sendDefaultPii on. Cleared anyway:
       // this function is the last gate, and it should not depend on a setting
       // somewhere else still being right.
@@ -103,6 +126,7 @@ export function initSentry(): void {
 
     beforeBreadcrumb(breadcrumb) {
       if (breadcrumb.category === "console") return null
+      if (breadcrumb.message) breadcrumb.message = redactParams(breadcrumb.message)
       if (breadcrumb.data) {
         delete breadcrumb.data.body
         delete breadcrumb.data.response_body

@@ -25,19 +25,25 @@ import { withRetry } from "../server/db/retry"
  * would be the tail wagging the dog, so this seeds one row for one user and the
  * screen stays owed. plan.md, "The next three branches", 2026-08-14.
  *
- * **The goal weight is 85.0 kg — Sriman's call, 2026-08-14.**
+ * ## The goal weight comes from the environment, not from this file
  *
- * ## The −9.0 kg fixture offset does not apply here
+ * It was a hard-coded constant in this file — a real person's real target
+ * weight, committed, in git history forever. Caught by the Privacy axis of
+ * `/nutrisa-review`, 2026-08-15. The value is deliberately not repeated here
+ * either: a comment quoting the literal is the same exposure in a different
+ * syntax.
  *
- * That standing rule covers *committed fixtures*: real bodyweight that ends up
- * in the repository gets shifted first. This writes to Neon, which already
- * holds the true 38-row history unshifted, and a goal offset by 9 kg against
- * unoffset weights would put the goal line in the wrong place and report the
- * user as having arrived when they had not.
+ * The −9.0 kg fixture offset genuinely does not apply here, and that reasoning
+ * still holds: this writes to Neon, which already holds the true 38-row history
+ * unshifted, and a goal offset by 9 kg against unoffset weights would put the
+ * goal line in the wrong place and report the user as having arrived when they
+ * had not. But "the offset does not apply" is an argument about *Neon*, not
+ * about the literal in the source — and the literal is the part that ends up in
+ * a repository that may not stay private.
+ *
+ * So it moves to `.env`, alongside every other value this project treats as
+ * personal. `SEED_GOAL_WEIGHT_KG=85`.
  */
-
-/** Sriman's call, 2026-08-14. Kilograms. */
-const GOAL_WEIGHT_KG = 85.0
 
 const dryRun = process.argv.includes("--dry-run")
 
@@ -47,8 +53,23 @@ function requireEnv(name: string): string {
   return value
 }
 
+/**
+ * Validated rather than trusted. A typo that parses as `NaN` would otherwise
+ * reach the `numeric(5,2)` column as a null and silently un-set the goal —
+ * which looks identical, on screen, to never having set one.
+ */
+function requireGoalWeight(): number {
+  const raw = requireEnv("SEED_GOAL_WEIGHT_KG")
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`SEED_GOAL_WEIGHT_KG must be a positive number of kilograms, got "${raw}".`)
+  }
+  return value
+}
+
 async function main() {
   const userId = requireEnv("MIGRATION_TARGET_USER_ID")
+  const GOAL_WEIGHT_KG = requireGoalWeight()
 
   // The FK to users.clerk_id would catch this, but the error it throws names a
   // constraint rather than the problem. A missing mirror row means the Clerk

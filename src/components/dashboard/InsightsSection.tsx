@@ -1,5 +1,7 @@
 import { ScrollView, Text, View } from "react-native"
 
+import { goalDirection, type GoalDirection } from "@engine"
+
 import { InsightCard, InsightPlaceholder } from "@/components/dashboard/InsightCard"
 import { formatKcal, formatKg } from "@/lib/format"
 import { useDaySummary, useWeightSeries } from "@/lib/queries"
@@ -33,6 +35,13 @@ import { colors } from "@/design/tokens"
  * 2026-08-14 was to swap it for average intake, which keeps the two-tile layout
  * and is computable from data that already exists.
  */
+/** Matches the trend card's mapping — see the note there. */
+const DIRECTION_COLOR: Record<GoalDirection, string> = {
+  toward: colors.ok,
+  away: colors.danger,
+  unchanged: colors.textSecondary,
+}
+
 export function InsightsSection() {
   return (
     <View>
@@ -135,11 +144,18 @@ function WeightTrendTile() {
   const goalKg = data.goal?.goalKg
   const change = data.change7d
 
+  /**
+   * Same engine call as the trend card above, deliberately. These two used to
+   * carry a copy each of the same comparison — one card apart on one screen,
+   * with nothing keeping them in step.
+   *
+   * The neutral colour differs on purpose: this card has no arrow or sign
+   * beside it, only a line, so with no goal to judge against it falls back to
+   * `primary` rather than a grey that would read as disabled.
+   */
   const color =
     change && goalKg !== undefined
-      ? Math.abs(change.to.trend - goalKg) < Math.abs(change.from.trend - goalKg)
-        ? colors.ok
-        : colors.danger
+      ? DIRECTION_COLOR[goalDirection(change.from.trend, change.to.trend, goalKg)]
       : colors.primary
 
   // The last seven days of the drawn window. `points` is one entry per calendar

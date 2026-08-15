@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { goalProgress, projectTrend } from "./goal"
+import { goalDirection, goalProgress, projectTrend } from "./goal"
 import { addDays } from "./time"
 import { trendWeightSeries } from "./trend"
 
@@ -156,5 +156,58 @@ describe("projectTrend", () => {
     const projection = projectTrend(losing(92, 0.1, 10), { forDays: 5 })
     expect(projection.points).toHaveLength(5)
     expect(projection.ratePerWeek).toBeLessThan(0)
+  })
+})
+
+describe("goalDirection", () => {
+  // Losing toward a goal below you — the common case, and the only one the
+  // old `delta < 0` shorthand got right.
+  it("is toward when a loss closes the gap to a lower goal", () => {
+    expect(goalDirection(100, 99, 85)).toBe("toward")
+  })
+
+  it("is away when a gain opens the gap to a lower goal", () => {
+    expect(goalDirection(98.5, 99, 85)).toBe("away")
+  })
+
+  /**
+   * The case the sign of the delta cannot answer, and the reason this function
+   * exists. Someone 5 kg under their target gaining 0.4 kg had a good week; an
+   * app that paints that red is telling them to stop doing the thing that is
+   * working.
+   */
+  it("is toward when a GAIN closes the gap to a higher goal", () => {
+    expect(goalDirection(80, 80.4, 85)).toBe("toward")
+  })
+
+  it("is away when a loss opens the gap to a higher goal", () => {
+    expect(goalDirection(80, 79.6, 85)).toBe("away")
+  })
+
+  it("is unchanged when the distance does not move", () => {
+    expect(goalDirection(90, 90, 85)).toBe("unchanged")
+  })
+
+  /**
+   * Overshooting past the goal by less than you were short by is still
+   * progress — the distance shrank. Answering "away" here would tell someone
+   * who just arrived that they went backwards.
+   */
+  it("is toward when the trend crosses the goal and lands nearer it", () => {
+    expect(goalDirection(87, 84, 85)).toBe("toward")
+  })
+
+  it("is away when the trend crosses the goal and overshoots further", () => {
+    expect(goalDirection(86, 83, 85)).toBe("away")
+  })
+
+  it("is unchanged on a symmetric crossing", () => {
+    // 86 is 1 above, 84 is 1 below. The gap is identical, so neither colour is
+    // honest — this is exactly why `unchanged` is a third answer.
+    expect(goalDirection(86, 84, 85)).toBe("unchanged")
+  })
+
+  it("is toward when arriving exactly on the goal", () => {
+    expect(goalDirection(86, 85, 85)).toBe("toward")
   })
 })

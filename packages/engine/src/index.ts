@@ -70,8 +70,10 @@ export {
 } from "./chart"
 
 export {
+  goalDirection,
   goalProgress,
   projectTrend,
+  type GoalDirection,
   type GoalProgress,
   type Projection,
   type ProjectionOptions,

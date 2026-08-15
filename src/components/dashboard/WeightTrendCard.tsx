@@ -2,7 +2,15 @@ import { useState } from "react"
 import { Text, View } from "react-native"
 import Svg, { Circle, Line, Polyline, Text as SvgText } from "react-native-svg"
 
-import { addDays, daysBetween, evenlySpaced, niceScale, type LogDay } from "@engine"
+import {
+  addDays,
+  daysBetween,
+  evenlySpaced,
+  goalDirection,
+  niceScale,
+  type GoalDirection,
+  type LogDay,
+} from "@engine"
 import type { WeightSeries } from "@shared"
 
 import { Card, CardLabel } from "@/components/dashboard/Card"
@@ -26,6 +34,19 @@ const TREND = colors.primary
 const PROJECTION = colors.amber
 const GOAL = colors.ok
 const AXIS_FONT = "Barlow_400Regular"
+
+/**
+ * How a goal direction is painted. The mapping is a design decision and lives
+ * here; deciding *which* direction it is, is arithmetic and lives in the engine.
+ *
+ * `unchanged` is muted rather than green: a week that ended where it started is
+ * neither a win nor a loss, and green would congratulate it.
+ */
+const DIRECTION_COLOR: Record<GoalDirection, string> = {
+  toward: colors.ok,
+  away: colors.danger,
+  unchanged: colors.textSecondary,
+}
 
 /**
  * The windows the range menu offers, shortest first.
@@ -71,11 +92,12 @@ const RANGES: readonly DropdownOption<number | "all">[] = [
  *
  * ## The goal line does not get a vote on the scale
  *
- * It did at first, and the real data showed why that is wrong. The goal is
- * 85.0 kg and the trend sits at 98.8, so an axis stretched to include both
- * spans 15 kg — and the 1.3 kg of movement the chart exists to show collapses
- * into a sliver at the top while most of the card draws empty space above a
- * line the user will not reach for months.
+ * It did at first, and the real data showed why that is wrong. When the goal is
+ * many kilograms from the current trend — which is the normal case at the start
+ * of a cut — an axis stretched to include both spans that entire distance, and
+ * the kilogram or two of movement the chart exists to show collapses into a
+ * sliver at one edge while most of the card draws empty space around a line the
+ * user will not reach for months.
  *
  * So the scale is fitted to the trend, the readings and the projection, and the
  * goal is drawn **only when it lands inside that range**. When it does not, it
@@ -165,13 +187,13 @@ function TrendSummary({ series }: { series: WeightSeries }) {
   const latest = series.latest!
   const change = series.change7d
 
-  // Closing the gap is progress, whichever direction of travel that means.
+  // Closing the gap is progress, whichever direction of travel that means —
+  // decided by the engine, so this card and the insight tile below it cannot
+  // reach different conclusions about the same week.
   const goalKg = series.goal?.goalKg
   const direction =
     change && goalKg !== undefined
-      ? Math.abs(change.to.trend - goalKg) < Math.abs(change.from.trend - goalKg)
-        ? colors.ok
-        : colors.danger
+      ? DIRECTION_COLOR[goalDirection(change.from.trend, change.to.trend, goalKg)]
       : colors.textSecondary
 
   return (
