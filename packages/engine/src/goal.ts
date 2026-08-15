@@ -69,6 +69,50 @@ export function goalProgress(
   }
 }
 
+/**
+ * Which way a change moved relative to the goal.
+ *
+ * `unchanged` is a real third answer, not a rounding artefact: a week that ends
+ * exactly where it started has not gone the wrong way, and colouring it red
+ * would be a lie about a week the user probably did fine in.
+ */
+export type GoalDirection = "toward" | "away" | "unchanged"
+
+/**
+ * Did the trend close the gap to the goal, or open it?
+ *
+ * ## Why this is not `delta < 0`
+ *
+ * Green-for-down is wrong for anyone gaining toward a target. The dashboard
+ * shows this as a colour — `ok` or `danger` — and the sign of the change cannot
+ * decide it, because whether "up" is good depends entirely on which side of the
+ * goal you are standing. Someone 5 kg under their target gaining 0.4 kg had a
+ * good week, and an app that paints that red is telling them to stop doing the
+ * thing that is working.
+ *
+ * ## Why it lives here
+ *
+ * It was `Math.abs(change.to.trend - goalKg) < Math.abs(change.from.trend - goalKg)`,
+ * written out twice — once in `WeightTrendCard` and once in `InsightsSection` —
+ * with no test behind either copy. Caught by the Standards axis of
+ * `/nutrisa-review`, 2026-08-15: a derived fact about the user's data, computed
+ * in a component. Two copies of a comparison is how two surfaces end up
+ * disagreeing about the same week, and they sit one card apart on the same
+ * screen.
+ */
+export function goalDirection(
+  from: number,
+  to: number,
+  goalKg: number,
+): GoalDirection {
+  const before = Math.abs(from - goalKg)
+  const after = Math.abs(to - goalKg)
+
+  if (after < before) return "toward"
+  if (after > before) return "away"
+  return "unchanged"
+}
+
 export type ProjectionPoint = { day: LogDay; trend: number }
 
 export type Projection = {

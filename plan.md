@@ -6,20 +6,105 @@ useful. Full reasoning behind every decision lives in the spec:
 
 **Workflow:** one feature per branch, one fresh session per branch, all git run manually.
 
-**Status (2026-08-12):** Phase 0 done bar the Anthropic spend cap · **Phase 1 engine and
+**Status (2026-08-14):** Phase 0 done bar the Anthropic spend cap · **Phase 1 engine and
 migration complete** — all 11 tables live in Neon, the 38-row history migrated and verified,
-73 engine tests green · **the trend algorithm was corrected from per-row to per-calendar-day
-after checking it against the real data; the spec's stated hypothesis was wrong** ·
+**282 tests green across 15 files** (was 175 at the start of the day) · **Branches
+`api-scope-and-reads` and `dashboard-live-data` are both built** — Clerk middleware, the
+scoped query layer, `packages/shared/`, both read routes, Sentry, the profile seed, then
+React Query, the typed client, the three shared state components, `streak.ts`, `chart.ts`,
+and the dashboard wired card by card until **`design-fixture.ts` was deleted**. The API
+reproduces the confirmed 98.84 kg trend end to end and the screen draws it. **Two items
+remain open, both needing something a keyboard cannot do**: the security suite needs a Neon
+branch to run against, and the 44×44 / thumb-reach pass needs the phone · **the trend algorithm was
+corrected from per-row to per-calendar-day after checking it against the real data; the
+spec's stated hypothesis was wrong** ·
 **Phase 3 auth shipped early and verified on device — the rest of Phase 3 has not.** Sign-in
 (Google and Apple), the token cache, the four native tabs and the fonts are all on the
 iPhone and working; **four items remain open**: the React Query provider and typed client,
 the shared `<Empty>` / `<Loading>` / `<ErrorState>` components, the sign-out cache-leak
 re-check (it cannot be done until there is health data to leak), and the 44×44 / thumb-reach
-pass on device. Read "Phase 3" as "auth", not as the phase · Clerk → Neon sync live via Inngest
+pass on device. Read "Phase 3" as "auth", not as the phase · **A full dashboard UI is built
+and on the phone, but every number on it is a hardcoded design value** — see "The
+fixture-backed dashboard" below, and Phase 4, before reading its checkboxes ·
+Clerk → Neon sync live via Inngest
 in dev mode · the POPIA cascade is now structural — every user-scoped table cascades from
 `users` · Water tracking cut from v1 · the fourth tab is **AI Assistant**, not Library —
-the library became a screen inside Nutrition (2026-08-12) · Phases 2, 4–12 not started ·
+the library became a screen inside Nutrition (2026-08-12) · **Phase 2's read half is
+done**; the writes (`api-writes`) and the Vercel deploy are not · Phases 4–12 not started ·
 v1.1 deferred
+
+### The next three branches — decided 2026-08-14
+
+Sriman's call: **the dashboard gets wired to real data as soon as Phase 2's read routes
+land**, rather than waiting for all of Phase 2 to finish. Proving the whole stack on a
+screen you can actually look at is worth more than keeping one branch to one concern, and
+it deletes the fixture sooner.
+
+1. **`api-scope-and-reads`** — server only, no UI. Clerk middleware → `UserScope`, the
+   scoped query layer, `packages/shared/`, `GET /day/:date`, `GET /weight-logs`, both
+   security tests, Sentry. **Not** the writes, not `targets`, not the Vercel deploy:
+   ngrok already reaches the phone, so deployment is not on the path to real numbers.
+2. **`dashboard-live-data`** — **built 2026-08-14.** The React Query provider and typed
+   client, the three shared state components, the sign-out cache clear, and
+   `packages/engine/streak.ts` all landed, and `design-fixture.ts` is deleted. See the
+   section below. **The 44×44 / thumb-reach pass is the one item still open** — it is a
+   device check and cannot be done from here.
+3. **`api-writes`** — the rest of Phase 2, before Phase 4 proper.
+
+---
+
+## The dashboard — fixture-backed 2026-08-12, live 2026-08-14
+
+**`design-fixture.ts` is deleted.** Every number on the dashboard now comes from
+`GET /api/day/:date` and `GET /api/weight-logs` through React Query, computed by
+`packages/engine/`. The section below is kept because the three debts it tracked are how
+the branch was scoped, and because the failure it records — a fixture-backed screen reading
+as a finished screen — is worth not repeating.
+
+*The state it described:* about 14 components under `src/components/dashboard/`, every
+figure traced from a design mock, no engine call, no query, no four states.
+
+Branch `dashboard-live-data` shrank the fixture card by card until it was gone. Its three
+debts, all now settled:
+
+- [x] **`packages/engine/streak.ts` did not exist** — the streak was the literal `12` in
+      the fixture. **Written 2026-08-14, 17 tests.** It carries the rule the fixture's own
+      note argued for: a run stays alive until midnight on a day not yet logged, so `lit`
+      is a separate field from `days` and **12-and-unlit is a real state**, not `days > 0`.
+      `longestStreak()` came along with it — one pass over data already in hand, and the
+      overlay is the natural home for "your best is 21"
+- [x] **The Expenditure tile has no data source — resolved 2026-08-14.** Swapped for
+      **7-day average intake**, Sriman's call. `averageDailyIntake()` in the engine backs
+      it and `GET /day/:date` returns it. Adaptive TDEE stays deferred. The tile needs
+      retitling in branch 2, and should show `loggedDays` — the average is over days
+      logged, not days elapsed
+- [x] **The goal line has no goal — resolved 2026-08-14.** Seeded at **85.0 kg** via
+      `npm run seed:profile`, run against Neon. A real profile/settings surface is still
+      owed and still deferred to its own branch
+
+### What wiring it actually changed — 2026-08-14
+
+Three things the fixture had quietly settled turned out to be wrong once real numbers
+arrived, and all three were found by looking at the response rather than by reasoning:
+
+- **The chart axis was a design constant.** `yTicks: [92, 91, 90, 89, 88]` was typed by
+  hand from a mock and looked like layout. It is not: an axis label is a number the user
+  reads off the screen, so it now comes from `niceScale()` in the engine. Same for which
+  dates get x-labels — `evenlySpaced()`, which guarantees **both ends** are labelled,
+  because picking every nth entry silently drops the last one whenever the length is not a
+  clean multiple, and the right-hand end is the one people read first.
+- **The goal line must not scale the chart.** The first version fed the goal into the axis,
+  reasoning that a goal drawn off-frame looks like a rendering fault. Against the real data
+  that is 85.0 kg against a trend at 98.8 — a 15 kg axis on which the 1.3 kg of movement
+  the chart exists to show collapses into a sliver. The goal now gets the dashed line
+  **only when it lands inside the data's own range**, and otherwise becomes an
+  `↓ Goal 85.0 kg` marker pinned to the edge it lies beyond. The fixture never caught this
+  because its goal was 88.0 against data at 89–91.
+- **Unlogged days are not zeros, all the way to the pixel.** `averageDailyIntake` returns
+  `null` for a day with no log, and the sparkline now breaks its line across those instead
+  of drawing them on the floor. On the real data this matters immediately: the current
+  7-day window has **one** logged day in it, and a zero-filled sparkline would have drawn
+  six fast days that never happened.
 
 **Auth summary — revised 2026-08-11, this supersedes the original plan.** Google **and
 Apple** both ship in Phase 3, on **one** sign-in screen, via Clerk's `useSSO()` browser
@@ -239,7 +324,10 @@ than a list somebody has to remember to update.
 
 ### Verification — the merge gate
 - [x] Engine suite green: trend, macros, remaining, target resolution, SAST boundary
-      (incl. the 00:40 case), back-date bounds, cost calc — **64 tests, all passing.**
+      (incl. the 00:40 case), back-date bounds, cost calc — was **64 tests** when this
+      phase closed; **175 across 10 files as of 2026-08-14**, all passing. The growth is
+      not new engine work: it is the three `tests/` guards (`engine-purity`,
+      `no-hex-literals`, `tokens`) that came with the single-colour-token commit.
       This does *not* include the oracle below, which has no data to run against yet
 - [x] **Trend series reproduces from the 38 rows now in Neon** — with an important
       correction to what this item could ever have meant. **There is no stored ground
@@ -266,28 +354,134 @@ than a list somebody has to remember to update.
 
 **Goal:** a Hono API on Vercel where reading another user's data is structurally impossible.
 
-- [ ] Scaffold Hono app, deploy to Vercel, confirm it responds — *scaffold exists and
-      responds locally (`server/index.ts`: `/`, `/health`, the Clerk webhook, the Inngest
-      handler). **Not deployed** — it runs on localhost behind ngrok, which is dev-only
-      by design. The Vercel half is untouched*
-- [ ] Clerk middleware: verify session token → produce a `UserScope`
-- [ ] Scoped query layer — data functions **cannot be called** without a `UserScope`
-- [ ] Confirm no route reads `user_id` from a body, param, or header
-- [ ] `GET /day/:date` — day summary (engine-computed)
+**The read half landed 2026-08-14.** Session middleware, `UserScope`, the scoped query
+layer, `packages/shared/` and both data routes now exist and were exercised against the
+real history. What is left in this phase is `api-writes` and the Vercel deploy.
+
+*(The paragraph this replaces described a server with four routes, no middleware and no
+`packages/shared/`. That was accurate on the morning of 2026-08-14 and is the state the
+branch started from.)*
+
+**Split into two branches, 2026-08-14** — see "The next three branches" at the top. The
+reads go first and alone, so the dashboard can come alive against them; the writes follow.
+
+### Branch `api-scope-and-reads` — everything the dashboard needs to read
+
+**Built 2026-08-14. One item is written but unrun — see the security tests below.**
+
+- [x] Clerk middleware: verify session token → produce a `UserScope` —
+      `server/auth/user-scope.ts`. `verifyToken` from `@clerk/backend`, which is what this
+      project's own `.agents/skills/clerk-expo` prescribes for a plain backend. **The
+      scope carries a module-private symbol**, so `{ userId: body.userId } as UserScope`
+      does not compile anywhere else in the tree — the rule is a type error, not a habit
+- [x] Scoped query layer — data functions **cannot be called** without a `UserScope`.
+      `server/data/scoped.ts` is the only module that imports `db`, and `selectOwned`
+      returns **rows, not a builder**: a builder would let a caller chain `.where()`, which
+      in Drizzle *replaces* the condition rather than adding to it, so one innocuous line
+      would drop the ownership filter and widen the query to every user in the table
+- [x] Confirm no route reads `user_id` from a body, param, or header — and it is a test
+      now, not a confirmation. `tests/scoped-access.test.ts` fails if any file outside
+      `data/scoped.ts` imports `db`, if a route reads a user id from client input, or if a
+      function in `data/` does not take `scope: UserScope` first. Verified it actually
+      fires by planting a violating file and watching both guards go red
+- [x] Shared zod schemas in `packages/shared/`, imported by both sides — created here, for
+      real contracts. Carries the `{name,qty,kcal,pro,carb,fat}` → `{kcal,protein,carbs,fat}`
+      mapping that `macros.ts` warns about: without it, three of four keys arrive
+      `undefined` and `dayTotals` returns NaN silently
+- [x] `GET /day/:date` — day summary (engine-computed). Accepts `today` as well as a
+      date, so the client never has to ask a phone's clock what day it is
+- [x] `GET /weight-logs` — the series behind the chart, the trend card and the insight
+      tile. `?days=30` narrows what is **drawn**, never what is computed
+- [x] Seed one `profiles` row with `goal_weight_kg` for Sriman's user — **`npm run
+      seed:profile`, run 2026-08-14, `goal_weight_kg = 85.0` (Sriman's call).** Idempotent,
+      and an update rather than a skip, since re-running it is the only way to move the
+      goal until a settings screen exists
+- [x] Sentry wired with `sendDefaultPii: false`, no request bodies, no weight/macro
+      values in breadcrumbs — `server/observability/sentry.ts`. Drops the whole request
+      body, **every** header rather than an allowlist (a live Clerk token in a Sentry issue
+      is a working credential), query strings, and console breadcrumbs. Off entirely
+      without a DSN
+- [x] Security tests below — **run and green 2026-08-15, 12/12** against a Neon branch.
+      See the section below, including the fixture-retry gap the first run exposed
+
+**Also landed here, not originally listed:**
+
+- [x] `packages/engine/src/intake.ts` — `averageDailyIntake()`, backing the Expenditure
+      tile's replacement. Owed by the zero-arithmetic rule: the alternative was a `reduce`
+      in a route handler. Averages over **days logged, not days elapsed** — dividing by a
+      fixed 7 would drop the figure 30% for skipping two days, which reads as progress and
+      is a lie. 14 tests
+- [x] `server/db/retry.ts` — retries transient `fetch failed` from the Neon driver, moved
+      out of the migration script because the read routes need it too. **Not defensive
+      padding**: a read-only smoke run 500'd on a different one of five requests on each of
+      two consecutive attempts before this was wired in, and passed 5/5 after. Neon's free
+      tier suspends when idle, which the server README already documented as a ~90s wake.
+      Only transport errors are retried, never Postgres errors. ⚠️ **The Phase 2 write
+      routes must not simply reuse this** — their safety comes from the client-minted
+      UUIDv7 and `ON CONFLICT DO NOTHING`, not from a retry wrapper
+
+**Verified end to end against the real 38-row history**, with a throwaway read-only test
+through the actual Hono routes: `latest.trend` came back **98.84 kg** — the Phase 1
+confirmed figure, reproduced through the middleware, the scope layer, Postgres and the
+engine. Day 2026-06-17 returned its real meal against the 2300/167/195/60 targets with
+remaining and ring progress computed; an unlogged day returned a true zero with targets
+present; `2026-02-30` returned 400.
+
+### Branch `api-writes` — the rest
 - [ ] `POST /meal-logs` — accepts client UUIDv7, `ON CONFLICT (id) DO NOTHING`
 - [ ] `DELETE /meal-logs/:id`
-- [ ] `POST /weight-logs` + `GET /weight-logs`
+- [ ] `POST /weight-logs`
 - [~] ~~`POST /water-logs`~~ — cut with the water feature, 2026-08-12
 - [ ] `GET /targets`, `POST /targets`
 - [ ] Back-date support: `date` accepted and validated, `created_at` always real instant
-- [ ] Shared zod schemas in `packages/shared/`, imported by both sides
-- [ ] Sentry wired with `sendDefaultPii: false`, no request bodies, no weight/macro
-      values in breadcrumbs
 - [ ] Rate-limit or at minimum log unauthenticated request volume
+- [ ] Scaffold Hono app, deploy to Vercel, confirm it responds — *scaffold exists and
+      responds locally. **Not deployed** — it runs on localhost behind ngrok, which is
+      dev-only by design. The Vercel half is untouched.* **Deliberately not on the reads
+      branch:** ngrok already reaches the iPhone, so nothing about seeing real numbers on
+      the dashboard waits for Vercel
 
 ### Security tests (Neon branch, real Postgres — not mocks)
-- [ ] User A cannot read or write user B's rows
-- [ ] Unauthenticated request to a protected route is refused
+
+These ship with `api-scope-and-reads`. The scope layer is the thing being tested, and it
+arrives in that branch — testing it later would mean shipping the read routes unproven.
+
+**Written 2026-08-14. Run and green 2026-08-15 — 12/12 against real Postgres**, on a Neon
+branch named `test` (endpoint `ep-dry-truth-ayu60irj`, distinct from the main
+`ep-lingering-haze-ay7kofis`). Took 93s, almost all of it the branch's compute waking.
+Verified afterwards that zero `user_sectest_%` rows remained.
+
+They need `TEST_DATABASE_URL` pointing at that branch — they create users, write rows and
+delete them again, so pointing them at the main database risks leaving debris beside 38
+rows of irreplaceable history. With the variable unset the suite fails with a message
+saying exactly that; it does not silently skip. `npm run test:security`.
+
+⚠️ **The first run failed, and not on an assertion.** `beforeAll` inserted the `users` rows
+and then died on `weight_logs` with a 10s connect timeout, skipping all twelve tests. The
+retry from `server/db/retry.ts` was wired into the query layer and the scripts but **not
+into the tests' own fixture setup** — and a Neon branch is a fresh compute that has never
+been woken, so it stalls more readily than the main database, not less. Every fixture write
+and both cleanup paths now go through `withRetry`. Worth remembering as a category: a flaky
+security suite is one people start skipping, so its scaffolding needs the same care as the
+code it tests.
+
+Everything in them is real except one function: Clerk's `verifyToken` is stubbed, because
+minting a genuine session token would make the suite depend on Clerk being up in order to
+tell us whether *our* query layer leaks. The middleware, the scope, the queries, Postgres
+and the engine are all the real thing — the test cannot fabricate a `UserScope`, so it
+comes in through the front door, the same way an attacker would.
+
+- [x] User A cannot read or write user B's rows — **green.** A's meals and totals, B's
+      meals and totals, A's weigh-ins, B's weigh-ins **and B's absent goal weight** (a leak
+      through a table the day route never touches), a user with no data at all getting an
+      empty series rather than someone else's, and A's streak and logged-day list counting
+      only A's own days — that last one matters because it comes from `selectOwnedDays`,
+      which builds its own `WHERE` rather than going through `selectOwned`, so it is a
+      second place the filter has to be right
+- [x] Unauthenticated request to a protected route is refused — **green.** No header, on
+      both routes; an unverifiable token; an empty bearer; a non-bearer scheme; and a
+      request that names another user in the query string *and* a header while carrying A's
+      token, which still returns A's data
 
 ---
 
@@ -319,13 +513,35 @@ than a list somebody has to remember to update.
 - [x] Signed-out screen and sign-in flow
 - [x] Build the sign-in screen with room for a second provider button — both
       providers shipped together, so no second pass is needed
-- [ ] Sign-out, and a signed-out state that doesn't leak cached health data — *sign-out
-      itself works (button on the placeholder home screen), but the second half is
-      unproven: there is no health data and no React Query cache to leak yet. Re-check
-      when the API client lands*
-- [ ] React Query provider + typed API client using the shared schemas
-- [ ] Shared state components: `<Empty>`, `<Loading>`, `<ErrorState>` — reused everywhere
-- [ ] Verify 44×44px targets and thumb reach on the real device, one-handed
+**The four items below all land in the `dashboard-live-data` branch** (2026-08-14). They are
+not being deferred — wiring the dashboard forces every one of them, so they are cheaper
+there than in a Phase 3 mop-up branch that would have to invent a surface to prove them on.
+
+- [x] Sign-out, and a signed-out state that doesn't leak cached health data — **done
+      2026-08-14, and there are two locks on it.** `clearQueryCache()` runs *before*
+      `signOut()`, because signing out flips Clerk's auth state and remounts the tree —
+      clearing afterwards races that, and anything mounting in between would be handed the
+      previous user's day summary. Separately, **every query key is namespaced by Clerk
+      user id**, so a second account could not read the first one's entries even if the
+      clear were removed. Both exist because they fail differently. ⚠️ **Still owed: the
+      two-account walkthrough on the device** — this is proven by construction, not by
+      observation
+- [x] React Query provider + typed API client using the shared schemas —
+      `@tanstack/react-query` 5.101.4, provider inside `ClerkProvider` (the queries read the
+      user id and call `getToken()`, so auth has to be above them). **Responses are parsed
+      through the shared zod schema, never cast** — `as DaySummary` is a lie the compiler
+      agrees with, and the first dropped field would render `undefined` deep inside a card
+      with no error anywhere
+- [x] Shared state components: `<Empty>`, `<Loading>`, `<ErrorState>` —
+      `src/components/state/`. Written against the dashboard as their first real consumer,
+      exactly as this item asked. `<ErrorState>` maps the error **code** to copy the app
+      owns and never forwards a server message: a session that lapsed is told to sign in
+      rather than offered a "try again" that goes in a circle
+- [ ] Verify 44×44px targets and thumb reach on the real device, one-handed — **still
+      open, and it is now the only Phase 3 item left.** It is a device check; nothing about
+      it can be done from a keyboard. The controls to judge are the quick-action bar, the
+      chart's range switcher (which is a *working* control now, cycling 30 / 90 / 365
+      days), the streak pill, and the "Try again" button inside `<ErrorState>`
 
 ---
 
@@ -333,9 +549,19 @@ than a list somebody has to remember to update.
 
 **Goal:** the ~⅓ of logging that OFF can't serve. Must be fast and pleasant, not punished.
 
-- [ ] Dashboard: today's totals vs targets, remaining macros, macro colour coding
-- [ ] Dashboard answers the three questions in under 10s: what am I looking at,
-      how am I tracking, what do I log next
+The first two items landed with `dashboard-live-data` on 2026-08-14. The rest of Phase 4 is
+genuinely not started.
+
+- [x] Dashboard: today's totals vs targets, remaining macros, macro colour coding —
+      **live as of 2026-08-14.** Every figure comes from the engine through React Query.
+      Over-target is a designed state rather than a minus sign: the hero reads "Calories
+      over" with the excess beside it, and a macro ring that passes its target turns
+      `danger` — losing the macro's own colour is the signal, because a full purple ring
+      and an over-target purple ring look identical
+- [~] Dashboard answers the three questions in under 10s: what am I looking at,
+      how am I tracking, what do I log next — **now judgeable and not yet judged.** The
+      surfaces exist and are showing a real day; the test is whether *your* numbers read
+      fast, which is a stopwatch on the device. Pairs with the 44×44 pass above
 - [ ] Nutrition tab: day view, meals in `sort_order`, `logged_time` shown
 - [ ] Manual entry form — the speed-critical surface
 - [ ] Unit type selector: g, slices, pieces, tbsp, tsp, cup, ml
@@ -577,7 +803,7 @@ Only after v1.0 is in daily use.
 | Cut | Re-add when |
 |---|---|
 | Local-first SQLite two-way sync | Multi-user with heavy offline use — **not** v1.1 |
-| Adaptive TDEE recalc (weekly Inngest job) | 3+ weeks logging in the new app + profile fields filled |
+| Adaptive TDEE recalc (weekly Inngest job) | 3+ weeks logging in the new app + profile fields filled. ⚠️ **The dashboard's Expenditure tile silently depends on this** — it shows a TDEE figure that nothing can compute while this is cut. Resolve the tile before `dashboard-live-data`; see the fixture-backed dashboard section |
 | Roles, tiers, sharing, admin, billing | A second real user exists |
 | E2E device tests (Maestro / Detox) | Multi-user, when regressions hurt someone who isn't you |
 | Progress photos (the *feature*) | A separate feature, still cut. **ImageKit itself is no longer deferred** — it is the decided image-optimisation and delivery layer for any stored, displayed image. What's deferred is the progress-photo feature, not the tool. **Never** used by label OCR. |
@@ -611,6 +837,39 @@ Only after v1.0 is in daily use.
         tabs render as labels with no icons.
       - Android renders Material 3 / Jetpack Compose navigation, not liquid glass —
         the two platforms will not look alike, by design.
+- [x] **What backs the Expenditure tile? — 7-day average intake. Sriman's call,
+      2026-08-14.** The tile is retitled and now reads `averageIntake` from
+      `GET /day/:date`, computed by `packages/engine/src/intake.ts`. The row keeps both
+      tiles and adaptive TDEE stays deferred. One thing to carry into the UI: the average
+      is over **days logged**, not days elapsed, and the response includes `loggedDays`
+      so the tile can say "5 of 7 days" rather than implying a full week.
+- [x] **How does `goal_weight_kg` get written? — seeded, 2026-08-14, at 85.0 kg
+      (Sriman's call).** `npm run seed:profile`, run against Neon. A real profile/settings
+      screen is still owed and is still its own branch — it is a whole surface with four
+      states, not a checkbox. Until it exists, re-running the script with a different
+      constant is the only way to move the goal, which is why it updates rather than skips.
+- [x] **Should the chart window from the last weigh-in, or from today? — from TODAY.
+      Sriman's call on the device, 2026-08-15.** `?days=30` used to end at the last
+      weigh-in, so eleven days of not standing on the scale left no mark and the chart
+      looked complete. It now runs `2026-07-17 → 2026-08-15`: 19 points, then empty space,
+      with the dashed projection filling the gap between the last weigh-in and today. Three
+      consequences, all handled: the x-axis spans the **window** rather than the data (or
+      the ticks bunch left and the gap goes unlabelled), the projection is clipped at today
+      (or it drags the domain weeks into the future), and a window can now legitimately
+      hold **no points**, which gets its own empty state — "No weigh-ins in this range" is
+      not the same sentence as "No weigh-ins yet", and telling someone with 38 weigh-ins
+      that they have none reads as data loss.
+- [x] **Chart range control: menu, not a cycling button. Sriman's call, 2026-08-15.**
+      Tapping past 90 and 1 year to reach 30 is a penance that gets worse with every option
+      added. Now `src/components/ui/Dropdown.tsx` — a small anchored menu offering
+      30 days / 90 days / 1 year / All time, one tap to any of them, 44pt rows. Built as a
+      reusable component because the targets sheet and the food-unit selector will both
+      want it.
+- [ ] **Custom date range on the chart — deferred to its own branch, 2026-08-15.** Sriman
+      asked for it and said later, explicitly. It is not another entry in the `RANGES`
+      array: it is a date-picker surface with its own four states and its own validation,
+      and the bounds it needs are the ones `checkLogDate` already expresses (nothing in the
+      future, nothing before the first logged day).
 - [ ] **Does the old app's source still exist anywhere?** It is the only thing that can
       fully close the trend risk. The per-day-vs-per-row question is settled, but the
       anchor is one recognised number, which cannot rule out a subtler difference (where
@@ -630,6 +889,22 @@ Only after v1.0 is in daily use.
   than a recorded series: it pins the per-day-vs-per-row question decisively, and would
   not catch a subtler error (a different rounding point, say) that happens to land on the
   same final number. Recovering the old implementation's source would close it fully.
+- **A fixture-backed screen reads as a finished screen — closed 2026-08-14.** The dashboard
+  looked complete on the phone, which is why it went two commits without an entry in this
+  file and why Phase 4 appeared untouched. `design-fixture.ts` was the only thing marking
+  those numbers as fake, and it disappeared from view the moment you stopped reading the
+  source. It is now deleted and every card fetches. **Worth keeping as a recorded failure:**
+  the mitigation that worked was deleting the fixture in one branch rather than wiring
+  cards gradually beside it — a half-wired dashboard where some figures are real and some
+  are traced from a mock is the genuinely dangerous state, because nothing on screen tells
+  the two apart.
+- **The dashboard now shows an honest but bleak picture, and that is correct.** Added
+  2026-08-14. The real data has one meal logged in the last seven days and no weigh-in
+  since 2026-08-04, so the streak reads 0, the average-intake tile reads "1 of last 7
+  days", and the trend is rising at +0.49 kg/week away from an 85 kg goal — which is why
+  `projectTrend` correctly returns no ETA. **None of that is a bug**, and the risk is
+  reading it as one and "fixing" the app. If the screen is to look different, the input has
+  to be different.
 - **OFF resolved 2 of 6 pantry items.** Manual entry speed is a product requirement.
 - **Sonnet 5 intro pricing ($2/$10) ends 2026-08-31.** Budget against $3/$15.
 - **Sonnet 5's tokenizer runs ~30% heavier** than the previous generation — measure, never

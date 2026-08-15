@@ -39,7 +39,15 @@ yarn-error.*
 # Weight and meal history is personal health data under POPIA. It is read by
 # the migration script and by the trend oracle test, and it must never reach
 # git: a commit is public the moment the repo is, and history is forever.
-data/
+#
+# **Leading slash: this matches ./data/ ONLY, not every directory named `data`.**
+# Unanchored, it also swallowed `server/data/` — the entire scoped query layer,
+# the one thing enforcing that a query cannot run without a verified UserScope —
+# and shipped a branch whose routes imported three files that were not in it.
+# Nothing failed locally, because the files were on disk the whole time; it would
+# have failed on the next clean clone, or for the next person. Anchor any rule
+# meant for one specific directory.
+/data/
 
 # typescript
 *.tsbuildinfo
@@ -49,3 +57,5 @@ example
 # generated native folders
 /ios
 /android
+
+.scratch/

@@ -3,6 +3,8 @@ import { useClerk } from "@clerk/expo"
 
 import { currentLoggingDay } from "@engine"
 
+import { clearQueryCache } from "@/lib/query-client"
+
 /**
  * Holding screen for the three tabs the shell routes to but that have no UI
  * yet. Each is its own branch later; this exists so the tab bar can be walked
@@ -36,11 +38,29 @@ export function TabPlaceholder({ title, note }: { title: string; note: string })
         SAST day: {currentLoggingDay()}
       </Text>
 
+      {/*
+        Sign-out clears the React Query cache **before** ending the session.
+
+        Order matters. `signOut()` flips Clerk's auth state, which unmounts the
+        tabs and remounts the sign-in screen; clearing afterwards would race
+        that re-render, and anything that mounted in between would be handed the
+        previous user's cached day summary to draw. Clearing first means there
+        is nothing left to hand anyone.
+
+        This is the second of two locks on the same door — every query key is
+        also namespaced by Clerk user id, so a second account could not read the
+        first one's entries even if this call were removed. Both exist because
+        they fail differently: the key namespace protects against a stale read,
+        this protects against the data still sitting in memory at all.
+      */}
       <Pressable
         className="mt-[32px] h-[44px] items-center justify-center rounded-[10px] bg-secondary px-[24px] active:opacity-90"
         accessibilityRole="button"
         accessibilityLabel="Sign out"
-        onPress={() => void signOut()}
+        onPress={() => {
+          clearQueryCache()
+          void signOut()
+        }}
       >
         <Text className="font-barlow-semibold text-[15px] text-white">Sign out</Text>
       </Pressable>
