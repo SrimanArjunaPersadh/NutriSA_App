@@ -120,6 +120,17 @@ branch review. These are the ones that most often get violated by default:
 One feature per branch, one fresh session per branch. At the end of a session, stop and
 hand off — suggest the next branch name, don't create it.
 
+**Starting a session: read `.scratch/handoffs/` first.** The previous session leaves a
+handoff there named after the branch it worked on. It carries the next concrete action, the
+decisions that are not yet in `plan.md`, and the open questions for Sriman — read the most
+recent one before touching code, and before asking him where things stand.
+
+`.scratch/` is gitignored, deliberately: a handoff is session state, not repo state. Two
+consequences worth knowing. It never reaches a commit, so nothing there may be treated as a
+source of truth over `plan.md` — the handoff **references**, it does not restate. And it
+does not travel between machines, so on a fresh clone the directory will be empty; that is
+normal, not a missing file, and the answer is to ask Sriman rather than to hunt for it.
+
 ## Commands
 
 ```bash
