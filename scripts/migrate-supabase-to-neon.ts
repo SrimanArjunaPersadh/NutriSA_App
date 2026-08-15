@@ -5,6 +5,7 @@ import path from "node:path"
 import { db, schema } from "../server/db"
 import { isLogDay, type LogDay } from "@engine"
 import { numOrNull, num, nullable, readCsv, ts } from "./csv"
+import { withRetry } from "../server/db/retry"
 
 /**
  * Moves the Supabase history into Neon, once.
@@ -48,38 +49,6 @@ function requireEnv(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`Missing ${name}. Add it to .env — see plan.md Phase 0.`)
   return value
-}
-
-/**
- * Retries a statement through transient network failures.
- *
- * Neon's HTTP driver reaches the database over `fetch`, and that connection
- * drops often enough to matter: a 38-row insert failed here while a 4-row one
- * immediately after succeeded, with identical data. A transport blip is not a
- * reason to abandon a migration halfway.
- *
- * Only transport errors are retried. A Postgres error carries a `code` (a
- * constraint violation, a bad type), and retrying one of those just produces
- * the same failure more slowly while hiding the real problem.
- */
-async function withRetry<T>(label: string, run: () => Promise<T>): Promise<T> {
-  const MAX_ATTEMPTS = 4
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await run()
-    } catch (error: unknown) {
-      const cause = (error as { cause?: { code?: string; message?: string } })?.cause
-      const isPostgresError = Boolean(cause?.code)
-      if (isPostgresError || attempt === MAX_ATTEMPTS) throw error
-
-      const waitMs = 400 * 2 ** (attempt - 1)
-      console.log(
-        `  ${label}: ${cause?.message ?? "connection failed"} — ` +
-          `retry ${attempt}/${MAX_ATTEMPTS - 1} in ${waitMs}ms`,
-      )
-      await new Promise((resolve) => setTimeout(resolve, waitMs))
-    }
-  }
 }
 
 function table(name: string) {

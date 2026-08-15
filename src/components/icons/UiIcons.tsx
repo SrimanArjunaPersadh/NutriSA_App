@@ -72,6 +72,28 @@ export function ChevronRight({ size = 16, color = colors.textSecondary }: IconPr
   )
 }
 
+/**
+ * The selected row in a `Dropdown`.
+ *
+ * Drawn, not the "✓" character, for the reason at the top of this file — and
+ * more so here than anywhere else: a tick is the only mark distinguishing the
+ * chosen option from the rest, so a fallback glyph would not merely look odd,
+ * it would leave the menu with nothing saying which one is current.
+ */
+export function TickIcon({ size = 16, color = colors.primary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="m3.5 8.5 3 3 6-7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
 /** Magnifier in the food search field. */
 export function SearchIcon({ size = 20, color = colors.textSecondary }: IconProps) {
   return (

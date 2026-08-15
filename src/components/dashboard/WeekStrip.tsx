@@ -57,19 +57,29 @@ import { colors } from "@/design/tokens"
  * dashed on iOS. The past-day ring is dashed, so a CSS border would have made
  * yesterday look like today on half the devices this ships to.
  *
- * ## The three states, and the fourth that is owed
+ * ## The four states
  *
- * Today gets a solid ring, past days a dashed one, future days none. The state
- * this cannot show yet is **logged** — a filled ring on a day with a meal on
- * it, which is what makes the strip worth scrolling and what the streak counts.
- * It needs the data layer. Until then the dashed ring means "past", where it
- * will come to mean "past, nothing logged".
+ * | state | ring |
+ * |---|---|
+ * | today | solid, `primary` |
+ * | past, logged | solid, `ok` |
+ * | past, nothing logged | dashed, `buttonBorder` |
+ * | future | none |
  *
- * The columns are not pressable for the same reason: switching the dashboard to
- * another day is a query that does not exist. They are labelled as dates rather
- * than left as bare digits, so VoiceOver reads "Thursday 13 August, today"
- * instead of loose numbers — but they announce as text, not as buttons that go
- * nowhere.
+ * **Logged** is the state this could not show while the screen was
+ * fixture-backed, and it is the one that makes the strip worth scrolling — it
+ * is the streak, laid out on a calendar. It comes from `loggedDays` on the day
+ * summary, which the server bounds to the same 13 weeks this shows.
+ *
+ * Today keeps `primary` whether or not it is logged. Two signals compete for
+ * that ring and "this is the day you are looking at" is the more useful one;
+ * whether today is logged is what the flame in the header is for.
+ *
+ * The columns are still not pressable: switching the dashboard to another day
+ * needs a date parameter threaded through the screen, and that is the branch
+ * that adds day-switching, not this one. They are labelled as dates rather than
+ * left as bare digits, so VoiceOver reads "Thursday 13 August, logged" instead
+ * of loose numbers — but they announce as text, not as buttons that go nowhere.
  */
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -104,7 +114,19 @@ const GUTTER = 16
 const CIRCLE_SIZE = 36
 const RING_STROKE = 1.5
 
-type DayState = "past" | "today" | "future"
+type DayState = "past" | "logged" | "today" | "future"
+
+const RING_STROKE_BY_STATE: Record<Exclude<DayState, "future">, string> = {
+  // `primary` rather than white: it is already what the tab bar uses for the
+  // current destination, so "the thing you are looking at" is one colour across
+  // the app. There is deliberately no `white` token — Tailwind ships one, and a
+  // second copy in the palette would be a token that exists only to be a
+  // duplicate.
+  today: colors.primary,
+  /** Same green as a loss on the chart: this day went the right way. */
+  logged: colors.ok,
+  past: colors.buttonBorder,
+}
 
 function DayRing({ state }: { state: DayState }) {
   if (state === "future") return null
@@ -122,15 +144,12 @@ function DayRing({ state }: { state: DayState }) {
         cx={CIRCLE_SIZE / 2}
         cy={CIRCLE_SIZE / 2}
         r={radius}
-        // `primary` rather than white: it is already what the tab bar uses for
-        // the current destination, so "the thing you are looking at" is one
-        // colour across the app. There is deliberately no `white` token —
-        // Tailwind ships one, and a second copy in the palette would be a
-        // token that exists only to be a duplicate.
-        stroke={state === "today" ? colors.primary : colors.buttonBorder}
+        stroke={RING_STROKE_BY_STATE[state]}
         strokeWidth={RING_STROKE}
         // 4-on-4-off reads as dashed at 36px; finer than that turns into a
         // grey halo on a retina panel and loses the distinction entirely.
+        // Only the empty past day is dashed — the dashes are what make it read
+        // as "nothing here" beside a solid logged one.
         strokeDasharray={state === "past" ? [4, 4] : undefined}
         fill="none"
       />
@@ -165,12 +184,23 @@ export function currentMonthLabel(today: LogDay = currentLoggingDay()): string {
  */
 export function WeekStrip({
   today = currentLoggingDay(),
+  loggedDays,
   onVisibleMonthChange,
 }: {
   today?: LogDay
+  /**
+   * Days carrying at least one meal. Undefined while the day summary is still
+   * loading, which renders every past day as unlogged — the honest reading of
+   * "we do not know yet", and it settles into the real pattern in one frame
+   * without the ring changing size or the row reflowing.
+   */
+  loggedDays?: readonly LogDay[]
   onVisibleMonthChange?: (label: string) => void
 }) {
   const { width } = useWindowDimensions()
+
+  // A Set, because this is checked 91 times per render.
+  const logged = new Set(loggedDays ?? [])
   const scroller = useRef<ScrollView>(null)
   const initialised = useRef(false)
 
@@ -227,7 +257,13 @@ export function WeekStrip({
           >
             {week.map((day) => {
               const state: DayState =
-                day === today ? "today" : day < today ? "past" : "future"
+                day === today
+                  ? "today"
+                  : day > today
+                    ? "future"
+                    : logged.has(day)
+                      ? "logged"
+                      : "past"
               const index = weekdayIndex(day)
 
               return (
@@ -237,7 +273,9 @@ export function WeekStrip({
                   accessibilityLabel={`${WEEKDAY_NAMES[index]} ${dayOfMonth(day)} ${monthLabel(
                     day,
                     today,
-                  )}${state === "today" ? ", today" : ""}`}
+                  )}${
+                    state === "today" ? ", today" : state === "logged" ? ", logged" : ""
+                  }`}
                   className="flex-1 items-center"
                 >
                   <Text

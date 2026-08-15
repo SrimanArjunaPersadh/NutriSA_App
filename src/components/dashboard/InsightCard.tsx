@@ -1,25 +1,22 @@
 import { useState } from "react"
-import { Pressable, Text, View } from "react-native"
+import { Text, View } from "react-native"
 
 import { Sparkline } from "@/components/dashboard/Sparkline"
 import { ChevronRight } from "@/components/icons/UiIcons"
-import type { Insight } from "@/components/dashboard/design-fixture"
 
 /**
  * One tile in the Insights & Analytics row: a metric, the shape of its last
  * week, and the current figure.
  *
- * The whole tile is the touch target rather than the chevron. A 16pt caret is
- * well under the 44×44 minimum and would need padding out to reach it, at
- * which point the padding is the target and the caret is just the label for it
- * — so the caret is marked decorative and the card takes the press.
+ * Unwired on this branch — there is no insight detail screen to push to. The
+ * tile is a plain View rather than a Pressable with `disabled` on it: a
+ * Pressable renders press feedback for a destination that does not exist, and
+ * a card that visibly responds to a tap and then does nothing is worse than one
+ * that does not respond. The chevron stays because the row *will* be tappable,
+ * and it is the affordance that says so.
  *
- * Unwired on this branch. `onPress` is deliberately absent rather than a no-op
- * handler, and `accessibilityState.disabled` says so out loud: a Pressable with
- * nothing behind it still renders press feedback, and without the state flag
- * VoiceOver would announce a working button that goes nowhere. The visual
- * feedback is kept on purpose so the touch targets can still be felt on device.
- * Drop the flag in the branch that adds the handler.
+ * When the detail screen lands, this becomes a Pressable and the chevron
+ * finally means something.
  */
 
 /**
@@ -29,21 +26,36 @@ import type { Insight } from "@/components/dashboard/design-fixture"
  */
 const CHART_HEIGHT = 54
 
-export function InsightCard({ insight }: { insight: Insight }) {
+/** Fixed so the two tiles line up whatever state each of them is in. */
+export const INSIGHT_CARD_WIDTH = 172
+
+export type InsightProps = {
+  title: string
+  /** The window the figure covers, shown under the title. */
+  period: string
+  /** Pre-formatted by the caller. No component rounds for display. */
+  value: string
+  unit: string
+  /** Oldest first. `null` is a day with no log — see `Sparkline`. */
+  series: readonly (number | null)[]
+  color: string
+}
+
+export function InsightCard({ title, period, value, unit, series, color }: InsightProps) {
   const [chartWidth, setChartWidth] = useState(0)
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${insight.title}, ${insight.period}: ${insight.value} ${insight.unit}`}
-      accessibilityState={{ disabled: true }}
-      className="w-[172px] rounded-[16px] border border-cardBorder bg-card p-[14px] active:opacity-90"
+    <View
+      accessible
+      accessibilityLabel={`${title}, ${period}: ${value} ${unit}`}
+      className="rounded-[16px] border border-cardBorder bg-card p-[14px]"
+      style={{ width: INSIGHT_CARD_WIDTH }}
     >
       <Text className="font-barlow-semibold text-[17px] leading-[21px] text-white">
-        {insight.title}
+        {title}
       </Text>
-      <Text className="mt-[2px] font-barlow text-[13px] text-textSecondary">
-        {insight.period}
+      <Text numberOfLines={1} className="mt-[2px] font-barlow text-[13px] text-textSecondary">
+        {period}
       </Text>
 
       <View
@@ -52,8 +64,8 @@ export function InsightCard({ insight }: { insight: Insight }) {
         onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}
       >
         <Sparkline
-          values={insight.series}
-          color={insight.color}
+          values={series}
+          color={color}
           width={chartWidth}
           height={CHART_HEIGHT}
         />
@@ -64,14 +76,45 @@ export function InsightCard({ insight }: { insight: Insight }) {
       <View className="mt-[10px] flex-row items-center justify-between">
         <View className="flex-row items-baseline">
           <Text className="font-display text-[24px] leading-[26px] text-white">
-            {insight.value}
+            {value}
           </Text>
           <Text className="ml-[4px] font-barlow text-[13px] text-textSecondary">
-            {insight.unit}
+            {unit}
           </Text>
         </View>
         <ChevronRight size={16} />
       </View>
-    </Pressable>
+    </View>
+  )
+}
+
+/**
+ * A tile that has no figure to show — no logs in the window, or the query
+ * failed. Same footprint as a real one, so the row does not reflow between
+ * states and the two tiles stay on one baseline.
+ */
+export function InsightPlaceholder({
+  title,
+  message,
+}: {
+  title: string
+  message: string
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${title}: ${message}`}
+      className="rounded-[16px] border border-cardBorder bg-card p-[14px]"
+      style={{ width: INSIGHT_CARD_WIDTH }}
+    >
+      <Text className="font-barlow-semibold text-[17px] leading-[21px] text-white">
+        {title}
+      </Text>
+      <View className="flex-1 justify-center">
+        <Text className="my-[24px] font-barlow text-[14px] text-textSecondary">
+          {message}
+        </Text>
+      </View>
+    </View>
   )
 }

@@ -46,7 +46,28 @@ export {
   type LoggedItem,
 } from "./macros"
 
+export {
+  averageDailyIntake,
+  type AverageIntake,
+  type DayIntake,
+  type IntakePoint,
+} from "./intake"
+
 export { resolveTargetForDate, type TargetRow } from "./targets"
+
+export {
+  currentStreak,
+  longestStreak,
+  NO_STREAK,
+  type Streak,
+} from "./streak"
+
+export {
+  evenlySpaced,
+  niceScale,
+  type Scale,
+  type ScaleOptions,
+} from "./chart"
 
 export {
   goalProgress,

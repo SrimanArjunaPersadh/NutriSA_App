@@ -3,7 +3,7 @@ import { Animated, Easing, Pressable, Text, View } from "react-native"
 import { useRouter } from "expo-router"
 
 import { FlameIcon } from "@/components/icons/UiIcons"
-import { streak } from "@/components/dashboard/design-fixture"
+import { useDaySummary } from "@/lib/queries"
 import { colors, withAlpha } from "@/design/tokens"
 
 /**
@@ -38,6 +38,21 @@ import { colors, withAlpha } from "@/design/tokens"
  */
 export default function StreakOverlay() {
   const router = useRouter()
+
+  /**
+   * Read from the cache, not fetched.
+   *
+   * This screen is only reachable from the pill in the dashboard header, and
+   * the pill only renders once the day summary has loaded — so by the time
+   * anyone is here, React Query already holds the answer and this resolves
+   * without a request. That is why the overlay has no loading state: it cannot
+   * be opened before there is something to show.
+   *
+   * The fallback exists for the one case that is not a user journey — a reload
+   * with this route already on the stack, which Metro does on every save.
+   */
+  const { data } = useDaySummary()
+  const streak = data?.streak ?? { days: 0, lit: false }
 
   const entrance = useRef(new Animated.Value(0)).current
   const breath = useRef(new Animated.Value(0)).current
@@ -74,7 +89,11 @@ export default function StreakOverlay() {
     )
     loop.start()
     return () => loop.stop()
-  }, [breath])
+    // `streak.lit` is a dependency now that it arrives from a query rather than
+    // a constant: on a reload with this route already on the stack the fallback
+    // renders unlit first, and without this the flame would stay still after
+    // the real value landed.
+  }, [breath, streak.lit])
 
   // Scales in from 0.8, then breathes on top of that once lit. `breath` holds
   // at 0 when the loop above never starts, so the multiply is a no-op rather
@@ -126,9 +145,18 @@ export default function StreakOverlay() {
           ended on one; now the sentence finishes in words, and a decorative
           flame after "going" would be a second flame competing with the one
           above that actually reports the state.
+
+          Three states, three sentences. Asking someone who has already logged
+          today to "keep the streak going" reads as though the app did not
+          notice — the whole point of `lit` being separate from `days` is that
+          the screen can tell those apart.
         */}
         <Text className="mt-[28px] text-center font-barlow text-[17px] text-white/80">
-          Log one meal today to keep the streak going
+          {streak.lit
+            ? "Logged today. Come back tomorrow to keep it going"
+            : streak.days === 0
+              ? "Log one meal today to start a streak"
+              : "Log one meal today to keep the streak going"}
         </Text>
 
         <Pressable

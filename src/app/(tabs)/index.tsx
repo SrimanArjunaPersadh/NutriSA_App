@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { ScrollView, Text, View } from "react-native"
+import { RefreshControl, ScrollView, Text, View } from "react-native"
 import { Image } from "expo-image"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import logoMark from "@/design/logo-mark.png"
+import { colors } from "@/design/tokens"
 import { CaloriesCard } from "@/components/dashboard/CaloriesCard"
 import { InsightsSection } from "@/components/dashboard/InsightsSection"
 import { MacrosCard } from "@/components/dashboard/MacrosCard"
@@ -15,6 +16,7 @@ import {
 import { StreakPill } from "@/components/dashboard/StreakPill"
 import { currentMonthLabel, WeekStrip } from "@/components/dashboard/WeekStrip"
 import { WeightTrendCard } from "@/components/dashboard/WeightTrendCard"
+import { useDaySummary } from "@/lib/queries"
 
 /**
  * Dashboard — the cards traced from src/design/home_screen_ui.png, the insights
@@ -28,10 +30,16 @@ import { WeightTrendCard } from "@/components/dashboard/WeightTrendCard"
  * fourth question nobody asks mid-morning; weight keeps the chart below and its
  * own tab.
  *
- * This is the happy state only. The empty, loading and error states are owed
- * before this screen can merge for real; they are not sketched here because
- * every one of them depends on the shape of the query that does not exist yet,
- * and guessing at it now would only have to be thrown away.
+ * ## Every number here is real
+ *
+ * `design-fixture.ts` is gone. Each card fetches through React Query and owns
+ * its own four states — loading, error, empty, happy — rather than the screen
+ * holding one state for all of them. That is deliberate: the cards answer
+ * different questions from different routes, and a single screen-wide spinner
+ * would hide a working calories card because the chart was slow.
+ *
+ * The four-state rule therefore lands on the card, which is the surface a user
+ * actually reads. See `src/components/state/`.
  *
  * The ScrollView is the first child on purpose — native tabs hang the automatic
  * content inset, and tap-the-tab-to-scroll-to-top, off the first scrollable they
@@ -64,6 +72,18 @@ export default function Dashboard() {
   // the header does not render a frame without it and shove the pill sideways.
   const [month, setMonth] = useState(currentMonthLabel)
 
+  /**
+   * The strip needs the logged days, and every card below needs the rest of
+   * this response. React Query dedupes them all onto one request, so calling
+   * the hook here as well costs nothing and keeps each card owning its own four
+   * states instead of being handed props it cannot render without.
+   *
+   * Pull-to-refresh drives this query rather than both: it is the one the whole
+   * screen is built around, and the weight query has its own longer stale time
+   * because a weigh-in happens once a day at most.
+   */
+  const { data, refetch, isRefetching } = useDaySummary()
+
   return (
     <>
       <ScrollView
@@ -73,6 +93,16 @@ export default function Dashboard() {
           paddingBottom: SCROLL_BOTTOM_PADDING,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            // The spinner has to be visible against the app ground, which is
+            // near-black — the platform default is a dark grey that disappears
+            // on it entirely.
+            tintColor={colors.textSecondary}
+          />
+        }
       >
         <View className="flex-row items-center px-[16px]">
           {/*
@@ -121,7 +151,7 @@ export default function Dashboard() {
             inside each page — wrapping it in a padded View would put its snap
             points 16pt out of step with its content. */}
         <View className="mt-[18px]">
-          <WeekStrip onVisibleMonthChange={setMonth} />
+          <WeekStrip loggedDays={data?.loggedDays} onVisibleMonthChange={setMonth} />
         </View>
 
         <View className="mt-[20px] gap-[14px] px-[16px]">
