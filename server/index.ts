@@ -7,6 +7,7 @@ import type { AppEnv, UserScope } from "./auth/user-scope";
 import { env } from "./env";
 import { captureRouteError, initSentry } from "./observability/sentry";
 import { reads } from "./routes/reads";
+import { writes } from "./routes/writes";
 import {
   clerkUserCreated,
   clerkUserDeleted,
@@ -48,6 +49,11 @@ app.get("/", (c) =>
       "GET /health",
       "GET /api/day/:date",
       "GET /api/weight-logs",
+      "GET /api/targets",
+      "POST /api/meal-logs",
+      "DELETE /api/meal-logs/:id",
+      "POST /api/weight-logs",
+      "POST /api/targets",
       "POST /api/webhooks/clerk",
       "GET|POST|PUT /api/inngest",
     ],
@@ -111,6 +117,14 @@ app.on(["GET", "POST", "PUT"], "/api/inngest", (c) => inngestHandler(c));
 app.route("/api", reads);
 
 /**
+ * The write routes — same path prefix, same session verification, plus a
+ * per-user rate limit that the reads do not carry. Two routers rather than one
+ * because that limit is the difference between them: a read costs a query, a
+ * write costs a row.
+ */
+app.route("/api", writes);
+
+/**
  * Unhandled errors.
  *
  * The client is told nothing beyond "something broke". A Postgres error
@@ -138,6 +152,9 @@ honoServe({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`  Health check    http://localhost:${info.port}/health`);
   console.log(`  Day summary     GET /api/day/:date  (or /api/day/today)`);
   console.log(`  Weight series   GET /api/weight-logs?days=30`);
+  console.log(`  Targets         GET /api/targets   POST /api/targets`);
+  console.log(`  Log a meal     POST /api/meal-logs  DELETE /api/meal-logs/:id`);
+  console.log(`  Log a weigh-in POST /api/weight-logs`);
   console.log(`  Clerk webhook  POST /api/webhooks/clerk`);
   console.log(`  Inngest         ALL /api/inngest`);
 });

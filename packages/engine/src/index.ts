@@ -55,6 +55,8 @@ export {
 
 export { resolveTargetForDate, type TargetRow } from "./targets"
 
+export { nextSortOrder } from "./ordering"
+
 export {
   currentStreak,
   longestStreak,

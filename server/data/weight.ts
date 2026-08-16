@@ -12,11 +12,17 @@ import {
   type LogDay,
   type TrendPoint,
 } from "@engine"
-import type { WeightRange, WeightSeries } from "@shared"
+import type {
+  WeightRange,
+  WeightSeries,
+  WeightWriteResult,
+  WriteWeight,
+} from "@shared"
 
 import type { UserScope } from "../auth/user-scope"
+import { isUniqueViolation } from "../db/errors"
 import { profiles, weightLogs } from "../db/schema"
-import { selectOwned } from "./scoped"
+import { selectOwned, upsertOwned, type WriteOutcome } from "./scoped"
 
 /**
  * The weight series behind the trend chart, the trend card and the weight
@@ -111,6 +117,70 @@ export async function readWeightSeries(
       goalKg: goalWeightKg ?? undefined,
       forDays: PROJECTION_DAYS,
     }),
+  }
+}
+
+/**
+ * Records a weigh-in, replacing that day's if there is one.
+ *
+ * ## Why this is an upsert and not an insert
+ *
+ * `weight_logs` carries `UNIQUE (user_id, date)`, and the schema explains why:
+ * the trend takes one step per calendar day, so a second row for a day would
+ * double-step the series and every value after it would be quietly wrong. Given
+ * that, a second weigh-in on the same day has only two possible answers —
+ * refuse it, or replace. Replace is the right one: standing on the scale twice
+ * is how people correct a bad reading, and "you already weighed today" is a
+ * strange thing for an app to say to someone holding a better number.
+ *
+ * ## What `replaced` means, precisely
+ *
+ * The row that now holds this day is not the one the client just minted. Since
+ * every fresh save carries a fresh UUIDv7, that is exactly "there was already a
+ * weigh-in here". A **retry** of the same save comes back `replaced: false`,
+ * which is also right — it replaced nothing, it landed on its own row.
+ *
+ * ## The one failure this cannot swallow
+ *
+ * The conflict target is `(user_id, date)`, so a clash on the **primary key** —
+ * the same id sent for a different day — is not caught by it and surfaces as a
+ * unique violation. That is a client minting ids badly, and it gets a 409
+ * rather than a 500: retrying it would fail identically forever.
+ */
+export async function writeWeightLog(
+  scope: UserScope,
+  day: LogDay,
+  input: WriteWeight,
+): Promise<WriteOutcome<WeightWriteResult>> {
+  let rows
+  try {
+    rows = await upsertOwned(
+      scope,
+      weightLogs,
+      { id: input.id, date: day, weight: input.weightKg },
+      {
+        target: [weightLogs.userId, weightLogs.date],
+        set: { weight: input.weightKg },
+      },
+    )
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, reason: "id-taken" }
+    throw error
+  }
+
+  const row = rows[0]
+  // Unreachable through a correct conflict target — `upsertOwned` says why —
+  // so this is refused rather than reported as a success with nothing behind it.
+  if (!row) return { ok: false, reason: "id-taken" }
+
+  return {
+    ok: true,
+    value: {
+      id: row.id,
+      date: row.date,
+      weightKg: row.weight,
+      replaced: row.id !== input.id,
+    },
   }
 }
 

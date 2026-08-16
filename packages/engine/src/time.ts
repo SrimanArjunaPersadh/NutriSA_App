@@ -135,14 +135,30 @@ export type LogDateBounds = {
    * The user's earliest logged day, if they have one. Nothing may be logged
    * before it — a back-date into a period the user was not tracking would show
    * up as a trend point with no history behind it.
+   *
+   * This is the bound a **date picker** wants: it describes the data. The write
+   * routes deliberately do not pass it, because refusing to back-fill yesterday
+   * for someone whose first log is today would be absurd.
    */
   firstLogDay?: LogDay
+  /**
+   * The oldest day a **write** may name, regardless of history.
+   *
+   * A separate bound from `firstLogDay` because it answers a different
+   * question: not "is there data here" but "can any surface in the app show
+   * this day at all". A meal back-dated past every window the UI scrolls is
+   * accepted, stored, and then invisible forever — which reads as data loss.
+   * `server/routes/writes.ts` sets it, and its value is the same quarter the
+   * week strip scrolls.
+   */
+  earliest?: LogDay
 }
 
 export type LogDateRejection =
   | "malformed"
   | "in-the-future"
   | "before-first-log"
+  | "too-far-back"
 
 /**
  * Whether a user-supplied `date` may be written.
@@ -151,6 +167,10 @@ export type LogDateRejection =
  * forbidding it. Returns the reason on failure because each one needs different
  * words on screen: a future date is a mistake, a pre-history date is a
  * limitation worth explaining.
+ *
+ * When both lower bounds are given and a date falls outside both,
+ * `before-first-log` is reported. It is the more informative of the two — it
+ * names something the user did, rather than a limit the app chose.
  */
 export function checkLogDate(
   date: string,
@@ -162,6 +182,9 @@ export function checkLogDate(
   }
   if (bounds.firstLogDay && daysBetween(bounds.firstLogDay, date) < 0) {
     return { ok: false, reason: "before-first-log" }
+  }
+  if (bounds.earliest && daysBetween(bounds.earliest, date) < 0) {
+    return { ok: false, reason: "too-far-back" }
   }
   return { ok: true, day: date }
 }

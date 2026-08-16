@@ -4,6 +4,7 @@ import type { Context, MiddlewareHandler } from "hono"
 import type { ApiErrorCode } from "@shared"
 
 import { env } from "../env"
+import { recordUnauthenticated } from "../http/limits"
 
 /**
  * The authorisation boundary. Everything user-scoped in this server is reached
@@ -51,7 +52,16 @@ export type AppEnv = {
   }
 }
 
+/**
+ * Refuses a request, and counts it.
+ *
+ * The tally is volume only — how many, from how many callers, never an IP and
+ * never the token. plan.md's `api-writes` branch asks for exactly this, and
+ * `../http/limits.ts` explains why the unauthenticated path is counted rather
+ * than blocked.
+ */
 function fail(c: Context, code: ApiErrorCode, message: string, status: 401 | 400) {
+  recordUnauthenticated(c)
   return c.json({ code, message }, status)
 }
 
@@ -86,6 +96,26 @@ function bearerToken(c: Context): string | null {
  * The reason is logged locally, where it is useful and not addressed to them.
  */
 export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
+  /**
+   * Already verified on this request. Nothing to do.
+   *
+   * Both routers mount this, and both are mounted at `/api` — so a write runs
+   * the chain twice, because the first router's wildcard middleware matches
+   * every path under the prefix and not only its own routes. Each router
+   * declaring its own guard is worth keeping: `tests/security/` requests those
+   * routers directly, and a router whose protection lives somewhere else is a
+   * router that is one refactor away from having none.
+   *
+   * Trusting the scope already on the context is exactly as strong as verifying
+   * the token again, and for a structural reason rather than a hopeful one:
+   * `UserScope` carries a module-private symbol, so the only thing that can
+   * have put one there is the code below.
+   */
+  if (c.get("scope")) {
+    await next()
+    return undefined
+  }
+
   const token = bearerToken(c)
   if (!token) {
     return fail(c, "unauthenticated", "Authentication required.", 401)

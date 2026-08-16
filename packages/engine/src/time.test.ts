@@ -132,6 +132,48 @@ describe("checkLogDate", () => {
   it("allows any past date for a user with no history yet", () => {
     expect(checkLogDate("2020-01-01", { today: "2026-08-12" }).ok).toBe(true)
   })
+
+  /**
+   * The write bound. Separate from `firstLogDay` because the write routes must
+   * let a brand-new user back-fill yesterday — see the note on `LogDateBounds`.
+   */
+  describe("earliest", () => {
+    const writeBounds = { today: "2026-08-12", earliest: "2026-05-13" }
+
+    it("accepts the oldest permitted day and everything after it", () => {
+      expect(checkLogDate("2026-05-13", writeBounds).ok).toBe(true)
+      expect(checkLogDate("2026-08-12", writeBounds).ok).toBe(true)
+    })
+
+    it("rejects the day before it", () => {
+      expect(checkLogDate("2026-05-12", writeBounds)).toEqual({
+        ok: false,
+        reason: "too-far-back",
+      })
+    })
+
+    it("still rejects a future date first", () => {
+      expect(checkLogDate("2026-08-13", writeBounds)).toEqual({
+        ok: false,
+        reason: "in-the-future",
+      })
+    })
+
+    it("does not bound a user whose history predates it, unless asked to", () => {
+      // No `earliest`, so a date picker over a long history keeps working.
+      expect(checkLogDate("2020-01-01", { today: "2026-08-12" }).ok).toBe(true)
+    })
+
+    it("reports the first-log reason when both bounds are broken", () => {
+      expect(
+        checkLogDate("2026-01-01", {
+          today: "2026-08-12",
+          firstLogDay: "2026-05-01",
+          earliest: "2026-05-13",
+        }),
+      ).toEqual({ ok: false, reason: "before-first-log" })
+    })
+  })
 })
 
 describe("weekdayIndex", () => {

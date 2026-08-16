@@ -5,6 +5,7 @@ import { logDaySchema, weightRangeSchema } from "@shared"
 
 import { getScope, requireUser, type AppEnv } from "../auth/user-scope"
 import { readDaySummary } from "../data/day"
+import { readTargets } from "../data/targets"
 import { readWeightSeries } from "../data/weight"
 
 /**
@@ -79,3 +80,17 @@ reads.get("/weight-logs", async (c) => {
 
   return c.json(await readWeightSeries(getScope(c), parsed.data))
 })
+
+/**
+ * `GET /targets` — the targets in force today, and every set on record.
+ *
+ * It sits here rather than beside `POST /targets` in `writes.ts` because it is
+ * a read: no body, nothing changes, and the write router's rate limit is for
+ * things that cost a row. The pair is documented together in
+ * `../data/targets.ts`, which is where the effective-dating rule lives.
+ *
+ * No parameters at all. "Which targets apply" is answered against today by the
+ * engine, and a caller asking about a different day is asking `GET /day/:date`,
+ * which already resolves them for that day.
+ */
+reads.get("/targets", async (c) => c.json(await readTargets(getScope(c))))

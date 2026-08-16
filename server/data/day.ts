@@ -46,8 +46,12 @@ const INTAKE_WINDOW_DAYS = 7
  *
  * Bounded at all because this rides on a response the dashboard fetches on
  * every open, and an unbounded list grows by one entry per logged day forever.
+ *
+ * Exported because `../routes/writes.ts` bounds back-dating by the same number:
+ * a day the app cannot show is a day nothing may be written to. The two must
+ * move together, and importing is how that stays true.
  */
-const LOGGED_DAYS_WINDOW_DAYS = 91
+export const LOGGED_DAYS_WINDOW_DAYS = 91
 
 export async function readDaySummary(
   scope: UserScope,

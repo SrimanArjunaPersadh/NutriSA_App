@@ -17,6 +17,7 @@ Expo app ──Bearer <Clerk session token>──▶ requireUser ──▶ UserS
 |---|---|
 | `GET /api/day/:date` | One day: targets, consumed, remaining, ring progress, meals, 7-day average intake, the streak, and the logged days behind the week strip. `:date` may be `today`. |
 | `GET /api/weight-logs?days=30` | The trend series, latest point, 7- and 30-day change, goal weight, goal progress, projection. |
+| `GET /api/targets` | The macro targets in force today, and every set on record. |
 
 Two fields on the day response are **as of today, not as of `:date`**: `streak`
 and `loggedDays`. The flame in the dashboard header answers "have I logged
@@ -26,6 +27,39 @@ to last Tuesday.
 `days` narrows what is **drawn**, never what is **computed** — the trend carries
 its whole history forward, so it is always calculated over every weigh-in and
 sliced afterwards. See `data/weight.ts`.
+
+**Writes** (branch `api-writes`) — same session verification, plus a per-user
+rate limit the reads do not carry.
+
+| Route | Does | Answers |
+|---|---|---|
+| `POST /api/meal-logs` | Logs a meal | `201` written · `200` this id was already written |
+| `DELETE /api/meal-logs/:id` | Removes one | `200` always, with `deleted` |
+| `POST /api/weight-logs` | Records a weigh-in | `201` new day · `200` that day's was replaced |
+| `POST /api/targets` | Sets targets from a day | `201` new day · `200` that day's were replaced |
+
+**Every write carries a client-minted UUIDv7, and that is the only thing making
+these routes safe to retry.** A logged meal has no natural key — same food, same
+day, twice is a real thing people do — so the server cannot tell a duplicate
+from a second helping. The client can, and says so by reusing the id or minting
+a new one.
+
+```
+retry with the same id  ──▶  ON CONFLICT (id) DO NOTHING  ──▶  200 created:false
+a genuine second meal   ──▶  a new id, no conflict        ──▶  201 created:true
+somebody else's id      ──▶  no row this user can see     ──▶  409 conflict
+```
+
+⚠️ **No write is wrapped in `withRetry`.** A retried `POST` whose first attempt
+succeeded before the response was lost would log the meal twice, and
+`ON CONFLICT (id)` would not catch it — the ids match across attempts only when
+the *client* is the one retrying. `tests/write-safety.test.ts` fails if a
+`withRetry` ever appears beside a mutation.
+
+`date` is optional on every write and means today, decided by
+`currentLoggingDay()` — never by the phone. Sending one is back-dating: allowed,
+bounded to the window the app can actually display, and never able to touch
+`created_at`, which always records the real instant of the write.
 
 **Sync** — Clerk fires a user lifecycle event → this app verifies the signature
 and enqueues an Inngest event → an Inngest function writes the change into Neon.
@@ -63,8 +97,13 @@ on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
 | `auth/user-scope.ts` | Verifies the Clerk session token; mints the `UserScope`. **The only place a user id enters the system.** |
 | `data/scoped.ts` | The scoped query layer. **The only module allowed to import `db`.** |
 | `data/day.ts` | Assembles `GET /day/:date` from rows + engine calls |
-| `data/weight.ts` | Assembles `GET /weight-logs` from rows + engine calls |
-| `routes/reads.ts` | Both read routes, mounted behind `requireUser` |
+| `data/weight.ts` | Assembles `GET /weight-logs`, and records a weigh-in |
+| `data/meals.ts` | Writes and deletes a logged meal |
+| `data/targets.ts` | Reads and sets the effective-dated macro targets |
+| `db/errors.ts` | Tells a unique violation (409) from a real failure (500) |
+| `http/limits.ts` | Per-user write cap; counts unauthenticated volume without storing an IP |
+| `routes/reads.ts` | The three read routes, behind `requireUser` |
+| `routes/writes.ts` | The four write routes, behind `requireUser` + the rate limit |
 | `observability/sentry.ts` | Sentry init, `sendDefaultPii: false`, scrubbing |
 | `db/schema.ts` | All 11 tables, keyed by Clerk id |
 | `db/index.ts` | Drizzle client over the Neon HTTP driver |
@@ -94,6 +133,11 @@ Three things keep that true as the code grows, and none of them is a code review
 - **`tests/security/user-isolation.test.ts`** proves the outcome against real
   Postgres: user A's requests return only A's rows, and an unauthenticated
   request is refused. Needs a Neon branch — `npm run test:security`.
+- **`tests/security/write-isolation.test.ts`** proves the write half against the
+  same branch: a `user_id` in the body changes nothing, an id belonging to
+  someone else is refused without admitting whose it is, deleting another user's
+  meal deletes nothing, and one user's weigh-in never overwrites another's on
+  the same day.
 
 ## First run
 
