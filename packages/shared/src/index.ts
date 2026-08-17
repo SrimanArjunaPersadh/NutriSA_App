@@ -56,6 +56,30 @@ export {
 } from "./day"
 
 export {
+  clientIdSchema,
+  mealDeleteResultSchema,
+  mealWriteResultSchema,
+  targetRowSchema,
+  targetsResponseSchema,
+  targetsWriteResultSchema,
+  weightWriteResultSchema,
+  writeMacrosSchema,
+  writeMealItemSchema,
+  writeMealSchema,
+  writeTargetsSchema,
+  writeWeightSchema,
+  type MealDeleteResult,
+  type MealWriteResult,
+  type TargetRowResponse,
+  type TargetsResponse,
+  type TargetsWriteResult,
+  type WeightWriteResult,
+  type WriteMeal,
+  type WriteTargets,
+  type WriteWeight,
+} from "./writes"
+
+export {
   goalProgressSchema,
   projectionSchema,
   trendChangeSchema,

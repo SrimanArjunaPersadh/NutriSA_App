@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url"
+
 import { defineConfig } from "vitest/config"
 
 /**
@@ -31,6 +33,29 @@ import { defineConfig } from "vitest/config"
  * a second suite.
  */
 export default defineConfig({
+  /**
+   * The `@engine` and `@shared` aliases.
+   *
+   * Vitest resolves through Vite, which does not read `tsconfig.json` paths —
+   * `tsc` and `tsx` do, which is why the server runs and typechecks without
+   * this. The default suite never needed it while `packages/engine/` was the
+   * only thing under test: the engine imports nothing but itself, by design and
+   * by `engine-purity.test.ts`. `packages/shared/` is not pure — it validates
+   * days through the engine's `isLogDay`, on purpose, so that there is one
+   * opinion about what a calendar day is — and its tests need this to resolve.
+   *
+   * `@shared` arrived with `column-widths.test.ts`, which asks the write
+   * schemas about a boundary and the Drizzle column about the same boundary.
+   *
+   * Kept in step with `tsconfig.json` and `vitest.security.config.mts` by hand.
+   * Adding another alias means adding it in all three.
+   */
+  resolve: {
+    alias: {
+      "@engine": fileURLToPath(new URL("./packages/engine/src/index.ts", import.meta.url)),
+      "@shared": fileURLToPath(new URL("./packages/shared/src/index.ts", import.meta.url)),
+    },
+  },
   test: {
     include: ["packages/**/*.test.ts", "tests/**/*.test.ts"],
     /**

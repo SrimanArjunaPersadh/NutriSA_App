@@ -46,10 +46,21 @@ export const apiErrorSchema = z.object({
   code: z.enum([
     /** No token, a malformed token, or one that failed verification. */
     "unauthenticated",
-    /** A path param or query string that could not be parsed. */
+    /** A path param, query string or body that could not be parsed. */
     "bad-request",
     /** The route is fine, the thing it names does not exist. */
     "not-found",
+    /**
+     * A write whose id is already taken by a row this user cannot see.
+     *
+     * Distinct from a retry of the same write, which succeeds silently — see
+     * `writes.ts`. This one means the UUIDv7 collided with somebody else's,
+     * which random 122-bit ids do not do by accident. Minting a fresh id is the
+     * only sane response, and it is why the client needs to tell the two apart.
+     */
+    "conflict",
+    /** Too many requests from one caller. Back off and try later. */
+    "rate-limited",
     /** Anything unhandled. The details went to Sentry, not to the client. */
     "server-error",
   ]),

@@ -193,6 +193,11 @@ async function errorCode(response: Response): Promise<ApiErrorCode | "network"> 
   if (response.status === 401) return "unauthenticated"
   if (response.status === 400) return "bad-request"
   if (response.status === 404) return "not-found"
+  // The two the write routes add. A 409 means the id must be re-minted and the
+  // save retried; a 429 means back off. Both are actionable, and both would be
+  // "something went wrong" without this.
+  if (response.status === 409) return "conflict"
+  if (response.status === 429) return "rate-limited"
   return "server-error"
 }
 

@@ -29,8 +29,12 @@ fixture-backed dashboard" below, and Phase 4, before reading its checkboxes ·
 Clerk → Neon sync live via Inngest
 in dev mode · the POPIA cascade is now structural — every user-scoped table cascades from
 `users` · Water tracking cut from v1 · the fourth tab is **AI Assistant**, not Library —
-the library became a screen inside Nutrition (2026-08-12) · **Phase 2's read half is
-done**; the writes (`api-writes`) and the Vercel deploy are not · Phases 4–12 not started ·
+the library became a screen inside Nutrition (2026-08-12) · **Phase 2's write half landed
+2026-08-16 (`api-writes`); the Vercel deploy is still untouched, and so is the phone.** All
+four write routes exist and are proven against real Postgres — **388 tests green across 21
+files** offline, plus **41 across 2 files** in the security suite — but **nothing on the
+write path has been exercised from the device**, because the client mints its first UUIDv7
+in Phase 4. Read "Phase 2 is done" as "the server is done" · Phases 4–12 not started ·
 v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
@@ -270,7 +274,12 @@ than a list somebody has to remember to update.
 
 ### Engine — `packages/engine/`
 - [x] `time.ts` — `currentLoggingDay()`, `checkLogDate()` / `isValidLogDate()`, plus
-      `logMonth()` for the Phase 9 SAST-month budget gate
+      `logMonth()` for the Phase 9 SAST-month budget gate. `checkLogDate` gained an
+      `earliest` bound and a `too-far-back` reason on `api-writes` (2026-08-16), kept
+      separate from `firstLogDay` because they answer different questions: "is there data
+      here" versus "can any surface show this day at all"
+- [x] `ordering.ts` — `nextSortOrder()`, added on `api-writes`. Where a newly logged meal
+      sits in its day; the day view orders by it, so it is a number the user sees
 - [x] `trend.ts` — `trendWeightSeries()`, `tw[i] = round(0.1*w[i] + 0.9*tw[i-1], 2)`,
       plus `trendChangeOverDays()` (trend-to-trend, never raw-to-raw)
 - [x] `macros.ts` — `dayTotals()`, `remainingMacros()`, `macroProgress()`
@@ -428,13 +437,89 @@ remaining and ring progress computed; an unlogged day returned a true zero with 
 present; `2026-02-30` returned 400.
 
 ### Branch `api-writes` — the rest
-- [ ] `POST /meal-logs` — accepts client UUIDv7, `ON CONFLICT (id) DO NOTHING`
-- [ ] `DELETE /meal-logs/:id`
-- [ ] `POST /weight-logs`
+
+**Built 2026-08-16.** Server only, deliberately — the client mints its first
+UUIDv7 in Phase 4, where the logging surfaces are. All four routes are proven
+against real Postgres by `tests/security/write-isolation.test.ts` (29 tests).
+
+- [x] `POST /meal-logs` — accepts client UUIDv7, `ON CONFLICT (id) DO NOTHING`.
+      A replay answers **200 `created: false`** with the *stored* row, not the
+      second body: if the two disagree, the first write is what happened. An id
+      that conflicts with a row this user cannot see is **409**, which says
+      nothing about whose it is
+- [x] `DELETE /meal-logs/:id` — always 200, with `deleted` saying whether
+      anything went. A 404 would be an existence oracle over other users' rows,
+      and would make the v1.1 offline queue read a replayed delete as a failure.
+      Accepts a UUID of **any** version: the 38 migrated rows carry the old
+      app's ids and are as deletable as the rest
+- [x] `POST /weight-logs` — upserts on `(user_id, date)`. A second weigh-in on a
+      day **replaces** it rather than failing: that is how people correct a bad
+      reading, and the unique index means there is no shape where both survive.
+      The conflict target includes `user_id`, so the row found is the caller's
+      own by construction — and `setWhere` re-applies the ownership filter
+      anyway, which is what a future caller with a wrong target hits instead of
+      a cross-user overwrite
 - [~] ~~`POST /water-logs`~~ — cut with the water feature, 2026-08-12
-- [ ] `GET /targets`, `POST /targets`
-- [ ] Back-date support: `date` accepted and validated, `created_at` always real instant
-- [ ] Rate-limit or at minimum log unauthenticated request volume
+- [x] `GET /targets`, `POST /targets` — the GET sits on the **read** router,
+      where the unmetered reads are; only the POST is rate-limited. `current` is
+      resolved by the engine against today rather than being the newest row, so
+      a future-dated row is not applied early
+- [x] Back-date support: `date` accepted and validated, `created_at` always real
+      instant. Optional on every write, and **absent means today** — decided by
+      `currentLoggingDay()`, never by the phone. Bounded by the engine's
+      `checkLogDate`, which gained an `earliest` bound and a `too-far-back`
+      reason for this: a day older than the window the app can display would be
+      stored and then invisible, which is indistinguishable from data loss. The
+      bound is imported from `LOGGED_DAYS_WINDOW_DAYS` so the two cannot drift.
+      `firstLogDay` is deliberately **not** applied to writes — it is a
+      date-picker bound, and using it here would stop a user whose first log is
+      today from back-filling yesterday
+- [x] Rate-limit **and** log unauthenticated request volume — `server/http/limits.ts`.
+      Writes are capped per verified Clerk id, far above any human logging rate;
+      the 401 path is counted, not blocked, because it is already cheap. **No IP
+      is written to a log, a response or disk** — an IP is personal information
+      under POPIA, and a hash under a random per-process salt answers "how many,
+      from how many" just as well. Precisely: it is pseudonymisation within one
+      window, which is what counting *distinct* callers requires, and the key
+      cannot be reversed by anyone holding the logs. The first version salted
+      with `pid + Date.now()` and did **not** earn that claim — the process start
+      time is effectively published in the boot log, and IPv4 is only 2³²
+      addresses, so the whole mapping was brute-forceable. Caught by the Privacy
+      axis of `/nutrisa-review`, 2026-08-16; the salt is now `randomBytes(32)`
+      ⚠️ In-memory, therefore per-instance: honest on today's single dev server,
+      and it needs shared state (Upstash, or Neon itself) the day this runs on
+      Vercel. Whatever replaces it should keep the interface
+
+**Also landed here, not originally listed:**
+
+- [x] `packages/engine/src/ordering.ts` — `nextSortOrder()`, 7 tests. The day
+      view orders by `sort_order`, never `created_at`, so a meal's position is a
+      computed number the user sees and the zero-arithmetic rule puts it in the
+      engine. The **server** computes it, not the client: a stale query cache
+      would mint the same position for two different meals and leave the day
+      view breaking the tie arbitrarily
+- [x] `insertOwned` / `upsertOwned` / `deleteOwned` in the scoped layer, with
+      `user_id` stamped from the scope and the type forbidding a caller from
+      passing one. ⚠️ **None of them is wrapped in `withRetry`**, and
+      `tests/write-safety.test.ts` fails if that ever changes — a retried write
+      whose first attempt succeeded before the response was lost logs the meal
+      twice, and `ON CONFLICT (id)` does not catch it, because the ids match
+      across attempts only when the *client* is the one retrying
+- [x] `conflict` and `rate-limited` added to the shared `ApiError` codes, and
+      mapped on the client so a 409 says "mint a new id and save again" rather
+      than "something went wrong"
+- [x] `requireUser` is now idempotent. Both routers mount it and both are
+      mounted at `/api`, so the first router's wildcard middleware runs on the
+      second's routes too. Trusting a scope already on the context is exactly as
+      strong as verifying again — the brand symbol means nothing else could have
+      put one there
+- [x] `tests/column-widths.test.ts` — the write schemas' numeric ceilings must
+      match the columns behind them. `packages/shared/` ships in the app bundle
+      so it cannot import `db/schema.ts` to read a width; the numbers are
+      therefore written twice on purpose, and this is what makes that safe. Same
+      pattern as `tokens.test.ts`. Asserts behaviour rather than equal
+      constants: the widest value a column holds is accepted, the next one up is
+      refused. Verified it fires by narrowing `MAX_GRAMS` and watching 4 go red
 - [ ] Scaffold Hono app, deploy to Vercel, confirm it responds — *scaffold exists and
       responds locally. **Not deployed** — it runs on localhost behind ngrok, which is
       dev-only by design. The Vercel half is untouched.* **Deliberately not on the reads
@@ -450,6 +535,13 @@ arrives in that branch — testing it later would mean shipping the read routes 
 branch named `test` (endpoint `ep-dry-truth-ayu60irj`, distinct from the main
 `ep-lingering-haze-ay7kofis`). Took 93s, almost all of it the branch's compute waking.
 Verified afterwards that zero `user_sectest_%` rows remained.
+
+**`write-isolation.test.ts` joined them 2026-08-16 with `api-writes` — 41/41 across both
+files, 26s on a warm branch, and zero `user_sectest_%` rows left behind.** Same claim,
+other verb: a `user_id` in the request body changes nothing, an id belonging to another
+user is refused without admitting whose it is, deleting somebody else's meal deletes
+nothing, a weigh-in never overwrites another user's on the same day, and the day's sort
+order does not count meals the caller cannot see.
 
 They need `TEST_DATABASE_URL` pointing at that branch — they create users, write rows and
 delete them again, so pointing them at the main database risks leaving debris beside 38
@@ -471,6 +563,10 @@ tell us whether *our* query layer leaks. The middleware, the scope, the queries,
 and the engine are all the real thing — the test cannot fabricate a `UserScope`, so it
 comes in through the front door, the same way an attacker would.
 
+- [x] User A cannot **write** user B's rows — **green, 2026-08-16.** The `write` half of
+      the line below, and the reason it is listed separately: a read that leaks shows the
+      wrong number, a write that leaks changes somebody else's data. See
+      `write-isolation.test.ts` and the summary above
 - [x] User A cannot read or write user B's rows — **green.** A's meals and totals, B's
       meals and totals, A's weigh-ins, B's weigh-ins **and B's absent goal weight** (a leak
       through a table the day route never touches), a user with no data at all getting an
@@ -568,11 +664,30 @@ genuinely not started.
 - [ ] Macros always `quantity × per-unit`, **unit label always visible**
 - [ ] Gram inputs debounced at **300ms**
 - [ ] Save a new food to `foods` with `source='manual'` from the entry flow
-- [ ] Edit and delete a logged meal
+- [ ] Edit and delete a logged meal — **decided 2026-08-16: an edit is
+      `PATCH /meal-logs/:id`, not delete-and-re-post.** Delete-and-re-post needs no new
+      route, and that is its only merit: the meal loses its original `created_at`, jumps to
+      the end of its day, and a failure between the two calls leaves it simply deleted.
+      A patch keeps the id, the `created_at`, the `sort_order` and the day, so an edited
+      meal stays one meal in the history. Costs a partial-update contract — every field
+      optional, at least one required — which is a **new** schema and not `writeMealSchema`
+      with `.partial()`, because the id and the date must not be patchable by accident.
+      ⚠️ **Open sub-question: may an edit change `date`?** "I logged this on the wrong day"
+      is a real correction and the delete-and-re-post workaround is what we are removing, so
+      the recommendation is yes — but a meal that moves to another day needs a fresh
+      `sort_order` for the day it lands on, or it collides with whatever is already at that
+      position. `nextSortOrder` already answers that; it just has to be called on the move.
+      The delete route stays as it is
+- [x] `DELETE /meal-logs/:id` exists already — shipped with `api-writes`, 2026-08-16
 - [ ] Back-date a meal to a past day
 - [~] ~~Water tracking — one integer per day, tap to increment~~ — **cut from v1
       2026-08-12.** See the deferred backlog for the re-add trigger
-- [ ] Client mints UUIDv7 for every new row
+- [ ] Client mints UUIDv7 for every new row — **the server half is done and waiting.**
+      `POST /meal-logs` refuses a v4 (`clientIdSchema` checks the version nibble), so this
+      is not optional wiring. `node:crypto` does not exist in React Native: the minter
+      needs `expo-crypto`'s `getRandomValues`. The shape is reproduced, with a comment on
+      why, in `tests/security/write-isolation.test.ts` — it is 12 lines, and it belongs in
+      `src/lib/` the moment a surface saves anything
 - [ ] All four states on every new surface
 - [ ] **Time yourself: manual log start → saved, under 10 seconds**
 
