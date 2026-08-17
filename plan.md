@@ -664,7 +664,21 @@ genuinely not started.
 - [ ] Macros always `quantity × per-unit`, **unit label always visible**
 - [ ] Gram inputs debounced at **300ms**
 - [ ] Save a new food to `foods` with `source='manual'` from the entry flow
-- [ ] Edit and delete a logged meal
+- [ ] Edit and delete a logged meal — **decided 2026-08-16: an edit is
+      `PATCH /meal-logs/:id`, not delete-and-re-post.** Delete-and-re-post needs no new
+      route, and that is its only merit: the meal loses its original `created_at`, jumps to
+      the end of its day, and a failure between the two calls leaves it simply deleted.
+      A patch keeps the id, the `created_at`, the `sort_order` and the day, so an edited
+      meal stays one meal in the history. Costs a partial-update contract — every field
+      optional, at least one required — which is a **new** schema and not `writeMealSchema`
+      with `.partial()`, because the id and the date must not be patchable by accident.
+      ⚠️ **Open sub-question: may an edit change `date`?** "I logged this on the wrong day"
+      is a real correction and the delete-and-re-post workaround is what we are removing, so
+      the recommendation is yes — but a meal that moves to another day needs a fresh
+      `sort_order` for the day it lands on, or it collides with whatever is already at that
+      position. `nextSortOrder` already answers that; it just has to be called on the move.
+      The delete route stays as it is
+- [x] `DELETE /meal-logs/:id` exists already — shipped with `api-writes`, 2026-08-16
 - [ ] Back-date a meal to a past day
 - [~] ~~Water tracking — one integer per day, tap to increment~~ — **cut from v1
       2026-08-12.** See the deferred backlog for the re-add trigger
