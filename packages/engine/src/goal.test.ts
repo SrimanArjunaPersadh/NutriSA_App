@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { goalDirection, goalProgress, projectTrend } from "./goal"
+import { goalDirection, goalProgress, projectTrend, rateDirection } from "./goal"
 import { addDays } from "./time"
 import { trendWeightSeries } from "./trend"
 
@@ -209,5 +209,42 @@ describe("goalDirection", () => {
 
   it("is toward when arriving exactly on the goal", () => {
     expect(goalDirection(86, 85, 85)).toBe("toward")
+  })
+})
+
+describe("rateDirection", () => {
+  it("is toward when a loss rate closes the gap to a lower goal", () => {
+    expect(rateDirection(98.8, -0.5, 85)).toBe("toward")
+  })
+
+  it("is away when a gain rate opens the gap to a lower goal", () => {
+    expect(rateDirection(98.8, 0.5, 85)).toBe("away")
+  })
+
+  /**
+   * The case the sign cannot answer, and the reason this is not `rate < 0`.
+   * Someone gaining toward a target above them is doing the thing that works.
+   */
+  it("is toward when a GAIN rate closes the gap to a higher goal", () => {
+    expect(rateDirection(80, 0.4, 85)).toBe("toward")
+  })
+
+  it("is away when a loss rate opens the gap to a higher goal", () => {
+    expect(rateDirection(80, -0.4, 85)).toBe("away")
+  })
+
+  it("is unchanged when the rate is flat", () => {
+    expect(rateDirection(90, 0, 85)).toBe("unchanged")
+  })
+
+  /**
+   * A week of this rate lands past the goal but nearer it than the start. That
+   * is progress, and it is the same answer `goalDirection` gives for a measured
+   * change that crosses — the two must not disagree, because they are painted
+   * side by side on the Weight tab.
+   */
+  it("is toward when a week of the rate crosses the goal and lands nearer", () => {
+    expect(rateDirection(87, -3, 85)).toBe("toward")
+    expect(rateDirection(87, -3, 85)).toBe(goalDirection(87, 84, 85))
   })
 })

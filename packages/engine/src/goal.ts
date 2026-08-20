@@ -113,6 +113,34 @@ export function goalDirection(
   return "unchanged"
 }
 
+/**
+ * Which way a **rate** is carrying you, relative to the goal.
+ *
+ * `goalDirection` answers that for a change that already happened, between two
+ * measured trend values. A rate is the other shape of the same question: not
+ * "where did you get to" but "where does one more week of this put you".
+ *
+ * ## Why this is a function and not a `+` in the component
+ *
+ * The Weight tab paints the weekly rate the same colour it paints the seven-day
+ * change, and reaching `goalDirection` needs a second point — `currentKg +
+ * ratePerWeek`. Written at the call site that is a derived number about the
+ * user's data computed in a component, which is the first standing rule, and
+ * it is exactly the shape of thing `/nutrisa-review` found in `WeightTrendCard`
+ * on 2026-08-15. The addition is one character; the rule is not about the
+ * character.
+ *
+ * A rate of zero is `unchanged`, which falls out of `goalDirection` rather than
+ * being special-cased here: standing still is neither progress nor a setback.
+ */
+export function rateDirection(
+  currentKg: number,
+  ratePerWeek: number,
+  goalKg: number,
+): GoalDirection {
+  return goalDirection(currentKg, currentKg + ratePerWeek, goalKg)
+}
+
 export type ProjectionPoint = { day: LogDay; trend: number }
 
 export type Projection = {

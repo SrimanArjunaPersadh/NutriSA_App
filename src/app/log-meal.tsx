@@ -22,6 +22,7 @@ import { ErrorState, Loading } from "@/components/state"
 import { colors } from "@/design/tokens"
 import { ApiError } from "@/lib/api"
 import { formatGrams, formatKcal } from "@/lib/format"
+import { MEAL_WORDING, saveErrorMessage } from "@/lib/save-message"
 import {
   currentClockTime,
   draftFromMeal,
@@ -378,7 +379,7 @@ export default function LogMeal() {
         >
           {saveError ? (
             <Text className="mb-[10px] font-barlow text-[13px] text-danger">
-              {saveMessage(saveError)}
+              {saveErrorMessage(saveError, MEAL_WORDING)}
             </Text>
           ) : null}
 
@@ -488,35 +489,4 @@ function Screen({
       {children}
     </View>
   )
-}
-
-/**
- * What went wrong with the save, in the app's voice.
- *
- * Deliberately not `ErrorState`: that component fills its parent and offers a
- * retry button, which is right for a card that could not load and wrong for a
- * line above a button the user is about to press again anyway. The codes it
- * needs are the write-specific ones — a 409 and a 429 mean genuinely different
- * things here — and the server's own `message` still never reaches the screen.
- */
-function saveMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    switch (error.code) {
-      case "network":
-        return "Couldn't reach the server. Your meal is still here, try again."
-      case "unauthenticated":
-        return "Your session expired. Sign in again to save this."
-      case "conflict":
-        return "Something clashed on our side. Tap save again."
-      case "rate-limited":
-        return "Too many saves at once. Give it a moment."
-      case "bad-request":
-        return "Something in this meal wasn't accepted. Check the numbers."
-      case "not-found":
-        return "That meal is no longer there. It may have been deleted."
-      default:
-        return "Couldn't save that. This is a problem on our side, not yours."
-    }
-  }
-  return "Couldn't save that. This is a problem on our side, not yours."
 }

@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
  * - a body carrying `user_id` does not change whose row is written
  * - a client-minted UUIDv7 makes a retried write idempotent
  * - an id that belongs to somebody else is refused, and tells the caller nothing
- * - deleting somebody else's meal deletes nothing and admits nothing
+ * - deleting somebody else's meal or weigh-in deletes nothing and admits nothing
  * - a back-dated row keeps a real `created_at`
  * - one weigh-in per day, replaced rather than duplicated
  *
@@ -190,6 +190,7 @@ describe("an unauthenticated write is refused, and writes nothing", () => {
     expect((await post("/meal-logs", "forged", meal())).status).toBe(401)
     expect((await post("/weight-logs", "forged", { id: uuidv7(), weightKg: 90 })).status).toBe(401)
     expect((await del("/meal-logs/" + randomUUID(), "forged")).status).toBe(401)
+    expect((await del("/weight-logs/" + randomUUID(), "forged")).status).toBe(401)
   })
 })
 
@@ -572,6 +573,93 @@ describe("weigh-ins are one per day", () => {
   it("refuses a v4 id", async () => {
     const res = await post("/weight-logs", "token-a", { id: randomUUID(), weightKg: 90 })
     expect(res.status).toBe(400)
+  })
+})
+
+/**
+ * The delete added on `weight-and-trend`.
+ *
+ * A weigh-in has no patch — a correction is a second `POST`, which replaces the
+ * day — so this is the only way a row leaves the series, and it is the only
+ * delete in the app that changes numbers on days other than its own. These
+ * cases are about who may do it, not about what it does to the trend; the trend
+ * itself is `packages/engine/src/trend.test.ts`, offline, with no database in
+ * it.
+ *
+ * Deliberately on its own day, three back rather than the one the replace tests
+ * use, so that removing a row here cannot quietly change what a test above
+ * asserted.
+ */
+describe("deleting a weigh-in", () => {
+  const day = () => addDays(today, -3)
+
+  it("cannot delete another user's weigh-in, and does not say so", async () => {
+    const res = await post("/weight-logs", "token-b", {
+      id: uuidv7(),
+      date: day(),
+      weightKg: 61.2,
+    })
+    const id = res.body.id as string
+
+    const attempt = await del(`/weight-logs/${id}`, "token-a")
+    expect(attempt.status).toBe(200)
+    expect(attempt.body).toMatchObject({ deleted: false })
+
+    const rows = await setup("B's weigh-in survives", () =>
+      db.select().from(schema.weightLogs).where(eq(schema.weightLogs.id, id)),
+    )
+    expect(rows).toHaveLength(1)
+  })
+
+  it("deletes its own weigh-in, and is idempotent about it", async () => {
+    const id = uuidv7()
+    await post("/weight-logs", "token-a", { id, date: day(), weightKg: 99.1 })
+
+    expect((await del(`/weight-logs/${id}`, "token-a")).body).toMatchObject({ deleted: true })
+    expect((await del(`/weight-logs/${id}`, "token-a")).body).toMatchObject({ deleted: false })
+
+    const rows = await setup("gone", () =>
+      db
+        .select()
+        .from(schema.weightLogs)
+        .where(and(eq(schema.weightLogs.userId, ids.userA), eq(schema.weightLogs.date, day()))),
+    )
+    expect(rows).toEqual([])
+  })
+
+  /**
+   * The id that comes back from a replacing `POST` is the **stored** row's, not
+   * the one the client sent. Deleting by the id it sent would answer
+   * `deleted: false` and leave the weigh-in in the series, which is a bug the
+   * client can only avoid by using the response. This states that.
+   */
+  it("is keyed by the id the write answered with, not the one it sent", async () => {
+    const first = uuidv7()
+    await post("/weight-logs", "token-a", { id: first, date: day(), weightKg: 99.4 })
+
+    const second = uuidv7()
+    const replaced = await post("/weight-logs", "token-a", {
+      id: second,
+      date: day(),
+      weightKg: 98.8,
+    })
+    expect(replaced.body).toMatchObject({ replaced: true, id: first })
+
+    expect((await del(`/weight-logs/${second}`, "token-a")).body).toMatchObject({
+      deleted: false,
+    })
+    expect((await del(`/weight-logs/${first}`, "token-a")).body).toMatchObject({ deleted: true })
+  })
+
+  it("refuses an id that is not a UUID rather than 500ing on the cast", async () => {
+    const res = await del("/weight-logs/not-a-uuid", "token-a")
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ code: "bad-request" })
+  })
+
+  it("refuses an unauthenticated delete", async () => {
+    const res = await del(`/weight-logs/${randomUUID()}`, undefined)
+    expect(res.status).toBe(401)
   })
 })
 

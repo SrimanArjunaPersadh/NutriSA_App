@@ -303,7 +303,7 @@ export async function updateOwned<T extends IdentifiedTable>(
  *
  * An empty result means there was nothing matching **that this user owns**. The
  * caller cannot tell "already gone" from "not yours", and neither can the
- * client — that is deliberate, and `mealDeleteResultSchema` explains why.
+ * client — that is deliberate, and `deleteResultSchema` explains why.
  */
 export async function deleteOwned<T extends UserScopedTable>(
   scope: UserScope,

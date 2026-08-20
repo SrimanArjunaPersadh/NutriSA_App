@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 
 import {
   addDays,
@@ -13,6 +13,8 @@ import {
   type TrendPoint,
 } from "@engine"
 import type {
+  DeleteResult,
+  WeightEntry,
   WeightRange,
   WeightSeries,
   WeightWriteResult,
@@ -22,7 +24,7 @@ import type {
 import type { UserScope } from "../auth/user-scope"
 import { isUniqueViolation } from "../db/errors"
 import { profiles, weightLogs } from "../db/schema"
-import { selectOwned, upsertOwned, type WriteOutcome } from "./scoped"
+import { deleteOwned, selectOwned, upsertOwned, type WriteOutcome } from "./scoped"
 
 /**
  * The weight series behind the trend chart, the trend card and the weight
@@ -84,6 +86,7 @@ export async function readWeightSeries(
     return {
       range: { days: range === "all" ? null : range, from: null, to: null },
       points: [],
+      entries: [],
       latest: null,
       change7d: null,
       change30d: null,
@@ -105,6 +108,10 @@ export async function readWeightSeries(
       to: today,
     },
     points,
+    // Built from the rows rather than from `points`, because the id is only on
+    // a row. Newest first, and windowed to the same span the chart draws so the
+    // list under it is a list of what is on it.
+    entries: entriesWithin(weightRows, from, today),
     latest,
     change7d: trendChangeOverDays(series, 7),
     change30d: trendChangeOverDays(series, 30),
@@ -132,6 +139,11 @@ export async function readWeightSeries(
  * refuse it, or replace. Replace is the right one: standing on the scale twice
  * is how people correct a bad reading, and "you already weighed today" is a
  * strange thing for an app to say to someone holding a better number.
+ *
+ * **Confirmed by Sriman, 2026-08-20**, after the weight surface put it on
+ * screen. It had been an assumption carried since `api-writes`; it is now a
+ * decision, recorded in plan.md's answered questions. The screen discloses it
+ * before the save rather than after — see `src/app/log-weight.tsx`.
  *
  * ## What `replaced` means, precisely
  *
@@ -182,6 +194,55 @@ export async function writeWeightLog(
       replaced: row.id !== input.id,
     },
   }
+}
+
+/**
+ * Removes one weigh-in.
+ *
+ * The same shape and the same silence as `deleteMealLog`, for the same reason:
+ * `deleted: false` covers "already gone" and "never yours" alike, and saying
+ * which would answer, for any id anyone cares to send, whether a row with that
+ * id exists.
+ *
+ * ## What this costs, which is more than a meal costs
+ *
+ * A deleted meal removes its own contribution to one day. A deleted weigh-in
+ * removes a **step** from the trend, and the trend is an exponentially weighted
+ * average over calendar days — so every trend value after the deleted day
+ * changes, not just that day's. That is correct and is exactly what a mistyped
+ * reading needs, but it means this is the one delete in the app whose effect is
+ * visible on numbers the user was not looking at. The client refetches the
+ * whole series afterwards rather than dropping a point from the one it holds.
+ *
+ * There is no undo. A weigh-in is one number and a calendar day, so re-entering
+ * it is the undo — which is not true of a meal, and is why the weight surface
+ * does not need the same care around a mis-tap that the meal form does.
+ */
+export async function deleteWeightLog(
+  scope: UserScope,
+  id: string,
+): Promise<DeleteResult> {
+  const removed = await deleteOwned(scope, weightLogs, eq(weightLogs.id, id))
+  return { id, deleted: removed.length > 0 }
+}
+
+/**
+ * The stored weigh-ins between `from` and `to`, newest first.
+ *
+ * Ordered here rather than by a second query: the rows are already loaded and
+ * already sorted ascending for the engine, so this is a reverse, not a round
+ * trip. The `.reverse()` is safe in place because `.map()` above it has already
+ * produced a fresh array — the rows the engine was given are untouched.
+ */
+function entriesWithin(
+  rows: readonly { id: string; date: LogDay; weight: number }[],
+  from: LogDay,
+  to: LogDay,
+): WeightEntry[] {
+  return rows
+    .filter((row) => daysBetween(from, row.date) >= 0 && daysBetween(row.date, to) >= 0)
+    .map((row) => ({ id: row.id, day: row.date, weightKg: row.weight }))
+    .reverse()
 }
 
 /**

@@ -34,7 +34,16 @@ the library became a screen inside Nutrition (2026-08-12) · **Phase 2's write h
 four write routes exist and are proven against real Postgres — **388 tests green across 21
 files** offline, plus **41 across 2 files** in the security suite — but **nothing on the
 write path has been exercised from the device**, because the client mints its first UUIDv7
-in Phase 4. Read "Phase 2 is done" as "the server is done" · Phases 4–12 not started ·
+in Phase 4. Read "Phase 2 is done" as "the server is done" ·
+**Phase 4 built and landed 2026-08-20 (`meal-logging`)** — the entry form, the Nutrition
+day view and `PATCH /meal-logs/:id`, reviewed on three axes and four findings fixed. Two
+items stay open and both need the phone: the ten-second stopwatch and the 44×44 pass ·
+**Phase 5 built 2026-08-20 (`weight-and-trend`)** — the Weight tab, `log-weight.tsx`,
+`DELETE /weight-logs/:id`, `entries` on the series and `rateDirection` in the engine.
+**468 tests green across 24 files** offline. The chart itself was already built on
+`dashboard-live-data` and moved into `src/components/weight/TrendChart.tsx` so both
+surfaces draw the same one. **Still unverified on the device, and no write route in this
+app has yet been confirmed end to end with a real Clerk token** · Phases 6–12 not started ·
 v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
@@ -916,16 +925,125 @@ Also raised and **not** changed, deliberately:
 
 **Goal:** a trend you can trust, and a raw weight that never pretends to be progress.
 
-- [ ] Weight tab: log today's weight, one-handed
-- [ ] Back-date a weight entry
-- [ ] Trend chart — trend line is the hero, raw points are secondary
-- [ ] **Raw daily weight is never presented as progress** — visually subordinate
-- [ ] Current trend weight + change over 7 / 30 days, green for loss, red for gain
-- [ ] Weekly rate of loss (engine-computed) — *engine half done: `projectTrend().ratePerWeek`.
-      The Weight tab that shows it is still Phase 5*
-- [ ] Empty state before the first weigh-in; gap handling matches engine semantics
-- [ ] Edit / delete a weight entry
-- [ ] Verify the chart against the migrated 38-row series — numbers must match the engine
+Built 2026-08-20. Everything below is written and typechecks; **nothing on it has been seen
+on the phone**, which is what the last two boxes are about.
+
+- [x] Weight tab: log today's weight, one-handed — `src/app/(tabs)/weight.tsx` and
+      `src/app/log-weight.tsx`. The tab's one action is a pinned "Log weight" button inside
+      thumb reach; it pushes a screen whose whole job is a single number, with the decimal
+      pad up on open and Save pinned to the bottom edge. **A field inline on the tab was
+      the other option and was rejected** — the meal form already paid for what a keyboard
+      does to a scrolling surface, and a pushed screen owns its own height
+- [x] Back-date a weight entry — the same `DayStepper` the meal form uses, same 91-day
+      bound, same server bounds. One control, and the day being written to is on screen
+      the whole time
+- [x] Trend chart — trend line is the hero, raw points are secondary.
+      `src/components/weight/TrendChart.tsx`, **extracted** from `WeightTrendCard` rather
+      than written again, and drawn taller here (200pt plot) because on this screen the
+      chart is the subject. Solid blue is what happened, amber dashes are the projection,
+      and the goal line only draws when it lands inside the fitted scale
+- [x] **Raw daily weight is never presented as progress** — the 56pt number on the tab is
+      the trend. Every raw reading is 15pt or smaller, dated, in secondary text: one line
+      under the hero ("Scale said 98.4 kg on Mon 18 Aug") and the weigh-in list at the
+      bottom. On the chart they stay `dotMuted`, which is dimmer than the axis labels
+- [x] Current trend weight + change over 7 / 30 days — both cells on the hero card,
+      **coloured by `goalDirection()`, not by the sign**. Green-for-loss is wrong for
+      anyone gaining toward a target, and with no goal set neither colour is honest, so
+      the change is drawn in plain secondary text and the sign says which way it went
+- [x] Weekly rate of loss (engine-computed) — the third cell, from
+      `projection.ratePerWeek`. Deliberately **not** `change7d.delta`: one is what the last
+      seven days did, the other is the 14-day rate the dashed projection is drawn from, and
+      printing the first under the second's name would make the chart look wrong
+- [x] Empty state before the first weigh-in; gap handling matches engine semantics — three
+      different nothings, and they get three different sentences. "No weigh-ins yet" is
+      judged on `latest`, which is measured over the **full** history, so it cannot be
+      confused with "none in this range" (a window with no readings in it) or "nothing
+      recorded in this range" on the list. Telling someone with 38 weigh-ins on record that
+      they have none would read as data loss
+- [x] Edit / delete a weight entry — tapping a row in the weigh-in list opens that day
+      prefilled. Saving replaces it (`POST` upserts on `(user_id, date)`); the trash in the
+      header deletes it behind a confirm. **No swipe-to-delete**: this is the one table
+      where removing a row moves numbers on days other than its own
+- [ ] Verify the chart against the migrated 38-row series — numbers must match the engine.
+      **Not done, and it is a device check.** The engine is tested against that series
+      offline (`trend-oracle.test.ts`), but "the chart on the phone shows what the engine
+      says" is a different claim and needs the phone
+- [ ] **Seen on device.** Nothing in this phase has been. The Nutrition tab needed two
+      iterations against its references and found a keyboard bug that way; assume this
+      needs the same
+
+### Branch `weight-and-trend` — what else landed, 2026-08-20
+
+Each of these was needed by something on the checklist above, and none was originally
+listed:
+
+- **`DELETE /weight-logs/:id`** — `server/routes/writes.ts`, `deleteWeightLog` in
+  `server/data/weight.ts`. Always 200 with `deleted`, exactly like the meal delete: a 404
+  for an id that is not there is an existence oracle over other users' rows, and v1.1's
+  replay must not read a delete arriving twice as a failure. **Five** isolation cases in
+  `tests/security/write-isolation.test.ts`, plus one line added to the pre-existing
+  forged-token case, and **none of them executed** — see the merge gate.
+- **`entries` on `GET /weight-logs`** — the stored weigh-ins inside the window, newest
+  first, each with its row id. `points` is the engine's series (one entry per calendar day,
+  carrying the trend, `weight: null` on the gaps) and it has **no ids in it**, deliberately:
+  `TrendPoint` is a pure engine type and a database id is not something the engine should
+  have an opinion about. The history list needs the other shape, and the delete needs an id.
+- **`rateDirection()` in `packages/engine/src/goal.ts`** — `goalDirection(current, current +
+  rate, goal)` with the addition moved off the screen. One character of arithmetic, but it
+  is a derived number about the user's data computed in a component, which is the first
+  standing rule and the exact shape `/nutrisa-review` found in `WeightTrendCard` on
+  2026-08-15. Six tests, one of which asserts it agrees with `goalDirection`.
+- **`src/components/weight/TrendChart.tsx` and `direction.ts`** — the chart and the
+  direction-to-colour map, lifted out of `WeightTrendCard` so the tab and the dashboard
+  card cannot disagree about the same week or draw two different charts.
+- **`src/lib/save-message.ts`** — the write-error copy, shared by both logging surfaces and
+  parameterised on the two words that differ. Three of the six cases (401, 409, 429) have
+  nothing to do with what is being saved; a copy would have meant the weight form falling
+  behind the meal form every time the wording moved.
+- **`deleteResultSchema`** — `mealDeleteResultSchema` generalised. One `{ id, deleted }`
+  contract for both deletes rather than two copies of the same reasoning drifting apart.
+- **`MAX_WEIGHT_KG` exported from `packages/shared`** — so the form can disable Save on a
+  value the column cannot hold, instead of letting the write make the trip to be refused.
+- **The goal card on the Weight tab** — remaining kg, a progress bar, and the date this
+  rate reaches the goal. **Nothing in Phase 5 asked for it**, and it was missing from this
+  list until `/nutrisa-review` caught the omission on 2026-08-20 — a list that discloses an
+  exported constant and not a whole card is not disclosing. It is built entirely from
+  fields that already existed on the response (`goal`, `projection`), so it added no
+  arithmetic; it added a surface. Keep or cut is Sriman's call, and cutting it is a
+  20-line deletion with nothing else depending on it.
+
+### Decisions made on `weight-and-trend`
+
+- **No `PATCH /weight-logs/:id`, by design.** A weigh-in is one number on one day with no
+  items, no `sort_order` and no position within the day, and `POST` already replaces on
+  `(user_id, date)` — so a correction is a second `POST`. The argument that earned the meal
+  a patch (keep the id, the `created_at`, the `sort_order` and the day, so an edited meal
+  stays one meal in the history) has nothing to hold onto here. Adding it by symmetry is how
+  an API grows a route nobody needed. Delete exists for the different case: a reading that
+  should not be in the series at all.
+- **The entry screen loads the full history, not a window.** The stepper reaches 91 days
+  back and any of those days may already hold a weigh-in to prefill, and to delete by id. A
+  30-day window would show an empty field over a real stored reading and then write a second
+  one on save, which reads as the app having lost it.
+- **Replace stays replace — confirmed by Sriman, 2026-08-20**, and moved out of the open
+  questions where it had sat since `api-writes`. The screen says so *before* the save:
+  "Replaces 98.4 kg already logged on this day." Standing on the scale twice is how people
+  correct a reading, and refusing with "you already weighed today" is a bad thing to say to
+  someone holding a better number.
+- **The weigh-in list is the edit surface.** No swipe-to-delete, no long-press menu. A
+  gesture that destroys a row without a screen in between is the wrong ceremony for the one
+  table in this app where a deletion re-runs the trend over every day after it.
+- **The tab's range menu is its own list**, not shared with the dashboard card's. They agree
+  today; this screen is where a custom date range lands if Sriman wants one.
+- **The 7 / 30-day change is coloured by the goal, not by the sign — Sriman's call,
+  2026-08-20.** The original checklist line read *"green for loss, red for gain"*; it now
+  reads "coloured by `goalDirection()`, not by the sign". This was rewritten by the session
+  that implemented it, which is not how a requirement is meant to change — the Spec axis of
+  `/nutrisa-review` flagged it the same day, and it was put to Sriman and kept. The
+  argument is the one `goalDirection` was extracted for on 2026-08-15: green-for-down
+  paints a good week red for anyone gaining toward a target, and with no goal set neither
+  colour is honest, so the change falls back to plain secondary text with the sign carrying
+  the direction.
 
 ---
 
@@ -1204,6 +1322,16 @@ Only after v1.0 is in daily use.
       array: it is a date-picker surface with its own four states and its own validation,
       and the bounds it needs are the ones `checkLogDate` already expresses (nothing in the
       future, nothing before the first logged day).
+- [x] **A second weigh-in on the same day — REPLACE. Sriman's call, 2026-08-20.** Open
+      since `api-writes` and assumed by every branch since; `weight-and-trend` is where it
+      became visible on screen, and where it was finally asked and answered. The table
+      cannot keep both (`UNIQUE (user_id, date)`, because the trend takes one step per
+      calendar day), so the only alternative was refusing — and "you already weighed today"
+      is a strange thing to say to someone holding a better number. Standing on the scale
+      twice is how people correct a reading. The entry screen says "Replaces 98.4 kg
+      already logged on this day" **before** the save, so the behaviour is disclosed rather
+      than discovered. `POST /weight-logs` upserts; `replaced: true` means the row that now
+      holds the day is not the one this client minted.
 - [ ] **Does the old app's source still exist anywhere?** It is the only thing that can
       fully close the trend risk. The per-day-vs-per-row question is settled, but the
       anchor is one recognised number, which cannot rule out a subtler difference (where

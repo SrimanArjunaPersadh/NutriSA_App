@@ -14,7 +14,7 @@ import { getScope, requireUser, type AppEnv } from "../auth/user-scope"
 import { LOGGED_DAYS_WINDOW_DAYS } from "../data/day"
 import { deleteMealLog, patchMealLog, writeMealLog } from "../data/meals"
 import { writeTargets } from "../data/targets"
-import { writeWeightLog } from "../data/weight"
+import { deleteWeightLog, writeWeightLog } from "../data/weight"
 import { writeRateLimit } from "../http/limits"
 
 /**
@@ -259,6 +259,33 @@ writes.post("/weight-logs", async (c) => {
   if (!outcome.ok) return idTaken(c)
 
   return c.json(outcome.value, outcome.value.replaced ? 200 : 201)
+})
+
+/**
+ * `DELETE /weight-logs/:id` — remove a weigh-in.
+ *
+ * Always 200 with `deleted`, exactly as the meal delete is, and for the same
+ * two reasons: a 404 for an id that is not there is an existence oracle over
+ * other users' rows, and the offline queue's replay (v1.1) must not read a
+ * successful delete arriving twice as a failure.
+ *
+ * **There is deliberately no `PATCH /weight-logs/:id`** — decided on
+ * `weight-and-trend`, 2026-08-20. A weigh-in is one number on one day with no
+ * items, no `sort_order` and no position within the day, and `POST` already
+ * replaces on `(user_id, date)`, so correcting a reading is a second `POST`.
+ * The argument that earned the meal a patch — keeping the id, the `created_at`,
+ * the `sort_order` and the day so an edited meal stays one meal — has nothing
+ * to hold onto here. Delete exists because "I weighed the dog" is not a
+ * correction, it is a row that should not be in the series at all.
+ *
+ * Any UUID version, same as the meal routes: the 38 migrated rows carry ids
+ * from the old app and are as deletable as the rest.
+ */
+writes.delete("/weight-logs/:id", async (c) => {
+  const id = anyUuidSchema.safeParse(c.req.param("id"))
+  if (!id.success) return badRequest(c, "Expected a UUID.")
+
+  return c.json(await deleteWeightLog(getScope(c), id.data))
 })
 
 /**

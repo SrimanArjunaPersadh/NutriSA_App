@@ -49,8 +49,15 @@ import { logDaySchema, macrosSchema } from "./common"
 const MAX_KCAL = 9_999_999.99
 /** `numeric(8,2)` — every gram column. */
 const MAX_GRAMS = 999_999.99
-/** `numeric(5,2)` — `weight_logs.weight`. */
-const MAX_WEIGHT_KG = 999.99
+/**
+ * `numeric(5,2)` — `weight_logs.weight`.
+ *
+ * Exported because the weight form disables its Save button on a value the
+ * column cannot hold, rather than letting the write make the round trip to be
+ * refused. One number, one place; a second copy in the client is how a form
+ * ends up rejecting something the server would have taken.
+ */
+export const MAX_WEIGHT_KG = 999.99
 
 /**
  * Text ceilings. Postgres `text` is unbounded, so these are the only thing
@@ -274,7 +281,8 @@ export type MealPatchResult = z.infer<typeof mealPatchResultSchema>
  * One weigh-in per calendar day, enforced by a unique index. Posting a second
  * one for a day **replaces** it rather than failing: standing on the scale
  * twice is how people correct a reading, and the trend takes one step per day,
- * so there is no shape of this table where both could be kept.
+ * so there is no shape of this table where both could be kept. Confirmed by
+ * Sriman, 2026-08-20 — see plan.md's answered open questions.
  */
 export const writeWeightSchema = z.object({
   id: clientIdSchema,
@@ -337,19 +345,22 @@ export const mealWriteResultSchema = z.object({
 export type MealWriteResult = z.infer<typeof mealWriteResultSchema>
 
 /**
- * `DELETE /meal-logs/:id`.
+ * What every `DELETE` answers with — `/meal-logs/:id`, `/weight-logs/:id`.
+ *
+ * One schema rather than one per route, because there is one contract here and
+ * splitting it would be two copies of the same reasoning drifting apart.
  *
  * `deleted: false` means there was nothing to delete — already gone, or never
  * this user's. The two are deliberately not distinguished: telling a caller
  * "that row exists but is not yours" is an existence oracle over other people's
  * data, and the client's behaviour is the same either way.
  */
-export const mealDeleteResultSchema = z.object({
+export const deleteResultSchema = z.object({
   id: z.string(),
   deleted: z.boolean(),
 })
 
-export type MealDeleteResult = z.infer<typeof mealDeleteResultSchema>
+export type DeleteResult = z.infer<typeof deleteResultSchema>
 
 export const weightWriteResultSchema = z.object({
   /** The id of the row that now holds this day — not necessarily the one sent. */
