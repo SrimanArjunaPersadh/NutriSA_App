@@ -51,6 +51,73 @@ export function ChevronDown({ size = 16, color = colors.textSecondary }: IconPro
   )
 }
 
+/** Back caret in a screen header. `ChevronRight` mirrored, drawn rather than
+ *  rotated so the stroke caps land on the same pixel grid at every size. */
+export function ChevronLeft({ size = 16, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="m10 4-4 4 4 4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/** Add — the entry point to the manual logging form, and to a new line in it. */
+export function PlusIcon({ size = 20, color = colors.primary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 5v14M5 12h14"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/**
+ * Dismiss. Also removes one line from the entry form.
+ *
+ * `danger`-tinted by the callers that delete with it and muted where it only
+ * closes something — the shape is the same mark, and what it means is the
+ * colour, per the standing rule that colour is semantic.
+ */
+export function CloseIcon({ size = 18, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 6l12 12M18 6 6 18"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/** Delete a logged meal. A bin, not an X — this one destroys stored data. */
+export function TrashIcon({ size = 18, color = colors.danger }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 7h16M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M10 11v6M14 11v6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
 /**
  * Drill-in caret on an insight card.
  *
@@ -87,6 +154,72 @@ export function TickIcon({ size = 16, color = colors.primary }: IconProps) {
         d="m3.5 8.5 3 3 6-7"
         stroke={color}
         strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/** Calendar — opens the day the screen is logging to. */
+export function CalendarIcon({ size = 18, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-9ZM8 4v4M16 4v4M4 11h16"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/**
+ * Scan — the four corner brackets of a camera viewfinder.
+ *
+ * Distinct from `BarcodeIcon`, which is the stripes. The brackets say "point
+ * the camera at something"; the stripes say "a barcode". The reference design
+ * uses the brackets in the mode row and the two are not interchangeable there.
+ */
+export function ScanIcon({ size = 18, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3M8 12h8"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/** Quick add — a plus in a ring. The add *mode*, not the add button. */
+export function PlusCircleIcon({ size = 18, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.2} stroke={color} strokeWidth={1.8} />
+      <Path
+        d="M12 8.4v7.2M8.4 12h7.2"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  )
+}
+
+/** Downward chevron-on-a-stem, top right of the reference header. */
+export function ArrowDownIcon({ size = 18, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 5v13M6.5 12.5 12 18l5.5-5.5"
+        stroke={color}
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

@@ -27,6 +27,37 @@ import type { Macros } from "@engine"
  */
 
 /**
+ * How the item was entered: a quantity, a unit, and the macros one basis-worth
+ * of it contains. **Optional, and absent on every migrated row.**
+ *
+ * The macros stored beside it are absolute and authoritative — this does not
+ * replace them and nothing recomputes from it on a read. It exists so the edit
+ * surface can reopen an item as it was typed. Without it, "150 g of rice at 350
+ * kcal per 100 g" comes back only as "525 kcal" and a `qty` string nobody is
+ * allowed to parse, and changing 150 to 200 becomes mental arithmetic the app
+ * exists to remove.
+ *
+ * `unit` is a plain string here rather than the engine's `PortionUnit` union.
+ * The column already holds rows written before this field existed and will hold
+ * rows written by future versions; a stored unit this build does not recognise
+ * must degrade to "edit the macros directly", not fail the whole item's parse
+ * and drop the line from the day view.
+ */
+export const mealPortionSchema = z.object({
+  quantity: z.number(),
+  unit: z.string(),
+  /** Per one basis of `unit` — per 100 for g and ml, per 1 for the rest. */
+  per: z.object({
+    kcal: z.number(),
+    pro: z.number(),
+    carb: z.number(),
+    fat: z.number(),
+  }),
+})
+
+export type MealPortion = z.infer<typeof mealPortionSchema>
+
+/**
  * `qty` is a **string, verbatim**, and is never parsed.
  *
  * The old data holds "1 slice" and "2.5" in the same column. Nothing computes
@@ -40,6 +71,8 @@ export const mealItemSchema = z.object({
   pro: z.number(),
   carb: z.number(),
   fat: z.number(),
+  /** See `mealPortionSchema`. Absent on the 38 migrated rows. */
+  portion: mealPortionSchema.optional(),
 })
 
 export type MealItem = z.infer<typeof mealItemSchema>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   clientIdSchema,
+  patchMealSchema,
   writeMealSchema,
   writeTargetsSchema,
   writeWeightSchema,
@@ -172,5 +173,122 @@ describe("writeTargetsSchema", () => {
       writeTargetsSchema.safeParse({ id: V7, macros: { kcal: 2300, protein: 167, carbs: 195 } })
         .success,
     ).toBe(false)
+  })
+})
+
+describe("writeMealSchema — portions", () => {
+  const withPortion = {
+    ...MEAL,
+    items: [
+      {
+        name: "Rice",
+        qty: "150 g",
+        macros: { kcal: 525, protein: 18.8, carbs: 90, fat: 8.3 },
+        portion: {
+          quantity: 150,
+          unit: "g",
+          per: { kcal: 350, protein: 12.5, carbs: 60, fat: 5.5 },
+        },
+      },
+    ],
+  }
+
+  it("accepts a line that records how it was entered", () => {
+    const parsed = writeMealSchema.safeParse(withPortion)
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.items[0]?.portion?.quantity).toBe(150)
+  })
+
+  it("accepts a line with no portion — macros typed straight in", () => {
+    expect(writeMealSchema.safeParse(MEAL).success).toBe(true)
+  })
+
+  /**
+   * The unit is checked against the engine's list on the way *in*. The read
+   * path is deliberately lenient about it — a row written by a later version
+   * has to stay displayable — but a client writing "kg" today is a bug, and one
+   * that would silently change what the stored per-unit macros mean.
+   */
+  it("refuses a unit the engine does not know", () => {
+    const parsed = writeMealSchema.safeParse({
+      ...withPortion,
+      items: [
+        {
+          ...withPortion.items[0],
+          portion: { ...withPortion.items[0]!.portion, unit: "kg" },
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+  })
+
+  it("refuses a negative per-unit macro, same as every other macro", () => {
+    const parsed = writeMealSchema.safeParse({
+      ...withPortion,
+      items: [
+        {
+          ...withPortion.items[0],
+          portion: {
+            ...withPortion.items[0]!.portion,
+            per: { kcal: -1, protein: 0, carbs: 0, fat: 0 },
+          },
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+  })
+})
+
+describe("patchMealSchema", () => {
+  it("accepts a single field", () => {
+    expect(patchMealSchema.safeParse({ name: "Lunch" }).success).toBe(true)
+  })
+
+  /**
+   * The reason this is its own schema rather than `writeMealSchema.partial()`.
+   * A patch that could carry an id would give the request two answers to "which
+   * meal is this" — the path and the body — and a handler that read the wrong
+   * one would edit a different meal.
+   */
+  it("ignores an id in the body — the path names the meal", () => {
+    const parsed = patchMealSchema.safeParse({ name: "Lunch", id: V7 })
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && "id" in parsed.data).toBe(false)
+  })
+
+  /**
+   * An empty patch cannot be anything but a caller bug. Answering 200 to it
+   * would hide that bug behind a request that looks like it worked.
+   */
+  it("refuses an empty body", () => {
+    expect(patchMealSchema.safeParse({}).success).toBe(false)
+  })
+
+  it("accepts a move to another day", () => {
+    const parsed = patchMealSchema.safeParse({ date: "2026-08-01" })
+    expect(parsed.success && parsed.data.date).toBe("2026-08-01")
+  })
+
+  /**
+   * `null` clears the time and an absent key leaves it. The route reads the two
+   * differently, so the schema has to preserve the difference rather than
+   * collapsing both to undefined.
+   */
+  it("keeps null and absent apart for loggedTime", () => {
+    const cleared = patchMealSchema.safeParse({ loggedTime: null })
+    expect(cleared.success && cleared.data.loggedTime).toBeNull()
+
+    const untouched = patchMealSchema.safeParse({ name: "Lunch" })
+    expect(untouched.success && untouched.data.loggedTime).toBeUndefined()
+  })
+
+  it("holds the same bounds as a create", () => {
+    expect(patchMealSchema.safeParse({ name: "   " }).success).toBe(false)
+    expect(
+      patchMealSchema.safeParse({ macros: { kcal: -1, protein: 0, carbs: 0, fat: 0 } })
+        .success,
+    ).toBe(false)
+    expect(patchMealSchema.safeParse({ loggedTime: "25:00" }).success).toBe(false)
+    expect(patchMealSchema.safeParse({ date: "2026-02-30" }).success).toBe(false)
   })
 })

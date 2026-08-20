@@ -53,6 +53,20 @@ export const colors = {
   fats: "#2DD4BF",
 
   // ── Neutrals, promoted from bare literals ────────────────────────────────
+  /**
+   * Primary text, and the only near-full-brightness surface in the app.
+   *
+   * Tailwind has always had `white`, so `text-white` and `bg-white` worked
+   * without this — but `react-native-svg` takes a value, and an icon that has to
+   * go white had nowhere to read it from. Registered rather than typed as a hex
+   * at the one call site, because `no-hex-literals.test.ts` forbids that and is
+   * right to: the second call site is how a palette starts drifting.
+   *
+   * `tailwind.config.js` now declares it too. That shadows Tailwind's built-in
+   * `white` with the identical value, which changes nothing and keeps
+   * `tokens.test.ts`'s both-directions check honest.
+   */
+  white: "#FFFFFF",
   /** Secondary text: captions, axis labels, units. The most-used unregistered
    *  colour in the app before this module existed. */
   textSecondary: "#8A8F98",

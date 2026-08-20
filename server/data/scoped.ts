@@ -79,7 +79,9 @@ export type ScopedSelectOptions = {
  * because every query this builds is a `SELECT`: re-running one cannot change
  * anything, and a write helper added later must not simply copy this.
  *
- * The `as never` on `.from()` is load-bearing and is the only cast here.
+ * The `as never` on `.from()` is load-bearing. It is one of only two casts in
+ * this file — see `updateOwned` for the other, which is the same problem in a
+ * different Drizzle method.
  * Drizzle guards `.from()` with a conditional type that checks the table has a
  * non-empty selection, and that conditional cannot be reduced while `T` is
  * still an unresolved type parameter — so a generic helper over "any
@@ -161,9 +163,9 @@ type IdentifiedTable = UserScopedTable & { id: PgColumn }
  * status. Thrown, it would land in `app.onError` with everything genuinely
  * broken and come back as a 500 that tells the client to retry forever.
  */
-export type WriteOutcome<T> =
+export type WriteOutcome<T, Reason extends string = "id-taken"> =
   | { ok: true; value: T }
-  | { ok: false; reason: "id-taken" }
+  | { ok: false; reason: Reason }
 
 /**
  * `INSERT … ON CONFLICT (id) DO NOTHING`, with `user_id` stamped from the
@@ -238,6 +240,55 @@ export async function upsertOwned<T extends IdentifiedTable>(
       set: conflict.set,
       setWhere: ownedBy(scope, table),
     })
+    .returning()
+
+  return rows as T["$inferSelect"][]
+}
+
+/**
+ * `UPDATE <table> SET … WHERE user_id = <scope> [AND …]`, returning what changed.
+ *
+ * ## It cannot move a row to another owner
+ *
+ * `values` has `userId` and `id` removed by the type, so neither can be set.
+ * That is not tidiness: an `UPDATE` that could write `user_id` would let a
+ * patch hand one user's meal to another, and unlike the read helpers there is
+ * no `WHERE` clause that catches it — the ownership filter selects the row
+ * *before* the new owner is written. The only defence is that the column is not
+ * settable, so it is not settable.
+ *
+ * The `id` is excluded for a smaller reason and a firm one: the id is the row's
+ * identity and the idempotency key every write on this API is built around.
+ * Changing it under a client that is holding it is how a retry becomes a
+ * duplicate.
+ *
+ * An empty result means nothing matched — already deleted, or never this
+ * user's. The caller decides what that is worth; `../data/meals.ts` turns it
+ * into a 404 that says the same thing for both, the same way `deleteOwned`'s
+ * caller does.
+ *
+ * Not retried, like every other mutation here. An `UPDATE` with a fixed `SET`
+ * is in fact idempotent, so a retry would be harmless — but the rule this
+ * section holds is "no mutation in this file is wrapped in `withRetry`", and a
+ * rule with one carefully-argued exception in it is a rule the next person
+ * copies the exception from. `tests/write-safety.test.ts` enforces it flatly.
+ */
+export async function updateOwned<T extends IdentifiedTable>(
+  scope: UserScope,
+  table: T,
+  values: Partial<Omit<T["$inferInsert"], "userId" | "id">>,
+  where?: SQL | undefined,
+): Promise<T["$inferSelect"][]> {
+  const rows = await db
+    .update(table)
+    // The second cast in this file, and the same class of problem as the
+    // `as never` on `.from()` above: Drizzle's `.set()` parameter is a mapped
+    // type over the table's columns, and it cannot be reduced while `T` is
+    // still an unresolved type parameter. The signature above carries the real
+    // constraint — `userId` and `id` are removed there — so nothing a caller
+    // can write is loosened by this.
+    .set(values as Record<string, unknown>)
+    .where(ownedBy(scope, table, where))
     .returning()
 
   return rows as T["$inferSelect"][]

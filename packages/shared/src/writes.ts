@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { PORTION_UNITS } from "@engine"
+
 import { logDaySchema, macrosSchema } from "./common"
 
 /**
@@ -85,6 +87,25 @@ export const writeMacrosSchema = z.object({
 })
 
 /**
+ * How the line was entered, in the engine's vocabulary.
+ *
+ * Stored verbatim onto the item's jsonb (translated to `pro`/`carb`/`fat` on
+ * the way in) so the edit surface can reopen the line as it was typed. **The
+ * server does not recompute `macros` from it** — the same rule as the header
+ * totals below: what the user confirmed is what is stored.
+ *
+ * `quantity` is bounded well under the gram ceiling because it is a count or a
+ * measure, not a macro. `unit` is checked against the engine's list here rather
+ * than left as free text, because an unrecognised unit written *now* is a
+ * client bug, and lenience belongs on the read path where old rows live.
+ */
+export const writePortionSchema = z.object({
+  quantity: z.number().min(0).max(MAX_GRAMS),
+  unit: z.enum(PORTION_UNITS),
+  per: writeMacrosSchema,
+})
+
+/**
  * One line of a logged meal.
  *
  * `qty` is a free-text string and stays one — "1 slice", "half a punnet", "2.5"
@@ -96,6 +117,8 @@ export const writeMealItemSchema = z.object({
   name: z.string().trim().min(1).max(MAX_NAME_CHARS),
   qty: z.string().trim().max(MAX_QTY_CHARS),
   macros: writeMacrosSchema,
+  /** Optional: an item may be typed as plain macros with no portion behind it. */
+  portion: writePortionSchema.nullish(),
 })
 
 /**
@@ -149,6 +172,87 @@ export const writeMealSchema = z.object({
 })
 
 export type WriteMeal = z.infer<typeof writeMealSchema>
+
+/**
+ * `PATCH /meal-logs/:id` — correct a meal that is already logged.
+ *
+ * ## Why this is not `writeMealSchema.partial()`
+ *
+ * Decided 2026-08-16, and plan.md carries the reasoning. `.partial()` would
+ * make **every** field optional including `id`, which is the one thing a patch
+ * must never move: the id is the row, it arrives in the path, and a body that
+ * could also carry one creates two answers to "which meal is this" that a
+ * careless handler would let disagree. So this is its own object, and it does
+ * not have an `id` field at all.
+ *
+ * ## Why an edit is a patch and not a delete plus a re-post
+ *
+ * Delete-and-re-post needs no new route, and that is its only merit. The meal
+ * would lose its `created_at`, jump to the end of its day, and a failure
+ * between the two calls would leave it simply deleted — a correction that
+ * destroys the thing being corrected. A patch keeps the id, the `created_at`,
+ * the `sort_order` and the day, so an edited meal stays one meal in the
+ * history.
+ *
+ * ## At least one field
+ *
+ * An empty body is refused rather than treated as a no-op. It cannot be
+ * anything but a bug in the caller, and answering 200 to it would hide that bug
+ * behind a successful-looking request.
+ *
+ * ## `date` **is** patchable
+ *
+ * "I logged this on the wrong day" is a real correction, and the workaround for
+ * it is exactly the delete-and-re-post this route removes. A meal that moves to
+ * another day is given a fresh `sortOrder` for the day it lands on — see
+ * `server/data/meals.ts` — because its old position belongs to a different
+ * day's ordering and would otherwise collide with whatever already sits there.
+ */
+export const patchMealSchema = z
+  .object({
+    /** Moves the meal to another day. Bounded by the route, same as a create. */
+    date: logDaySchema.optional(),
+    name: z.string().trim().min(1).max(MAX_NAME_CHARS).optional(),
+    /** The confirmed header. Not checked against `items`, same as on a create. */
+    macros: writeMacrosSchema.optional(),
+    items: z.array(writeMealItemSchema).max(MAX_ITEMS).optional(),
+    /**
+     * `null` clears the time; omitting the field leaves it as it was. The two
+     * are genuinely different requests and the route reads them as such.
+     */
+    loggedTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected a wall-clock time as HH:MM")
+      .nullable()
+      .optional(),
+    /** A deliberate reorder within the day. Omit and the position is left alone. */
+    sortOrder: z.number().int().min(0).max(10_000).optional(),
+  })
+  .refine((patch) => Object.values(patch).some((value) => value !== undefined), {
+    message: "Send at least one field to change.",
+  })
+
+export type PatchMeal = z.infer<typeof patchMealSchema>
+
+/**
+ * What a patch answers with.
+ *
+ * The same three facts a create returns, for the same reason — the client
+ * refetches the day rather than patching its cache — plus the day the meal is
+ * on **now**, which is the one thing the caller may have just changed and
+ * cannot assume. `created` has no meaning here: a patch never creates a row,
+ * and a missing one is a 404.
+ */
+export const mealPatchResultSchema = z.object({
+  id: z.string(),
+  date: logDaySchema,
+  sortOrder: z.number(),
+  /** The day the meal was on **before** this patch, so the client can also
+   *  invalidate the day it left. Equal to `date` when nothing moved. */
+  previousDate: logDaySchema,
+})
+
+export type MealPatchResult = z.infer<typeof mealPatchResultSchema>
 
 /**
  * `POST /weight-logs`.

@@ -658,13 +658,41 @@ genuinely not started.
       how am I tracking, what do I log next — **now judgeable and not yet judged.** The
       surfaces exist and are showing a real day; the test is whether *your* numbers read
       fast, which is a stopwatch on the device. Pairs with the 44×44 pass above
-- [ ] Nutrition tab: day view, meals in `sort_order`, `logged_time` shown
-- [ ] Manual entry form — the speed-critical surface
-- [ ] Unit type selector: g, slices, pieces, tbsp, tsp, cup, ml
-- [ ] Macros always `quantity × per-unit`, **unit label always visible**
-- [ ] Gram inputs debounced at **300ms**
-- [ ] Save a new food to `foods` with `source='manual'` from the entry flow
-- [ ] Edit and delete a logged meal — **decided 2026-08-16: an edit is
+- [x] Nutrition tab: day view, meals in `sort_order`, `logged_time` shown —
+      `src/app/(tabs)/nutrition.tsx`. Ordered as the server returns them and
+      **not re-sorted client-side**: `sort_order` is the order, `logged_time` is
+      a label, and a second opinion here is how the two ends start disagreeing.
+      Each meal row is the control that opens it for editing; the items are
+      printed under the header rather than hidden behind a disclosure, because a
+      day view that shows only totals is one you cannot check
+- [x] Manual entry form — the speed-critical surface. `src/app/log-meal.tsx`,
+      one screen for both create and edit. `?id=` opens an existing meal and
+      patches it; without one it posts a new one. They were nearly two screens,
+      and every field and every state would have existed twice with the edit
+      copy the one nobody re-checks. The total and the Save button are pinned:
+      a save you have to scroll a five-item meal to reach is the biggest thing
+      standing between this form and the ten-second target below
+- [x] Unit type selector: g, slices, pieces, tbsp, tsp, cup, ml —
+      `PORTION_UNITS` in the engine, rendered through the existing `Dropdown`
+- [x] Macros always `quantity × per-unit`, **unit label always visible** —
+      `packages/engine/src/portions.ts`. **Two bases, not one:** `g` and `ml`
+      are quoted per 100 (which is how every SA label is printed), everything
+      countable per 1. Asking someone to divide 340 by 100 in their head before
+      typing is how a logging app gets abandoned. The heading over the four
+      macro fields is written *from* the unit — "Macros per 100 g" / "per
+      slice" — so changing the unit cannot silently change what they mean
+- [x] Gram inputs debounced at **300ms** — `src/lib/use-debounced-value.ts`.
+      The **field** is not debounced and must not be; what waits is everything
+      *computed* from it. Typing "150" passes through 1 and 15, and undebounced
+      the running total flashes 3, then 52, then 525 — three wrong numbers under
+      the thumb for every right one
+- [ ] Save a new food to `foods` with `source='manual'` from the entry flow —
+      **deliberately not on this branch.** It needs `POST /foods`, which needs
+      the nullable-`user_id` scoping `server/data/scoped.ts` says it will not
+      cover, and it is only worth anything next to food *search* — both of which
+      are Phase 6 `library-and-builder`. Building the write here would leave a
+      table you can add to and cannot read from
+- [x] Edit and delete a logged meal — **decided 2026-08-16: an edit is
       `PATCH /meal-logs/:id`, not delete-and-re-post.** Delete-and-re-post needs no new
       route, and that is its only merit: the meal loses its original `created_at`, jumps to
       the end of its day, and a failure between the two calls leaves it simply deleted.
@@ -672,24 +700,159 @@ genuinely not started.
       meal stays one meal in the history. Costs a partial-update contract — every field
       optional, at least one required — which is a **new** schema and not `writeMealSchema`
       with `.partial()`, because the id and the date must not be patchable by accident.
-      ⚠️ **Open sub-question: may an edit change `date`?** "I logged this on the wrong day"
-      is a real correction and the delete-and-re-post workaround is what we are removing, so
-      the recommendation is yes — but a meal that moves to another day needs a fresh
-      `sort_order` for the day it lands on, or it collides with whatever is already at that
-      position. `nextSortOrder` already answers that; it just has to be called on the move.
-      The delete route stays as it is
+      ✅ **Sub-question answered on `meal-logging`, 2026-08-20: yes, an edit may
+      change `date`** — the recommendation, taken. "I logged this on the wrong
+      day" is a real correction and delete-and-re-post is exactly the workaround
+      this route removes. A meal that moves gets a **fresh `sort_order` for the
+      day it lands on**, via the same `nextSortOrder` a create calls, because its
+      old position belongs to a different day's ordering and would collide with
+      whatever already sits there. A patch that does *not* change the day leaves
+      the position alone — re-appending on every edit would send a corrected
+      breakfast to the bottom of the day. The move is bounded by the same 91-day
+      window a create is. The delete route stayed as it is
 - [x] `DELETE /meal-logs/:id` exists already — shipped with `api-writes`, 2026-08-16
-- [ ] Back-date a meal to a past day
+- [x] `PATCH /meal-logs/:id` — **shipped here rather than on `api-writes`, on purpose.**
+      It was not on that branch's checklist and the decision landed after the branch was
+      already reviewed and committed. Shipping it beside the surface that calls it means it
+      is exercised on the device instead of becoming a fifth route no client has ever hit.
+      Its body is `patchMealSchema` — **a new schema, not `writeMealSchema.partial()`**,
+      because `.partial()` makes `id` optional too, and a patch that can carry an id gives
+      the request two answers to "which meal is this". At least one field is required; an
+      empty patch is a 400 rather than a 200 that hides a caller bug. Missing meal is a
+      404, and the answer is byte-identical for "no such id anywhere" and "somebody else's
+      id", so unlike the delete it is not an existence oracle — the delete's always-200
+      exists for replay safety, which a patch has no need of
+- [x] Back-date a meal to a past day — through `DayStepper`, which is the same
+      control on the day view and on the entry form. **No date picker:** you step
+      the day back and log there, so the day being written to is on screen the
+      whole time rather than something you have to remember you changed. Its
+      bounds are the server's — forward stops at today, back at 91 days — because
+      letting someone travel to a day the server will refuse means the refusal
+      arrives *after* they have typed a meal into it
 - [~] ~~Water tracking — one integer per day, tap to increment~~ — **cut from v1
       2026-08-12.** See the deferred backlog for the re-add trigger
-- [ ] Client mints UUIDv7 for every new row — **the server half is done and waiting.**
+- [x] Client mints UUIDv7 for every new row — `src/lib/uuid.ts`, on
+      `expo-crypto`'s `getRandomBytes`. **`Crypto.randomUUID()` is a v4** and
+      every write route would 400 on it. The id is held in a ref across save
+      attempts and re-minted only on a 409, which is the whole idempotency
+      contract in one place: a retry after a lost response carries the same id
+      and is answered "already logged" instead of logging the meal twice.
+      `tests/uuidv7.test.ts` parses it with the server's own `clientIdSchema`
+      and asserts the 48-bit timestamp survives — `millis >>> 32` is 0 in
+      JavaScript, and the obvious implementation gives every id minted in the
+      same 49 days an identical prefix. Original note follows:
+- [~] ~~the server half is done and waiting~~ — **done 2026-08-20.**
       `POST /meal-logs` refuses a v4 (`clientIdSchema` checks the version nibble), so this
       is not optional wiring. `node:crypto` does not exist in React Native: the minter
       needs `expo-crypto`'s `getRandomValues`. The shape is reproduced, with a comment on
       why, in `tests/security/write-isolation.test.ts` — it is 12 lines, and it belongs in
       `src/lib/` the moment a surface saves anything
-- [ ] All four states on every new surface
-- [ ] **Time yourself: manual log start → saved, under 10 seconds**
+- [x] All four states on every new surface — the day view owns loading, error,
+      empty and happy; the entry form owns loading/error for the meal it is
+      editing (a *new* meal has nothing to fetch and goes straight to the form),
+      and the save has its own three on top: pending disables the button,
+      failure prints a reason above it, success leaves the screen. The frame with
+      the back button is hoisted out of the state branches — a spinner on a
+      screen with no way back is a trap, and it only appears when the network is
+      already misbehaving
+- [ ] **Time yourself: manual log start → saved, under 10 seconds** — the form
+      exists and is now judgeable. Still a stopwatch on the device, and still
+      Sriman's to run. Pairs with the 44×44 pass in Phase 3
+
+### Branch `meal-logging` — what else landed, 2026-08-20
+
+Disclosed expansion, not scope creep hidden in a diff. Each of these was needed by
+something on the checklist above and none was originally listed:
+
+- **`packages/engine/src/portions.ts`** — `scalePortion`, `portionLabel`, `PORTION_UNITS`,
+  `PORTION_BASIS`. The quantity × per-unit rule, in the engine where the first standing
+  rule puts it. 24 tests.
+- **`sumMacros` / `normaliseMacros` exported from `macros.ts`.** `dayTotals` now delegates
+  to `sumMacros` rather than the two keeping their own loops — the entry form needs a
+  running total for **one meal**, and calling that a "day total" in the component drawing
+  it is a lie that reads fine and confuses the next person.
+- **`portion` on the stored item shape** — optional `{quantity, unit, per}` inside the
+  `items` jsonb, and on the read contract as `null`. **Absent on all 38 migrated rows,**
+  which is the whole reason it is optional. Without it, reopening "150 g of rice at 350
+  kcal per 100 g" gives back only "525 kcal" and a `qty` string nothing is allowed to
+  parse, so changing 150 to 200 becomes mental arithmetic the app exists to remove. Rows
+  that have no portion — the migrated ones, or a line typed as bare macros — open in a
+  second editor mode that edits exactly what is stored. Inventing "1 × piece" for them
+  would misrepresent the row *and* write the misrepresentation back on the next save.
+- **`updateOwned` in the scoped layer.** `user_id` and `id` are removed by the type, and
+  that is load-bearing rather than tidy: an `UPDATE` that could write `user_id` would hand
+  one user's meal to another, and the ownership filter does **not** catch it — the `WHERE`
+  selects the row before the new owner is written. `tests/write-safety.test.ts` guards it
+  and was confirmed red on a planted defect.
+- **`apiPost` / `apiPatch` / `apiDelete`**, all four verbs through one `request` function
+  in `src/lib/api.ts`, so the ngrok header and the error mapping cannot drift between a
+  read and a write.
+- **`conflict` and `rate-limited` given their own error copy.** Both were falling through
+  to "something went wrong", and both are actionable in ways that sentence is not.
+- **`formatDayWithWeekday`** — "Tue 18 Aug". The weekday is the half that makes a
+  back-dated day recognisable.
+
+### The Nutrition tab has two reference designs
+
+`src/design/nutrition_ui.png` draws the **add** surface — shortcut tiles, a list of foods
+with `+` buttons, a search field and a white "Log Foods" button.
+`src/design/nutrition_ui2.png` draws the **day** surface — the date as a heading, a calorie
+ring split into macro arcs, three macro cards and the day's meals. They share the Scan /
+Search / AI / Quick Add mode row, so they are two states of one screen rather than two
+screens.
+
+**The tab renders the day surface**, because that is what Phase 4 asks it for. The add
+surface needs food search, which is Phase 6.
+
+`src/components/nutrition/NutritionHeader.tsx`, `FoodRow.tsx`, `ShortcutRow.tsx` and
+`src/lib/food-emoji.ts` are the **add** surface's pieces, built on 2026-08-20 and **kept
+without being rendered**. They are not dead code and they are not an oversight; they are the
+first reference, waiting for the route that shows it. If Phase 6 goes a different way,
+delete them then rather than carrying them further.
+
+### Decisions made on `meal-logging`
+
+- **The calorie ring is split by macro energy, not drawn in one colour.** `nutrition_ui2.png`
+  shows three arcs, so `packages/engine/src/energy.ts` computes the shares — general Atwater
+  factors, 4/4/9 — and `CalorieDonut` turns them into dash offsets. The shares come from the
+  **grams** and are then rescaled, because the stored `kcal` is authoritative and is never
+  re-derived, so the two routinely disagree by a few calories. 12 tests.
+- **A meal's accent bar is coloured by its dominant macro**, via `dominantMacro`, not by row
+  index. The reference alternates red and teal down the list, which is a rotation — and two
+  identical meals would then get different colours purely from the order they were eaten in.
+  Colour is semantic, never decoration. A meal with no macros gets the neutral border colour.
+
+- **Macros are displayed protein, carbs, fat — everywhere, and that is settled.** Worth
+  recording the detour: `src/design/nutrition_ui.png` prints its rows protein-fat-carbs, so
+  the order was changed to match it on 2026-08-20; `nutrition_ui2.png` then arrived with its
+  three macro cards in protein-carbs-fat, the two references disagreed, and Sriman's call was
+  carbs second — which is also what the app had before either mock. `MacrosCard.tsx` carries
+  the argument. Every surface reads that order: the dashboard rings, the entry form's four
+  fields and two total lines, `FoodRow`, `CalorieDonut`'s arcs, and the Nutrition tab's three
+  cards. **The `Macros` type still declares `{kcal, protein, carbs, fat}` and must not be
+  reshuffled to match a display order** — object key order is not a contract, and chasing it
+  would touch the engine, every schema and the migration for a visual decision.
+- **The macro colours stay as plan.md fixes them** — protein purple, carbs yellow, fat teal.
+  `nutrition_ui2.png` draws protein red, carbs teal and fat amber; Sriman's call, 2026-08-20,
+  was that the locked table wins. A mock is evidence, not an instruction, and the token table
+  is a standing rule with two tests behind it.
+- **The form writes only the lines that have a name.** A blank row left at the bottom is
+  the normal way to finish typing; storing it would leave a nameless entry in the day view
+  that nothing can explain. A line with a name and no macros **is** saved — black coffee is
+  a real thing, and refusing it would make the app argue about what counts as food.
+- **The header total is recomputed from the complete lines**, not from the running total on
+  screen, which includes the blank one. They agree today because a blank line contributes
+  zeros; they would stop agreeing the moment an incomplete line could carry a number, and
+  the write contract is explicit that a header disagreeing with its items is unverifiable
+  server-side.
+- **`logged_time` is the phone's clock, and that is correct.** It is display only, nothing
+  sorts or computes by it, and it is what the user's day felt like. The **calendar day** is
+  a different question and is still answered by `currentLoggingDay()` server-side.
+- **No optimistic update on any mutation.** The write invalidates every cached day rather
+  than patching one. A meal moves the totals, the rings, the average, the week strip and
+  possibly the streak, and every one of those is the engine's answer — and the streak and
+  the average are measured against **today** whichever date was asked for, so logging on
+  Tuesday staled Friday's cached response too.
 
 ---
 

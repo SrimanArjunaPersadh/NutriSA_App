@@ -36,9 +36,11 @@ export {
 export {
   fromMacros,
   mealItemSchema,
+  mealPortionSchema,
   parseMealItems,
   toMacros,
   type MealItem,
+  type MealPortion,
 } from "./meal-items"
 
 export {
@@ -58,7 +60,9 @@ export {
 export {
   clientIdSchema,
   mealDeleteResultSchema,
+  mealPatchResultSchema,
   mealWriteResultSchema,
+  patchMealSchema,
   targetRowSchema,
   targetsResponseSchema,
   targetsWriteResultSchema,
@@ -66,10 +70,13 @@ export {
   writeMacrosSchema,
   writeMealItemSchema,
   writeMealSchema,
+  writePortionSchema,
   writeTargetsSchema,
   writeWeightSchema,
   type MealDeleteResult,
+  type MealPatchResult,
   type MealWriteResult,
+  type PatchMeal,
   type TargetRowResponse,
   type TargetsResponse,
   type TargetsWriteResult,

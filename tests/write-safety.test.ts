@@ -121,6 +121,53 @@ describe("the write helpers stamp user_id from the scope", () => {
     ).toBe(true)
   })
 
+  /**
+   * The mirror of the rule above, and the more dangerous half.
+   *
+   * `insertOwned` and `upsertOwned` must *set* `user_id`; `updateOwned` must
+   * never touch it. An `UPDATE` that could write `user_id` would hand one
+   * user's meal to another — and unlike every other query in this layer, the
+   * ownership filter does not catch it: the `WHERE` selects the row before the
+   * new owner is written, so the statement is perfectly legal and the row is
+   * simply gone from its owner's account.
+   *
+   * The type already forbids it (`Omit<…, "userId" | "id">`). This is the
+   * belt: a future `as never` in the wrong place would silence the type and
+   * nothing else would notice.
+   */
+  it("updateOwned never writes userId or id", () => {
+    const start = body.indexOf("export async function updateOwned")
+    expect(start, "updateOwned is gone from scoped.ts — has the patch path moved?").toBeGreaterThan(-1)
+
+    const nextExport = body.indexOf("export ", start + 10)
+    const fn = body.slice(start, nextExport === -1 ? undefined : nextExport)
+
+    expect(
+      /userId\s*:/.test(fn),
+      "updateOwned must not assign userId. An UPDATE that can move a row to " +
+        "another owner is not caught by the WHERE clause — the row is selected " +
+        "before the new owner is written.",
+    ).toBe(false)
+
+    expect(
+      /\.set\([^)]*id\s*:/.test(fn),
+      "updateOwned must not assign id. The id is the row's identity and the " +
+        "idempotency key every write on this API is built around.",
+    ).toBe(false)
+  })
+
+  it("applies the ownership filter to updates", () => {
+    const start = body.indexOf("export async function updateOwned")
+    const nextExport = body.indexOf("export ", start + 10)
+    const fn = body.slice(start, nextExport === -1 ? undefined : nextExport)
+
+    expect(
+      /\.where\(\s*ownedBy\(/.test(fn),
+      "updateOwned must filter by ownedBy(scope, …), the same as every other " +
+        "statement in this layer.",
+    ).toBe(true)
+  })
+
   it("applies the ownership filter to deletes", () => {
     const start = body.indexOf("export async function deleteOwned")
     const fn = body.slice(start)

@@ -1,4 +1,4 @@
-import type { LogDay } from "@engine"
+import { weekdayIndex, type LogDay } from "@engine"
 
 /**
  * Display formatting. **Presentation only — nothing here computes a value.**
@@ -99,4 +99,46 @@ export function formatDayShort(day: LogDay): string {
   const month = MONTH_ABBREVIATIONS[Number(day.slice(5, 7)) - 1] ?? ""
   // Unpadded: "7 May", not "07 May".
   return `${Number(day.slice(8, 10))} ${month}`
+}
+
+const WEEKDAY_ABBREVIATIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+/**
+ * `2026-08-18` → `"Mon 18 Aug"`. The heading over a day being logged to.
+ *
+ * The weekday is the half that makes a back-dated day recognisable: "17 Aug"
+ * takes a moment to place, "Sun 17 Aug" does not. `weekdayIndex` comes from the
+ * engine — working out which day of the week a date falls on is arithmetic, and
+ * the one time authority owns it.
+ */
+export function formatDayWithWeekday(day: LogDay): string {
+  return `${WEEKDAY_ABBREVIATIONS[weekdayIndex(day)] ?? ""} ${formatDayShort(day)}`
+}
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+/**
+ * `2026-08-20` → `"August 20"`. The Nutrition tab's heading.
+ *
+ * Month-first, which is the American order and **not** how a date is written in
+ * South Africa — but it is what `src/design/nutrition_ui2.png` prints, and this
+ * is the one string on that screen traced directly from it. Flagged for Sriman:
+ * "20 August" is the local form and is a one-line change here if he wants it.
+ */
+export function formatDayLong(day: LogDay): string {
+  const month = MONTH_NAMES[Number(day.slice(5, 7)) - 1] ?? ""
+  return `${month} ${Number(day.slice(8, 10))}`
 }

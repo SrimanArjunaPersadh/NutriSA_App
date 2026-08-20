@@ -101,6 +101,20 @@ export async function readDaySummary(
       name: item.name,
       qty: item.qty,
       macros: toMacros(item),
+      /**
+       * Absent on the 38 migrated rows and on anything logged as bare macros,
+       * and `null` is what the contract says for that — the client's editor
+       * reads it as "no portion behind this line" and falls back to editing the
+       * macros directly. `toMacros` again on the per-unit figures: they are
+       * macros, and the vocabulary translation is not optional for them either.
+       */
+      portion: item.portion
+        ? {
+            quantity: item.portion.quantity,
+            unit: item.portion.unit,
+            per: toMacros(item.portion.per),
+          }
+        : null,
     })),
   }))
 

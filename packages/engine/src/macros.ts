@@ -41,7 +41,14 @@ const DECIMALS: Record<keyof Macros, number> = {
   fat: 1,
 }
 
-function normalise(macros: Macros): Macros {
+/**
+ * Round each field to the precision it is read at.
+ *
+ * Exported because `portions.ts` scales macros and must land on the same
+ * decimals — a portion rounded to four places and a day total rounded to one
+ * would print two different numbers for the same single-item meal.
+ */
+export function normaliseMacros(macros: Macros): Macros {
   return {
     kcal: roundTo(macros.kcal, DECIMALS.kcal),
     protein: roundTo(macros.protein, DECIMALS.protein),
@@ -60,6 +67,21 @@ function normalise(macros: Macros): Macros {
  * against the items printed directly above them.
  */
 export function dayTotals(items: readonly LoggedItem[]): Macros {
+  return sumMacros(items)
+}
+
+/**
+ * Sum of any set of macros, rounded once at the end.
+ *
+ * The same arithmetic `dayTotals` needs, under the name the *other* caller
+ * needs: the manual entry form adds its lines up into a running total for one
+ * meal, and calling that a "day total" in the component that draws it would be
+ * a lie that reads fine and confuses the next person to open the file.
+ *
+ * `dayTotals` delegates here rather than the two keeping their own loops. One
+ * of them would eventually round differently.
+ */
+export function sumMacros(items: readonly LoggedItem[]): Macros {
   const total = items.reduce<Macros>(
     (acc, item) => ({
       kcal: acc.kcal + item.kcal,
@@ -69,7 +91,7 @@ export function dayTotals(items: readonly LoggedItem[]): Macros {
     }),
     ZERO_MACROS,
   )
-  return normalise(total)
+  return normaliseMacros(total)
 }
 
 /**
@@ -80,7 +102,7 @@ export function dayTotals(items: readonly LoggedItem[]): Macros {
  * red "over target" token exists precisely to show it.
  */
 export function remainingMacros(consumed: Macros, target: Macros): Macros {
-  return normalise({
+  return normaliseMacros({
     kcal: target.kcal - consumed.kcal,
     protein: target.protein - consumed.protein,
     carbs: target.carbs - consumed.carbs,

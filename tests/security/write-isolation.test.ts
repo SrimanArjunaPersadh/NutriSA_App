@@ -46,11 +46,13 @@ vi.mock("@clerk/backend", () => ({
 /**
  * A UUIDv7, minted the way the client will have to.
  *
- * Written here rather than imported because there is nothing to import yet:
- * the app mints ids in Phase 4, and it cannot use `node:crypto` when it does —
- * React Native has no such module, so the client's version will come from
- * `expo-crypto`. What must match is the **shape**, which is what
- * `clientIdSchema` checks and what this reproduces: 48 bits of millisecond
+ * Written here rather than imported from the app. `src/lib/uuid.ts` now exists
+ * and mints the real thing on `meal-logging`, but it reaches for `expo-crypto`,
+ * which is a native module with no binding under Node — importing it here would
+ * make this suite depend on a React Native runtime to test Postgres. The two
+ * are checked against each other by contract instead: both are parsed by
+ * `clientIdSchema`, and `tests/uuidv7.test.ts` asserts the client's version
+ * against it directly. What must match is the **shape**: 48 bits of millisecond
  * timestamp, version 7 in the high nibble of byte 6, the RFC variant in byte 8,
  * random everywhere else.
  */
@@ -105,6 +107,9 @@ async function send(
 
 const post = (path: string, token: string | undefined, body: Json) =>
   send(writes, "POST", path, token, body)
+
+const patch = (path: string, token: string | undefined, body: Json) =>
+  send(writes, "PATCH", path, token, body)
 
 const del = (path: string, token: string | undefined) =>
   send(writes, "DELETE", path, token)
@@ -302,6 +307,138 @@ describe("deleting", () => {
     const res = await del("/meal-logs/not-a-uuid", "token-a")
     expect(res.status).toBe(400)
     expect(res.body).toMatchObject({ code: "bad-request" })
+  })
+})
+
+describe("editing", () => {
+  it("cannot patch another user's meal, and learns nothing from trying", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-b", meal({ id, name: "B's dinner" }))
+
+    const res = await patch(`/meal-logs/${id}`, "token-a", { name: "A's dinner" })
+    expect(res.status).toBe(404)
+
+    const rows = await setup("unchanged", () =>
+      db.select().from(schema.mealLogs).where(eq(schema.mealLogs.id, id)),
+    )
+    expect(rows[0]?.name).toBe("B's dinner")
+    expect(rows[0]?.userId).toBe(ids.userB)
+  })
+
+  /**
+   * The same 404 for an id that does not exist anywhere. That is what makes the
+   * case above safe to answer at all: a prober cannot tell "not yours" from
+   * "not a thing", so the route is not an existence oracle over other people's
+   * rows.
+   */
+  it("answers the same way for an id nobody owns", async () => {
+    const res = await patch(`/meal-logs/${uuidv7()}`, "token-a", { name: "Nothing" })
+    expect(res.status).toBe(404)
+  })
+
+  it("edits its own meal in place, keeping the id and created_at", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id, name: "Lunch" }))
+
+    const before = await setup("before", () =>
+      db.select().from(schema.mealLogs).where(eq(schema.mealLogs.id, id)),
+    )
+
+    const res = await patch(`/meal-logs/${id}`, "token-a", {
+      name: "Late lunch",
+      macros: { kcal: 700, protein: 50, carbs: 60, fat: 20 },
+    })
+    expect(res.status).toBe(200)
+
+    const after = await setup("after", () =>
+      db.select().from(schema.mealLogs).where(eq(schema.mealLogs.id, id)),
+    )
+    expect(after).toHaveLength(1)
+    expect(after[0]?.name).toBe("Late lunch")
+    // The whole reason this is a patch and not a delete-and-re-post.
+    expect(after[0]?.createdAt.getTime()).toBe(before[0]?.createdAt.getTime())
+    expect(after[0]?.sortOrder).toBe(before[0]?.sortOrder)
+  })
+
+  it("leaves a field alone when the patch does not mention it", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id, name: "Snack", loggedTime: "15:30" }))
+
+    await patch(`/meal-logs/${id}`, "token-a", { name: "Afternoon snack" })
+
+    const rows = await setup("read back", () =>
+      db.select().from(schema.mealLogs).where(eq(schema.mealLogs.id, id)),
+    )
+    expect(rows[0]?.loggedTime).toBe("15:30")
+  })
+
+  it("clears the time when the patch sends null", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id, loggedTime: "15:30" }))
+
+    await patch(`/meal-logs/${id}`, "token-a", { loggedTime: null })
+
+    const rows = await setup("read back", () =>
+      db.select().from(schema.mealLogs).where(eq(schema.mealLogs.id, id)),
+    )
+    expect(rows[0]?.loggedTime).toBeNull()
+  })
+
+  /**
+   * A meal that moves day cannot keep its position: `sort_order` is a place
+   * within a day, and carrying it across would drop the meal on top of whatever
+   * already holds that slot on the day it lands on.
+   */
+  it("gives a meal that moves day a fresh position on the day it lands on", async () => {
+    const target = addDays(today, -5)
+    // Two meals already on the target day, so its next free position is 2.
+    await post("/meal-logs", "token-a", meal({ date: target }))
+    await post("/meal-logs", "token-a", meal({ date: target }))
+
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id, date: addDays(today, -6) }))
+
+    const res = await patch(`/meal-logs/${id}`, "token-a", { date: target })
+    expect(res.body).toMatchObject({ date: target, sortOrder: 2 })
+    expect(res.body).toMatchObject({ previousDate: addDays(today, -6) })
+  })
+
+  it("bounds a move by the same window a create is bounded by", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id }))
+
+    expect((await patch(`/meal-logs/${id}`, "token-a", { date: addDays(today, 1) })).status).toBe(400)
+    expect(
+      (await patch(`/meal-logs/${id}`, "token-a", { date: addDays(today, -400) })).status,
+    ).toBe(400)
+  })
+
+  it("refuses an empty patch rather than reporting a successful no-op", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id }))
+
+    const res = await patch(`/meal-logs/${id}`, "token-a", {})
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ code: "bad-request" })
+  })
+
+  it("refuses an id that is not a UUID rather than 500ing on the cast", async () => {
+    const res = await patch("/meal-logs/not-a-uuid", "token-a", { name: "x" })
+    expect(res.status).toBe(400)
+  })
+
+  /**
+   * An unauthenticated patch is refused before it reaches anything, the same as
+   * every other write. Listed here as well as in the blanket case above because
+   * this route was added a branch later, and a route that forgets to sit behind
+   * the middleware looks exactly like one that does until someone checks.
+   */
+  it("refuses an unauthenticated patch", async () => {
+    const id = uuidv7()
+    await post("/meal-logs", "token-a", meal({ id }))
+
+    const res = await patch(`/meal-logs/${id}`, undefined, { name: "Anyone's" })
+    expect(res.status).toBe(401)
   })
 })
 
