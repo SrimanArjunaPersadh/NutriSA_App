@@ -3,7 +3,7 @@ import { asc, eq } from "drizzle-orm"
 import { nextSortOrder, type LogDay } from "@engine"
 import {
   fromMacros,
-  type MealDeleteResult,
+  type DeleteResult,
   type MealPatchResult,
   type MealWriteResult,
   type PatchMeal,
@@ -251,7 +251,7 @@ export async function patchMealLog(
 export async function deleteMealLog(
   scope: UserScope,
   id: string,
-): Promise<MealDeleteResult> {
+): Promise<DeleteResult> {
   const removed = await deleteOwned(scope, mealLogs, eq(mealLogs.id, id))
   return { id, deleted: removed.length > 0 }
 }

@@ -64,6 +64,35 @@ export const projectionSchema = z.object({
   daysToGoal: z.number().nullable(),
 })
 
+/**
+ * One stored weigh-in, as a row rather than as a point on a line.
+ *
+ * ## Why this exists beside `points`
+ *
+ * `points` is the engine's series: one entry per **calendar day** in the
+ * window, carrying the smoothed trend, with `weight: null` on the days nobody
+ * stood on a scale. It is what the chart draws, and it deliberately has no ids
+ * in it — `TrendPoint` is a pure engine type and a database id is not something
+ * the engine should have an opinion about.
+ *
+ * The history list needs the other shape: the rows that actually exist, each
+ * with the id that `DELETE /weight-logs/:id` takes. Reconstructing that from
+ * `points` would mean filtering the nulls and then having no id to delete by.
+ *
+ * ## The id is not the one the client minted
+ *
+ * A second weigh-in on a day replaces the first **in place** — `POST` upserts
+ * on `(user_id, date)` — so the row keeps the id it was created with. A client
+ * that deleted by the id it last sent would delete nothing. This is where the
+ * real id comes from.
+ */
+export const weightEntrySchema = z.object({
+  id: z.string(),
+  day: logDaySchema,
+  /** The raw scale reading. Never a trend — see `trendPointSchema`. */
+  weightKg: z.number(),
+})
+
 export const weightSeriesSchema = z.object({
   /**
    * The window that was drawn, echoed back. `days: null` means the full
@@ -76,6 +105,15 @@ export const weightSeriesSchema = z.object({
   }),
   /** One entry per calendar day inside the window, oldest first. */
   points: z.array(trendPointSchema),
+  /**
+   * The stored weigh-ins inside the window, **newest first** — the order the
+   * history list reads in, where the most recent entry is the one you are most
+   * likely to be correcting.
+   *
+   * Windowed like `points` and unlike everything else in this response: it is
+   * display, not computation. Nothing is derived from it.
+   */
+  entries: z.array(weightEntrySchema),
   /** The most recent point in the **full** series. Null before the first weigh-in. */
   latest: trendPointSchema.nullable(),
   /** Null when the history is shorter than the window. */
@@ -93,6 +131,7 @@ export const weightSeriesSchema = z.object({
 })
 
 export type TrendPointResponse = z.infer<typeof trendPointSchema>
+export type WeightEntry = z.infer<typeof weightEntrySchema>
 export type TrendChangeResponse = z.infer<typeof trendChangeSchema>
 export type GoalProgressResponse = z.infer<typeof goalProgressSchema>
 export type ProjectionResponse = z.infer<typeof projectionSchema>
