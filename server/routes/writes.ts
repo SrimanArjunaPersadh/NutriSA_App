@@ -3,11 +3,16 @@ import type { Context } from "hono"
 import { z } from "zod"
 
 import { addDays, checkLogDate, currentLoggingDay, type LogDateRejection, type LogDay } from "@engine"
-import { writeMealSchema, writeTargetsSchema, writeWeightSchema } from "@shared"
+import {
+  patchMealSchema,
+  writeMealSchema,
+  writeTargetsSchema,
+  writeWeightSchema,
+} from "@shared"
 
 import { getScope, requireUser, type AppEnv } from "../auth/user-scope"
 import { LOGGED_DAYS_WINDOW_DAYS } from "../data/day"
-import { deleteMealLog, writeMealLog } from "../data/meals"
+import { deleteMealLog, patchMealLog, writeMealLog } from "../data/meals"
 import { writeTargets } from "../data/targets"
 import { writeWeightLog } from "../data/weight"
 import { writeRateLimit } from "../http/limits"
@@ -166,6 +171,56 @@ writes.post("/meal-logs", async (c) => {
   if (!outcome.ok) return idTaken(c)
 
   return c.json(outcome.value, outcome.value.created ? 201 : 200)
+})
+
+/**
+ * `PATCH /meal-logs/:id` — correct a meal that is already logged.
+ *
+ * Decided 2026-08-16 in preference to delete-and-re-post, which needs no route
+ * and loses the meal's `created_at`, its position in the day, and — if it fails
+ * between the two calls — the meal. `packages/shared/src/writes.ts` carries the
+ * full argument; the consequence here is that the id in the path is the row and
+ * the body may not carry another one.
+ *
+ * 404 when there is no such meal **that this user owns**. Unlike the delete
+ * below, that is not an existence oracle: the answer is identical for "no such
+ * id anywhere" and "somebody else's id", so it tells a prober nothing it did
+ * not already know. The delete's always-200 exists for a different reason —
+ * replay safety — and a patch has no replay to be safe about.
+ *
+ * Any UUID version, same as the delete: the migrated rows are as editable as
+ * the rest.
+ */
+writes.patch("/meal-logs/:id", async (c) => {
+  const id = anyUuidSchema.safeParse(c.req.param("id"))
+  if (!id.success) return badRequest(c, "Expected a UUID.")
+
+  const body = await parseBody(c, patchMealSchema)
+  if (!body.ok) return badRequest(c, body.message)
+
+  /**
+   * Only resolved when the request actually sent a date. `resolveWriteDay`
+   * answers an absent one with today, which is right for a create and wrong
+   * here: an edit that did not mention the day must leave it alone, and
+   * defaulting would silently drag every corrected back-dated meal forward to
+   * today.
+   */
+  let day: LogDay | undefined
+  if (body.data.date !== undefined) {
+    const resolved = resolveWriteDay(body.data.date)
+    if (!resolved.ok) return badRequest(c, resolved.message)
+    day = resolved.day
+  }
+
+  const outcome = await patchMealLog(getScope(c), id.data, body.data, day)
+  if (!outcome.ok) {
+    return c.json(
+      { code: "not-found" as const, message: "No such meal." },
+      404,
+    )
+  }
+
+  return c.json(outcome.value)
 })
 
 /**

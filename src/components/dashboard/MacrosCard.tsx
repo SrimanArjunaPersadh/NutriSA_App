@@ -34,6 +34,28 @@ const CARD_BODY_HEIGHT = 138
  * conflated the two — it shipped a `MacroRing[]` with values baked in — which
  * is why swapping it for live data touched every line of this file.
  */
+/**
+ * ## Protein, carbs, fat — the app's one display order, decided here
+ *
+ * Settled 2026-08-20, after a detour worth recording. `src/design/nutrition_ui.png`
+ * prints its rows as `204 Cal • 23P • 7F • 0C`, so the order was briefly changed
+ * to protein-fat-carbs to match it — then `nutrition_ui2.png` arrived with its
+ * three macro cards in **protein, carbs, fat**, the two references disagreed,
+ * and Sriman's call was carbs second. The lesson is the small one: a mock is
+ * evidence, not an instruction, and two mocks can be evidence of different
+ * things.
+ *
+ * Every surface reads this order: the rings here, the entry form's four fields
+ * and its two total lines, `CalorieDonut`'s arcs and the three cards on the
+ * Nutrition tab.
+ *
+ * Worth stating plainly because it is not obvious from any one file: **the
+ * order a macro is *displayed* in is a design decision made once, and the order
+ * the `Macros` type declares its keys in has nothing to do with it.** The type
+ * is still `{kcal, protein, carbs, fat}` and must not be reshuffled to match —
+ * object key order is not a contract, and chasing it would touch the engine,
+ * every schema and the migration for a visual decision.
+ */
 const MACRO_RINGS = [
   { key: "protein", label: "PROTEIN", color: colors.protein },
   { key: "carbs", label: "CARBS", color: colors.carbs },

@@ -11,6 +11,7 @@ export { roundTo } from "./round"
 
 export {
   currentLoggingDay,
+  currentClockTime,
   toLogDay,
   logMonth,
   isLogDay,
@@ -39,12 +40,32 @@ export {
 
 export {
   dayTotals,
+  sumMacros,
+  normaliseMacros,
   remainingMacros,
+  amountOver,
   macroProgress,
   ZERO_MACROS,
   type Macros,
   type LoggedItem,
 } from "./macros"
+
+export {
+  macroEnergyShares,
+  dominantMacro,
+  ATWATER,
+  NO_SHARES,
+  type MacroShares,
+} from "./energy"
+
+export {
+  isPortionUnit,
+  portionLabel,
+  scalePortion,
+  PORTION_BASIS,
+  PORTION_UNITS,
+  type PortionUnit,
+} from "./portions"
 
 export {
   averageDailyIntake,

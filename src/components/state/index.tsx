@@ -196,6 +196,30 @@ function describe(error: unknown): {
           detail: "That day could not be found.",
           retryable: false,
         }
+      /**
+       * A client-minted id collided with a row this user cannot see. Random
+       * 122-bit ids do not do that by accident, so it is a bug — but it is one
+       * a fresh id fixes, and the mutation hooks mint one on retry. Worth its
+       * own words because "try again" is genuinely the right advice here and
+       * genuinely wrong for the session case above.
+       */
+      case "conflict":
+        return {
+          title: "That didn't save",
+          detail: "Something clashed on our side. Try saving it again.",
+          retryable: true,
+        }
+      /**
+       * The per-user write cap. Nothing a person does by hand reaches it, so
+       * seeing this means something is looping — saying "slow down" to someone
+       * who is not going fast would be nonsense.
+       */
+      case "rate-limited":
+        return {
+          title: "Too many saves at once",
+          detail: "Give it a moment and try again.",
+          retryable: true,
+        }
       case "bad-request":
       case "malformed-response":
       case "server-error":

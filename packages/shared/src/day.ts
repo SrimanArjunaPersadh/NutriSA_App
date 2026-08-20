@@ -27,6 +27,28 @@ export const dayMealItemSchema = z.object({
   /** Verbatim, never parsed — see `meal-items.ts`. */
   qty: z.string(),
   macros: macrosSchema,
+  /**
+   * How the line was entered, if the row records it. **Null on every migrated
+   * row** and on anything written before the field existed.
+   *
+   * Nothing on the read path computes from this — `macros` above is the stored,
+   * authoritative figure either way. It rides along so the edit surface can
+   * reopen an item as "150 g at 350 kcal per 100 g" rather than as a bare
+   * total, which is the difference between changing a number and redoing the
+   * sum by hand.
+   *
+   * `unit` stays a plain string here, deliberately. The write side checks it
+   * against the engine's list; the read side must hand back whatever is stored,
+   * because a row written by a later version with a unit this build does not
+   * know is still a row this build has to display.
+   */
+  portion: z
+    .object({
+      quantity: z.number(),
+      unit: z.string(),
+      per: macrosSchema,
+    })
+    .nullable(),
 })
 
 export const dayMealSchema = z.object({

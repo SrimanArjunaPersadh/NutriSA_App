@@ -5,6 +5,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Shadows Tailwind's built-in `white` with the same value, so that
+        // `src/design/tokens.ts` can expose it to react-native-svg and the
+        // two palettes still agree in both directions. See tokens.test.ts.
+        white: "#FFFFFF",
         // Fixed token table — plan.md. Dark only, no light theme.
         //
         // This block is a hand-maintained copy of `src/design/tokens.ts`; a .js

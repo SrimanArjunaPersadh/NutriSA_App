@@ -41,7 +41,14 @@ const DECIMALS: Record<keyof Macros, number> = {
   fat: 1,
 }
 
-function normalise(macros: Macros): Macros {
+/**
+ * Round each field to the precision it is read at.
+ *
+ * Exported because `portions.ts` scales macros and must land on the same
+ * decimals — a portion rounded to four places and a day total rounded to one
+ * would print two different numbers for the same single-item meal.
+ */
+export function normaliseMacros(macros: Macros): Macros {
   return {
     kcal: roundTo(macros.kcal, DECIMALS.kcal),
     protein: roundTo(macros.protein, DECIMALS.protein),
@@ -60,6 +67,21 @@ function normalise(macros: Macros): Macros {
  * against the items printed directly above them.
  */
 export function dayTotals(items: readonly LoggedItem[]): Macros {
+  return sumMacros(items)
+}
+
+/**
+ * Sum of any set of macros, rounded once at the end.
+ *
+ * The same arithmetic `dayTotals` needs, under the name the *other* caller
+ * needs: the manual entry form adds its lines up into a running total for one
+ * meal, and calling that a "day total" in the component that draws it would be
+ * a lie that reads fine and confuses the next person to open the file.
+ *
+ * `dayTotals` delegates here rather than the two keeping their own loops. One
+ * of them would eventually round differently.
+ */
+export function sumMacros(items: readonly LoggedItem[]): Macros {
   const total = items.reduce<Macros>(
     (acc, item) => ({
       kcal: acc.kcal + item.kcal,
@@ -69,7 +91,7 @@ export function dayTotals(items: readonly LoggedItem[]): Macros {
     }),
     ZERO_MACROS,
   )
-  return normalise(total)
+  return normaliseMacros(total)
 }
 
 /**
@@ -80,12 +102,32 @@ export function dayTotals(items: readonly LoggedItem[]): Macros {
  * red "over target" token exists precisely to show it.
  */
 export function remainingMacros(consumed: Macros, target: Macros): Macros {
-  return normalise({
+  return normaliseMacros({
     kcal: target.kcal - consumed.kcal,
     protein: target.protein - consumed.protein,
     carbs: target.carbs - consumed.carbs,
     fat: target.fat - consumed.fat,
   })
+}
+
+/**
+ * How far past a target a `remaining` value has gone.
+ *
+ * `remainingMacros` goes negative on purpose and every surface leaves it that
+ * way, because over-target is a designed state rather than a minus sign — the
+ * copy reads "180 kcal over" rather than "-180 kcal left". Turning the sign
+ * into that figure is the last step of that calculation, so it belongs here
+ * rather than as a `Math.abs` in whichever component happens to print it.
+ *
+ * Added on `meal-logging` after a review found the same `Math.abs(remaining)`
+ * in two components. Two copies of one line is how a rule stops being a rule.
+ *
+ * Zero when the target has not been passed, so a caller can print this without
+ * first asking whether it applies.
+ */
+export function amountOver(remaining: number): number {
+  if (!Number.isFinite(remaining) || remaining >= 0) return 0
+  return -remaining
 }
 
 /**

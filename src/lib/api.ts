@@ -80,21 +80,32 @@ export function isAuthError(error: unknown): boolean {
 }
 
 /**
- * A GET against the API, authenticated and parsed.
+ * Every request this app makes, authenticated and parsed.
  *
  * `getToken` is passed in rather than imported. This module has no React in it
- * and Clerk's token lives behind a hook, so the caller — a query hook, which is
- * already inside a component — supplies it. That also keeps this function
- * testable without a Clerk provider.
+ * and Clerk's token lives behind a hook, so the caller — a query or mutation
+ * hook, which is already inside a component — supplies it. That also keeps this
+ * function testable without a Clerk provider.
  *
  * A null token is an `unauthenticated` failure raised **before** the request.
  * Sending an unauthenticated call to a route that will certainly refuse it just
  * turns one clear local state into a round-trip and a 401.
+ *
+ * ## One function, four verbs
+ *
+ * The write helpers below are the same request with a body and a method. They
+ * were nearly copied — a `apiPost` with its own `fetch`, its own ngrok header
+ * and its own error mapping — and the copy would have drifted the first time
+ * one of those three needed changing. Everything that is genuinely different
+ * between a read and a write is the `method`, the `Content-Type`, and whether
+ * there is a body at all — three conditionals, all visible in one place.
  */
-export async function apiGet<T extends z.ZodType>(
+async function request<T extends z.ZodType>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   schema: T,
   getToken: () => Promise<string | null>,
+  body?: unknown,
 ): Promise<z.infer<T>> {
   if (!BASE_URL) {
     throw new ApiError(
@@ -111,8 +122,10 @@ export async function apiGet<T extends z.ZodType>(
   let response: Response
   try {
     response = await fetch(`${BASE_URL}${path}`, {
+      method,
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         /**
          * ngrok's free tier serves an HTML interstitial — "You are about to
          * visit…" — to anything it takes for a browser, and React Native's
@@ -126,6 +139,7 @@ export async function apiGet<T extends z.ZodType>(
          */
         "ngrok-skip-browser-warning": "true",
       },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
   } catch (cause) {
     // No response at all: the tunnel is down, the phone is offline, or the dev
@@ -141,14 +155,14 @@ export async function apiGet<T extends z.ZodType>(
     throw new ApiError(await errorCode(response), await errorMessage(response), response.status)
   }
 
-  let body: unknown
+  let parsedBody: unknown
   try {
-    body = await response.json()
+    parsedBody = await response.json()
   } catch {
     throw new ApiError("malformed-response", "The server sent something that is not JSON.")
   }
 
-  const parsed = schema.safeParse(body)
+  const parsed = schema.safeParse(parsedBody)
   if (!parsed.success) {
     // Logged in full because this one is always a bug in this repo — the two
     // sides import the same schema, so a mismatch means one of them shipped
@@ -158,6 +172,65 @@ export async function apiGet<T extends z.ZodType>(
   }
 
   return parsed.data
+}
+
+/** A GET against the API, authenticated and parsed. */
+export async function apiGet<T extends z.ZodType>(
+  path: string,
+  schema: T,
+  getToken: () => Promise<string | null>,
+): Promise<z.infer<T>> {
+  return request("GET", path, schema, getToken)
+}
+
+/**
+ * A POST, with the response parsed through its shared schema.
+ *
+ * ## The body is not validated here
+ *
+ * It is built by a mutation hook from a form the user filled in, and the server
+ * parses it through the same schema this response comes back under. Checking it
+ * a third time on the way out would turn a server-side 400 — which the surface
+ * already has an error state for — into a client-side throw with no state
+ * behind it. The contract is enforced where the two sides meet, once.
+ *
+ * ## Every POST carries a client-minted id
+ *
+ * Not enforced by a type here, because the id sits inside `body` and belongs to
+ * the schema that shapes it. `src/lib/uuid.ts` is where it comes from and why.
+ */
+export async function apiPost<T extends z.ZodType>(
+  path: string,
+  body: unknown,
+  schema: T,
+  getToken: () => Promise<string | null>,
+): Promise<z.infer<T>> {
+  return request("POST", path, schema, getToken, body)
+}
+
+/** A PATCH — a partial correction to a row that already exists. */
+export async function apiPatch<T extends z.ZodType>(
+  path: string,
+  body: unknown,
+  schema: T,
+  getToken: () => Promise<string | null>,
+): Promise<z.infer<T>> {
+  return request("PATCH", path, schema, getToken, body)
+}
+
+/**
+ * A DELETE.
+ *
+ * Answers 200 with `deleted: false` rather than 404 when there was nothing to
+ * remove — see `mealDeleteResultSchema`. So this resolving is not proof that
+ * anything went, and a caller that needs to know must read the flag.
+ */
+export async function apiDelete<T extends z.ZodType>(
+  path: string,
+  schema: T,
+  getToken: () => Promise<string | null>,
+): Promise<z.infer<T>> {
+  return request("DELETE", path, schema, getToken)
 }
 
 /**

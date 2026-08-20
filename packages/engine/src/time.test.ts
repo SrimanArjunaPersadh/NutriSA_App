@@ -4,6 +4,7 @@ import {
   addDays,
   checkLogDate,
   currentLoggingDay,
+  currentClockTime,
   dayOfMonth,
   daysBetween,
   isLogDay,
@@ -273,5 +274,32 @@ describe("dayOfMonth", () => {
     expect(dayOfMonth("2026-08-09")).toBe(9)
     expect(dayOfMonth("2026-08-27")).toBe(27)
     expect(dayOfMonth("2026-03-01")).toBe(1)
+  })
+})
+
+describe("currentClockTime", () => {
+  it("reads the clock in SAST, not in the machine's timezone", () => {
+    // 22:40 UTC is 00:40 the next day in SAST — the case the whole module
+    // exists for, applied to the time rather than the date.
+    expect(currentClockTime(new Date("2026-08-19T22:40:00Z"))).toBe("00:40")
+  })
+
+  it("pads both halves", () => {
+    expect(currentClockTime(new Date("2026-08-20T05:03:00Z"))).toBe("07:03")
+    expect(currentClockTime(new Date("2026-08-20T22:00:00Z"))).toBe("00:00")
+  })
+
+  it("agrees with currentLoggingDay about which day it is", () => {
+    // The pair must never disagree: a 00:40 stamp on yesterday's date would be
+    // a meal that claims to have been eaten before it was logged.
+    const instant = new Date("2026-08-19T22:40:00Z")
+    expect(currentLoggingDay(instant)).toBe("2026-08-20")
+    expect(currentClockTime(instant)).toBe("00:40")
+  })
+
+  it("matches the shape the write schemas accept", () => {
+    expect(currentClockTime(new Date("2026-08-20T09:15:00Z"))).toMatch(
+      /^([01]\d|2[0-3]):[0-5]\d$/,
+    )
   })
 })

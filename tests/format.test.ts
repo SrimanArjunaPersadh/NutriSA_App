@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   formatDayShort,
+  formatDayWithWeekday,
   formatGrams,
   formatKcal,
   formatKg,
@@ -116,5 +117,17 @@ describe("formatDayShort", () => {
   it("covers both ends of the year", () => {
     expect(formatDayShort("2026-01-01")).toBe("1 Jan")
     expect(formatDayShort("2026-12-31")).toBe("31 Dec")
+  })
+})
+
+describe("formatDayWithWeekday", () => {
+  it("names the weekday in front of the short date", () => {
+    // 2026-08-18 is a Tuesday; 2026-08-16 a Sunday.
+    expect(formatDayWithWeekday("2026-08-18")).toBe("Tue 18 Aug")
+    expect(formatDayWithWeekday("2026-08-16")).toBe("Sun 16 Aug")
+  })
+
+  it("leaves the day unpadded, same as formatDayShort", () => {
+    expect(formatDayWithWeekday("2026-05-07")).toBe("Thu 7 May")
   })
 })
