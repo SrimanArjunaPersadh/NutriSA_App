@@ -43,10 +43,12 @@ import { useDaySummary } from "@/lib/queries"
  *
  * This is the day surface, because that is what plan.md's Phase 4 asks the
  * Nutrition tab for — "day view, meals in `sort_order`, `logged_time` shown".
- * `FoodRow`, `ShortcutRow` and `NutritionHeader` are the first reference's
- * pieces and are **kept but not rendered here**: they are the add surface, and
- * the add surface needs food search, which is Phase 6. See the note in plan.md
- * so they do not read as dead code six weeks from now.
+ * The add surface is **not built**: it needs food search, which Phase 6 owns
+ * outright — plan.md reserves "the control that opens the library" for that
+ * phase by name. Components for it were written here from the first reference
+ * and then deleted on review, because 472 lines nothing imports is scope creep
+ * whether or not it is disclosed. They are in commit `7270b52` when Phase 6
+ * wants them.
  *
  * ## Every number is the server's
  *

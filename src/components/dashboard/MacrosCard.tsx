@@ -46,8 +46,8 @@ const CARD_BODY_HEIGHT = 138
  * things.
  *
  * Every surface reads this order: the rings here, the entry form's four fields
- * and its two total lines, `FoodRow`'s macro line, `CalorieDonut`'s arcs and the
- * three cards on the Nutrition tab.
+ * and its two total lines, `CalorieDonut`'s arcs and the three cards on the
+ * Nutrition tab.
  *
  * Worth stating plainly because it is not obvious from any one file: **the
  * order a macro is *displayed* in is a design decision made once, and the order

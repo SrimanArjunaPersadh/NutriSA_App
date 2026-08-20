@@ -161,21 +161,6 @@ export function TickIcon({ size = 16, color = colors.primary }: IconProps) {
   )
 }
 
-/** Calendar — opens the day the screen is logging to. */
-export function CalendarIcon({ size = 18, color = colors.textSecondary }: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-9ZM8 4v4M16 4v4M4 11h16"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  )
-}
-
 /**
  * Scan — the four corner brackets of a camera viewfinder.
  *
@@ -207,21 +192,6 @@ export function PlusCircleIcon({ size = 18, color = colors.textSecondary }: Icon
         stroke={color}
         strokeWidth={1.8}
         strokeLinecap="round"
-      />
-    </Svg>
-  )
-}
-
-/** Downward chevron-on-a-stem, top right of the reference header. */
-export function ArrowDownIcon({ size = 18, color = colors.textSecondary }: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 5v13M6.5 12.5 12 18l5.5-5.5"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </Svg>
   )

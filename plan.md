@@ -816,11 +816,17 @@ screens.
 **The tab renders the day surface**, because that is what Phase 4 asks it for. The add
 surface needs food search, which is Phase 6.
 
-`src/components/nutrition/NutritionHeader.tsx`, `FoodRow.tsx`, `ShortcutRow.tsx` and
-`src/lib/food-emoji.ts` are the **add** surface's pieces, built on 2026-08-20 and **kept
-without being rendered**. They are not dead code and they are not an oversight; they are the
-first reference, waiting for the route that shows it. If Phase 6 goes a different way,
-delete them then rather than carrying them further.
+The **add** surface's pieces were built here from the first reference and then **deleted on
+review**, 2026-08-20 — `NutritionHeader.tsx`, `FoodRow.tsx`, `ShortcutRow.tsx` and
+`src/lib/food-emoji.ts`, 472 lines nothing imported. The review's point was the right one:
+Phase 6 reserves "the control that opens the library" by name, and disclosing scope creep
+does not stop it being scope creep. They are in commit `7270b52` if Phase 6 wants them —
+though by then the design may have moved, which is most of the argument for not carrying
+unrendered code forward.
+
+What survives from the first reference is what the day surface actually uses: `ModeTabs`
+(both references draw it) and `LogFoodsBar` (ui2 is cropped above the fold, and a logging
+screen with no way to log would be a strange thing to infer from a crop).
 
 ### What the review found — `/nutrisa-review since main`, 2026-08-20
 
@@ -850,9 +856,10 @@ requirement implemented wrong. All four are fixed:
 
 Also raised and **not** changed, deliberately:
 
-- **~950 lines of disclosed scope creep** (Spec) — the two mock-traced surfaces, and 472
-  lines of add-surface components nothing imports. Real, and Sriman's call to keep or cut;
-  Phase 6 owns that entry point.
+- **~950 lines of disclosed scope creep** (Spec). The 472 lines of add-surface components
+  nothing imported were **deleted** — Sriman's call, same day. The two mock-traced day
+  surfaces stay: they are the Nutrition tab Phase 4 asked for, drawn to a reference Sriman
+  supplied mid-branch.
 - `mealPatchResultSchema.previousDate` is specified as feeding a narrower invalidation the
   client does not do. Docstring corrected to say so; the field stays, because it is the only
   way a caller can learn a move happened.
