@@ -1,4 +1,5 @@
 import {
+  currentClockTime,
   isPortionUnit,
   normaliseMacros,
   portionLabel,
@@ -234,18 +235,16 @@ export function draftFromMeal(meal: DayMeal): {
 }
 
 /**
- * The wall-clock time to stamp on a new meal, `HH:MM`.
+ * Re-exported so the entry form takes its whole vocabulary from this module.
  *
- * The **phone's** clock, and that is correct: this field is display-only, it is
- * what the user's day felt like, and nothing sorts or computes by it. The
- * calendar day is a different question entirely and is answered server-side by
- * `currentLoggingDay()` — the single time authority — never here.
+ * It used to be *defined* here, on a bare `new Date()`, argued away as display
+ * only. A review on 2026-08-20 pointed out that it is persisted as
+ * `meal_logs.logged_time` on every meal, so it is not display only in the sense
+ * the rule means — and it read the device's clock rather than SAST, so a phone
+ * abroad would stamp a time disagreeing with the day the server filed it under.
+ * It now lives in `packages/engine/src/time.ts`, beside the day authority.
  */
-export function currentClockTime(now: Date = new Date()): string {
-  const hours = String(now.getHours()).padStart(2, "0")
-  const minutes = String(now.getMinutes()).padStart(2, "0")
-  return `${hours}:${minutes}`
-}
+export { currentClockTime }
 
 /** `HH:MM`, or nothing. The same shape the write schemas accept. */
 export function normaliseLoggedTime(value: string): string | null {

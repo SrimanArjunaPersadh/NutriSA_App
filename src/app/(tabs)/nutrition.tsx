@@ -3,7 +3,13 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useRouter } from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { currentLoggingDay, macroEnergyShares, NO_SHARES, type LogDay } from "@engine"
+import {
+  amountOver,
+  currentLoggingDay,
+  macroEnergyShares,
+  NO_SHARES,
+  type LogDay,
+} from "@engine"
 
 import { DayStepper } from "@/components/logging/DayStepper"
 import { CalorieDonut } from "@/components/nutrition/CalorieDonut"
@@ -269,7 +275,7 @@ export default function Nutrition() {
  */
 function caloriesLine(remaining: number | null, isToday: boolean): string {
   if (remaining === null) return "No targets set yet"
-  if (remaining < 0) return `${formatKcal(Math.abs(remaining))} kcal over`
+  if (remaining < 0) return `${formatKcal(amountOver(remaining))} kcal over`
   return isToday ? `${formatKcal(remaining)} kcal left today` : `${formatKcal(remaining)} kcal left`
 }
 

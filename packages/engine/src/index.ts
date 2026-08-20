@@ -11,6 +11,7 @@ export { roundTo } from "./round"
 
 export {
   currentLoggingDay,
+  currentClockTime,
   toLogDay,
   logMonth,
   isLogDay,
@@ -42,6 +43,7 @@ export {
   sumMacros,
   normaliseMacros,
   remainingMacros,
+  amountOver,
   macroProgress,
   ZERO_MACROS,
   type Macros,

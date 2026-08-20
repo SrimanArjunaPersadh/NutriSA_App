@@ -189,9 +189,27 @@ export default function LogMeal() {
     }
 
     pendingId.current ??= uuidv7()
+
+    /**
+     * `date` is sent **only when this is a back-date**, never for today.
+     *
+     * `writeMealSchema` spells out why: "Omitting it means today, and the server
+     * answers that with `currentLoggingDay()` … a client that fills in its own
+     * date is a second time authority, running on a phone whose clock and
+     * timezone this server does not control. At 00:40 SAST the two answers
+     * differ by a whole day."
+     *
+     * The first version sent `date: day` unconditionally, which made the phone
+     * the authority on every single meal — caught by review, 2026-08-20. The
+     * comparison below is against a **fresh** `currentLoggingDay()` rather than
+     * the one `day` was seeded with, so a form left open across midnight
+     * correctly sends yesterday's date as the back-date it now is.
+     */
+    const isBackDate = day !== currentLoggingDay()
+
     const input: WriteMeal = {
       id: pendingId.current,
-      date: day,
+      ...(isBackDate ? { date: day } : {}),
       name: name.trim(),
       macros: headerMacros,
       items: writeItems,

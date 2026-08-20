@@ -154,6 +154,18 @@ Copy this block into each branch's review before merging.
 | Protein | `#A78BFA` | Macro — reserved |
 | Carbs | `#FCD34D` | Macro — reserved |
 | Fats | `#2DD4BF` | Macro — reserved |
+| White | `#FFFFFF` | Primary text, and the one full-brightness surface |
+
+`White` was added to the table on `meal-logging`, 2026-08-20, after a review pointed out
+that it had been registered in `src/design/tokens.ts` and `tailwind.config.js` without
+appearing here — and this table is what "the tokens are fixed" refers to. Tailwind has
+always had `white`, so `text-white` worked without a token; what needed one was
+`react-native-svg`, which takes a value and cannot read a class. The rule the omission
+broke is "no new colour that is not in the token table, **even via a token**".
+
+The one full-brightness surface is the "Log Foods" button on the Nutrition tab. It is the
+single action on that screen, and `Primary` blue is already spoken for by the dashboard's
+actions, so white reads as a step up rather than as a second blue thing.
 
 Typography: **Barlow Condensed 800 italic** for stats and titles, **Barlow 400–600** for body.
 
@@ -809,6 +821,43 @@ surface needs food search, which is Phase 6.
 without being rendered**. They are not dead code and they are not an oversight; they are the
 first reference, waiting for the route that shows it. If Phase 6 goes a different way,
 delete them then rather than carrying them further.
+
+### What the review found — `/nutrisa-review since main`, 2026-08-20
+
+**Privacy: clean, no violations.** Standards found three hard violations, Spec found one
+requirement implemented wrong. All four are fixed:
+
+1. **The create path made the phone the date authority** (Spec, and the only real bug).
+   `log-meal.tsx` sent `date: day` on *every* save, with `day` seeded from a client-side
+   `currentLoggingDay()`. The branch's own contract forbids exactly this — "a client that
+   fills in its own date is a second one, running on a phone whose clock and timezone this
+   server does not control. At 00:40 SAST the two answers differ by a whole day." `date` is
+   now sent **only when it is a back-date**, compared against a fresh `currentLoggingDay()`
+   so a form left open across midnight still back-dates correctly. **Worth carrying: the
+   schema that argued the rule and the screen that broke it were written in the same
+   session.** Writing a rule down is not the same as following it.
+2. **A bare `new Date()` in `src/`** (Standards). `currentClockTime` was in
+   `src/lib/meal-draft.ts`, argued away as display only — but it is persisted as
+   `logged_time` on every meal, and it read the *device's* clock rather than SAST, so a
+   phone abroad would stamp a time disagreeing with the day the server filed it under. Moved
+   to `packages/engine/src/time.ts` beside the day authority, shifted through the same
+   offset. 4 tests.
+3. **`Math.abs(remaining)` in two components** (Standards). Turning a signed engine value
+   into the figure on screen is the last step of that calculation. Now `amountOver()` in the
+   engine, which also fixes the `-0` case. 4 tests.
+4. **`white` was a token with no row in the fixed table** (Standards). Added above, with the
+   reason it exists at all.
+
+Also raised and **not** changed, deliberately:
+
+- **~950 lines of disclosed scope creep** (Spec) — the two mock-traced surfaces, and 472
+  lines of add-surface components nothing imports. Real, and Sriman's call to keep or cut;
+  Phase 6 owns that entry point.
+- `mealPatchResultSchema.previousDate` is specified as feeding a narrower invalidation the
+  client does not do. Docstring corrected to say so; the field stays, because it is the only
+  way a caller can learn a move happened.
+- Touch targets under 44pt in the unrendered components, and two inline widths that belong
+  in `className`. Debt in code nothing renders.
 
 ### Decisions made on `meal-logging`
 

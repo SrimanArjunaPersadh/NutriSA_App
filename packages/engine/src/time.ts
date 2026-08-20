@@ -42,6 +42,37 @@ export function toLogDay(instant: Date): LogDay {
 }
 
 /**
+ * The wall-clock time in SAST, `HH:MM`.
+ *
+ * The companion to `currentLoggingDay`, and it lives here for the same reason:
+ * this module is the only place allowed to ask what time it is. It arrived on
+ * `meal-logging`, where it was first written as a bare `new Date()` inside
+ * `src/lib/meal-draft.ts` and argued away as "display only" — which was wrong,
+ * because the value is **persisted** as `meal_logs.logged_time` on every meal.
+ * A number that reaches a column is not display only.
+ *
+ * ## It is SAST, not the device's clock
+ *
+ * The first version read `now.getHours()`, which is the timezone of whatever
+ * machine is running — so the same meal stamped from a phone abroad would carry
+ * a time that disagrees with the day the server filed it under. Shifted and read
+ * through `getUTC*`, exactly as `toLogDay` does, the two always agree.
+ *
+ * ## What it is still not allowed to decide
+ *
+ * The calendar day. `logged_time` is a label the day view prints beside a meal;
+ * nothing sorts or computes by it, and the day a meal belongs to is answered
+ * server-side. A client that derived a day key from this would be a second time
+ * authority wearing a different hat.
+ */
+export function currentClockTime(now: Date = new Date()): string {
+  const shifted = new Date(now.getTime() + SAST_OFFSET_MS)
+  const hours = String(shifted.getUTCHours()).padStart(2, "0")
+  const minutes = String(shifted.getUTCMinutes()).padStart(2, "0")
+  return `${hours}:${minutes}`
+}
+
+/**
  * The SAST month a day falls in, `YYYY-MM`.
  *
  * The AI budget gate sums spend per calendar month in Africa/Johannesburg, not

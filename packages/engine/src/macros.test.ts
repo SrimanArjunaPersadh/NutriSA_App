@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { ZERO_MACROS, dayTotals, macroProgress, remainingMacros } from "./macros"
+import {
+  amountOver,
+  dayTotals,
+  macroProgress,
+  remainingMacros,
+  ZERO_MACROS,
+} from "./macros"
 
 const TARGET = { kcal: 2300, protein: 167, carbs: 195, fat: 60 }
 
@@ -82,5 +88,27 @@ describe("macroProgress", () => {
     // Infinity would reach a strokeDashoffset and blank the ring entirely.
     const progress = macroProgress({ kcal: 500, protein: 10, carbs: 10, fat: 10 }, ZERO_MACROS)
     expect(progress).toEqual(ZERO_MACROS)
+  })
+})
+
+describe("amountOver", () => {
+  it("is the size of the overshoot once a target is passed", () => {
+    expect(amountOver(-180)).toBe(180)
+    expect(amountOver(-0.5)).toBe(0.5)
+  })
+
+  it("is zero while there is still room, and at exactly the target", () => {
+    expect(amountOver(430)).toBe(0)
+    expect(amountOver(0)).toBe(0)
+  })
+
+  /** -0 is what `0 - 0` gives in JavaScript, and "-0 kcal over" is not a thing. */
+  it("never returns negative zero", () => {
+    expect(Object.is(amountOver(-0), -0)).toBe(false)
+    expect(amountOver(-0)).toBe(0)
+  })
+
+  it("is zero rather than NaN for a value that is not a number", () => {
+    expect(amountOver(Number.NaN)).toBe(0)
   })
 })

@@ -247,8 +247,22 @@ export const mealPatchResultSchema = z.object({
   id: z.string(),
   date: logDaySchema,
   sortOrder: z.number(),
-  /** The day the meal was on **before** this patch, so the client can also
-   *  invalidate the day it left. Equal to `date` when nothing moved. */
+  /**
+   * The day the meal was on **before** this patch. Equal to `date` when nothing
+   * moved.
+   *
+   * ⚠️ **Nothing consumes this yet.** It was specified as "so the client can
+   * invalidate the day it left", and the client does not: `useUpdateMeal`
+   * invalidates every cached day at once, because `GET /day/:date` carries three
+   * things measured against *today* — the streak, the trailing average and
+   * `loggedDays` — so a write on any day stales every cached response anyway.
+   * Caught by review, 2026-08-20; the docstring was describing an intention
+   * rather than the code.
+   *
+   * Kept rather than removed, because it is the only way a caller can learn a
+   * move actually happened — the request knows what it asked for, not what the
+   * row was. A narrower invalidation, or an undo, would need exactly this.
+   */
   previousDate: logDaySchema,
 })
 

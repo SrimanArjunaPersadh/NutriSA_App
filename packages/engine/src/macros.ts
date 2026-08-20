@@ -111,6 +111,26 @@ export function remainingMacros(consumed: Macros, target: Macros): Macros {
 }
 
 /**
+ * How far past a target a `remaining` value has gone.
+ *
+ * `remainingMacros` goes negative on purpose and every surface leaves it that
+ * way, because over-target is a designed state rather than a minus sign — the
+ * copy reads "180 kcal over" rather than "-180 kcal left". Turning the sign
+ * into that figure is the last step of that calculation, so it belongs here
+ * rather than as a `Math.abs` in whichever component happens to print it.
+ *
+ * Added on `meal-logging` after a review found the same `Math.abs(remaining)`
+ * in two components. Two copies of one line is how a rule stops being a rule.
+ *
+ * Zero when the target has not been passed, so a caller can print this without
+ * first asking whether it applies.
+ */
+export function amountOver(remaining: number): number {
+  if (!Number.isFinite(remaining) || remaining >= 0) return 0
+  return -remaining
+}
+
+/**
  * Share of each target consumed, as a 0–1 fraction for the dashboard rings.
  *
  * Not clamped, for the same reason as above — a ring at 1.2 is the caller's cue

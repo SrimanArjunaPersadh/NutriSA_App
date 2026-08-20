@@ -1,5 +1,7 @@
 import { Text, View } from "react-native"
 
+import { amountOver } from "@engine"
+
 import { ProgressRing } from "@/components/dashboard/ProgressRing"
 import { formatGrams } from "@/lib/format"
 
@@ -71,7 +73,7 @@ export function MacroMiniCard({
             over ? "text-danger" : "text-textSecondary"
           }`}
         >
-          {formatGrams(Math.abs(remaining))}g {over ? "over" : "left"}
+          {formatGrams(over ? amountOver(remaining) : remaining)}g {over ? "over" : "left"}
         </Text>
       )}
     </View>
