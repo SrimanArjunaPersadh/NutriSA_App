@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { MAX_WEIGHT_KG } from "@shared"
+
 import {
   formatDayShort,
   formatDayWithWeekday,
@@ -7,6 +9,7 @@ import {
   formatKcal,
   formatKg,
   formatSignedKg,
+  parseKg,
   withThousands,
 } from "../src/lib/format"
 
@@ -129,5 +132,58 @@ describe("formatDayWithWeekday", () => {
 
   it("leaves the day unpadded, same as formatDayShort", () => {
     expect(formatDayWithWeekday("2026-05-07")).toBe("Thu 7 May")
+  })
+})
+
+/**
+ * `parseKg` — the decimal separator, and why this test exists.
+ *
+ * A weigh-in of 98.70 could not be entered on the iPhone: `decimal-pad` draws
+ * the locale's separator, the locale is South Africa, the separator is a comma,
+ * and `Number("98,70")` is `NaN`. The Save button stayed dead and the screen
+ * read as "it won't let me type a decimal". Found on the device 2026-09-09.
+ *
+ * It could not have been found anywhere else — a US-locale simulator draws a
+ * full stop, and every offline test until now typed one. So the comma case is
+ * pinned here.
+ */
+describe("parseKg", () => {
+  it("reads a comma as a decimal point — the ZA keyboard's separator", () => {
+    expect(parseKg("98,70")).toBe(98.7)
+  })
+
+  it("still reads a full stop", () => {
+    expect(parseKg("98.70")).toBe(98.7)
+  })
+
+  it("agrees with itself across both separators", () => {
+    expect(parseKg("98,70")).toBe(parseKg("98.70"))
+  })
+
+  it("reads a whole number", () => {
+    expect(parseKg("98")).toBe(98)
+  })
+
+  it("tolerates surrounding whitespace", () => {
+    expect(parseKg("  98,7  ")).toBe(98.7)
+  })
+
+  it("round-trips formatKg", () => {
+    expect(parseKg(formatKg(98.7))).toBe(98.7)
+  })
+
+  it.each(["", "   ", "abc", "98,7,0", "9 8", "-98.7", "0"])(
+    "refuses %o",
+    (input) => {
+      expect(parseKg(input)).toBeNull()
+    },
+  )
+
+  it("refuses a weight above MAX_WEIGHT_KG", () => {
+    expect(parseKg(String(MAX_WEIGHT_KG + 1))).toBeNull()
+  })
+
+  it("accepts MAX_WEIGHT_KG itself — the bound is inclusive", () => {
+    expect(parseKg(String(MAX_WEIGHT_KG))).toBe(MAX_WEIGHT_KG)
   })
 })

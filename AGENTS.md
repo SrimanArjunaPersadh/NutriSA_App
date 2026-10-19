@@ -3,7 +3,7 @@
 ## Before writing any code
 
 **Expo has changed.** Read the exact versioned docs before writing Expo code:
-https://docs.expo.dev/versions/v54.0.0/ — not blog posts, not memory, not `latest`.
+https://docs.expo.dev/versions/v57.0.0/ — not blog posts, not memory, not `latest`.
 
 ⚠️ **`latest` in the Expo docs is not the version this project runs.** See the SDK pin below.
 
@@ -15,7 +15,7 @@ The full spec, with the reasoning behind every decision, lives at:
 
 | Layer | Choice |
 |---|---|
-| App | Expo SDK **54**, React Native 0.81.5 — **pinned, see below** |
+| App | Expo SDK **57**, React Native 0.86.3 — **pinned, see below** |
 | Routing | expo-router — file-based, `typedRoutes`, React Compiler on |
 | Navigation | **Native Tabs** — see the rule below. Never JS tabs. |
 | Styling | NativeWind v4, `className` only |
@@ -32,16 +32,22 @@ The full spec, with the reasoning behind every decision, lives at:
 Shared zod schemas live in `packages/shared/` and are imported by both client and server.
 There is one source of truth per contract; never redeclare a shape on one side.
 
-## The SDK is pinned to 54 — do not upgrade it
+## The SDK is pinned to 57 — do not upgrade it
 
-**Expo Go from the App Store supports exactly one SDK at a time, and right now that is 54.**
+**Expo Go from the App Store supports exactly one SDK at a time, and right now that is 57.**
 Newer SDKs exist in the docs and on npm long before the Expo Go binary clears Apple review.
 Phase 3 runs on Expo Go because it is the only free path onto the iPhone, so **the App Store
 Expo Go build — not the docs — decides this project's SDK.**
 
-This has already been learned the hard way: an upgrade to SDK 57 typechecked clean and
-passed `expo-doctor` 20/20, then failed on the device with *"Project is incompatible with
-this version of Expo Go"* and had to be fully reverted.
+The pin moved 54 → 57 on **2026-09-09**, and only because the device said so: Expo Go on the
+iPhone reported SDK 57 and Metro refused to open the 54 project against it. React Native went
+0.81.5 → 0.86.3 in the same step. `tests/expo-sdk-pin.test.ts` enforces both numbers.
+
+That is the same rule that made the *earlier* attempt at 57 wrong. It typechecked clean,
+passed `expo-doctor` 20/20, then failed on the device with *"Project is incompatible with this
+version of Expo Go"* and had to be fully reverted — because Expo Go was on 54 at the time.
+Neither the typechecker nor expo-doctor can see this constraint; it lives in the App Store.
+Read that history as evidence for the rule, not as an argument about a particular number.
 
 - Do not run `npx expo install expo@^<newer> --fix`, and do not "helpfully" bump the SDK.
 - `eas go` builds a personal Expo Go for a newer SDK, but **requires the paid Apple
@@ -60,12 +66,17 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 - **Never** use the JavaScript `Tabs` from `expo-router`, and never
   `@react-navigation/bottom-tabs`. If you are reaching for either, stop and ask.
 - The `unstable-` import path is correct and expected — Native Tabs is still alpha and the
-  API is subject to change, and it changed between SDK 54 and 55. Check the **SDK 54** docs
-  for the current shape before editing the tab layout; do not copy another SDK's API.
-- Native Tabs under Expo Go on SDK 54 is **verified** — on the iPhone 15, 2026-08-10. The
-  bar renders with the iOS 26 liquid-glass treatment and SF Symbols draw; every native view
-  it needs is already inside the Expo Go binary via `react-native-screens` 4.16.0. See the
-  answered open question in `plan.md` for the two Android caveats.
+  API is subject to change. It already changed once: `Icon` and `Label` were top-level
+  exports on SDK 54 and are compound members on 57 — `NativeTabs.Trigger.Icon` and
+  `NativeTabs.Trigger.Label`. Check the **SDK 57** docs, or read
+  `node_modules/expo-router/build/native-tabs/NativeTabs.d.ts`, before editing the tab
+  layout; do not copy another SDK's API.
+- **Native Tabs on SDK 57 is not yet verified on the device.** It was verified on SDK 54 —
+  iPhone 15, 2026-08-10, liquid-glass bar and SF Symbols drawing — but that result was
+  against `react-native-screens` 4.16.0 and the upgrade moved it to 4.26.0, so it no longer
+  carries. Re-confirm on the phone before trusting it. See the answered open question in
+  `plan.md` for the two Android caveats; SDK 57's `Icon` also accepts `md` (Material
+  Symbols), which closes the Android icon gap without needing a drawable.
 - If a design need appears to require a JS tab bar, that is a question for Sriman, not a
   decision to make in code.
 

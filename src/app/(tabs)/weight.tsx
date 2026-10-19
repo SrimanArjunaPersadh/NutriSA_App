@@ -7,9 +7,10 @@ import { currentLoggingDay, goalDirection, rateDirection, type LogDay } from "@e
 import type { TrendChangeResponse, WeightEntry, WeightSeries } from "@shared"
 
 import { Card, CardLabel } from "@/components/dashboard/Card"
-import { TAB_BAR_CLEARANCE } from "@/components/dashboard/QuickActionBar"
+
 import { ChevronRight } from "@/components/icons/UiIcons"
 import { Empty, ErrorState, Loading } from "@/components/state"
+import { PinnedBar, TAB_BAR_CLEARANCE } from "@/components/ui/PinnedBar"
 import { Dropdown, type DropdownOption } from "@/components/ui/Dropdown"
 import { DIRECTION_COLOR } from "@/components/weight/direction"
 import { chartHeight, TrendChart } from "@/components/weight/TrendChart"
@@ -162,7 +163,7 @@ export default function Weight() {
                       detail="Pick a longer range, or log today's weight."
                     />
                   ) : chartWidth > 0 ? (
-                    <TrendChart series={data} width={chartWidth} plotHeight={PLOT_HEIGHT} />
+                    <TrendChart series={data} width={chartWidth} plotHeight={PLOT_HEIGHT} scrubbable />
                   ) : null}
                 </View>
               </Card>
@@ -186,10 +187,7 @@ export default function Weight() {
         primary actions within thumb reach, and on this screen there is exactly
         one action — everything else is reading.
       */}
-      <View
-        className="absolute inset-x-0 bottom-0 px-[16px]"
-        style={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
-      >
+      <PinnedBar>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Log today's weight"
@@ -198,7 +196,7 @@ export default function Weight() {
         >
           <Text className="font-barlow-semibold text-[17px] text-white">Log weight</Text>
         </Pressable>
-      </View>
+      </PinnedBar>
     </View>
   )
 }

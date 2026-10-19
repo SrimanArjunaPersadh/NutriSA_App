@@ -8,11 +8,8 @@ import { colors } from "@/design/tokens"
 import { CaloriesCard } from "@/components/dashboard/CaloriesCard"
 import { InsightsSection } from "@/components/dashboard/InsightsSection"
 import { MacrosCard } from "@/components/dashboard/MacrosCard"
-import {
-  CONTROL_HEIGHT,
-  QuickActionBar,
-  TAB_BAR_CLEARANCE,
-} from "@/components/dashboard/QuickActionBar"
+import { CONTROL_HEIGHT, QuickActionBar } from "@/components/dashboard/QuickActionBar"
+import { TAB_BAR_CLEARANCE } from "@/components/ui/PinnedBar"
 import { StreakPill } from "@/components/dashboard/StreakPill"
 import { currentMonthLabel, WeekStrip } from "@/components/dashboard/WeekStrip"
 import { WeightTrendCard } from "@/components/dashboard/WeightTrendCard"

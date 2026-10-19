@@ -18,7 +18,7 @@ import { MacroMiniCard } from "@/components/nutrition/MacroMiniCard"
 import { MealCard } from "@/components/nutrition/MealCard"
 import { ModeTabs, type LogMode } from "@/components/nutrition/ModeTabs"
 import { Empty, ErrorState, Loading } from "@/components/state"
-import { TAB_BAR_CLEARANCE } from "@/components/dashboard/QuickActionBar"
+import { PinnedBar, TAB_BAR_CLEARANCE } from "@/components/ui/PinnedBar"
 import { ChevronDown, CloseIcon } from "@/components/icons/UiIcons"
 import { colors } from "@/design/tokens"
 import { formatDayLong, formatKcal } from "@/lib/format"
@@ -250,12 +250,9 @@ export default function Nutrition() {
         )}
       </ScrollView>
 
-      <View
-        className="absolute inset-x-0 bottom-0 px-[16px]"
-        style={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
-      >
+      <PinnedBar>
         <LogFoodsBar onLog={() => openEntry()} logLabel="Log Foods" />
-      </View>
+      </PinnedBar>
     </View>
   )
 }

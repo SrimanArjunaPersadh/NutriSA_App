@@ -12,14 +12,14 @@ import { useLocalSearchParams, useRouter } from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { currentLoggingDay, isLogDay, type LogDay } from "@engine"
-import { MAX_WEIGHT_KG, type WriteWeight } from "@shared"
+import { type WriteWeight } from "@shared"
 
 import { ChevronLeft, TrashIcon } from "@/components/icons/UiIcons"
 import { DayStepper } from "@/components/logging/DayStepper"
 import { FieldLabel } from "@/components/logging/fields"
 import { ErrorState, Loading } from "@/components/state"
 import { colors } from "@/design/tokens"
-import { formatDayWithWeekday, formatKg } from "@/lib/format"
+import { formatDayWithWeekday, formatKg, parseKg } from "@/lib/format"
 import { useDeleteWeight, useLogWeight, useWeightSeries } from "@/lib/queries"
 import { deleteErrorMessage, saveErrorMessage, WEIGHT_WORDING } from "@/lib/save-message"
 import { useKeyboardVisible } from "@/lib/use-keyboard-visible"
@@ -141,7 +141,7 @@ export default function LogWeight() {
     if (logWeight.error?.code === "conflict") pendingId.current = null
   }, [logWeight.error])
 
-  const weightKg = parseWeight(reading)
+  const weightKg = parseKg(reading)
   const canSave = weightKg !== null && !saving
 
   function save() {
@@ -255,6 +255,7 @@ export default function LogWeight() {
                 placeholderTextColor={colors.textSecondary}
                 accessibilityLabel="Weight in kilograms"
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 keyboardAppearance="dark"
                 autoFocus
                 selectTextOnFocus
@@ -329,31 +330,6 @@ export default function LogWeight() {
   )
 }
 
-/**
- * The typed characters as a weight, or null when they are not one yet.
- *
- * Deliberately **not** `toNumber` from `@/lib/meal-draft`. That one answers 0
- * for everything unusable, which is right for a macro field contributing to a
- * total and wrong here: this screen has to tell "nothing typed" from "zero
- * typed" to decide whether Save is pressable, and a 0 kg weigh-in is not a
- * thing anyone means.
- *
- * The upper bound is `MAX_WEIGHT_KG` — the width of the column, imported rather
- * than restated. Refusing here rather than letting the write make the trip is
- * only a courtesy: `writeWeightSchema` refuses it too, and is the one that
- * counts.
- *
- * Parsing, not arithmetic. It produces the number the user typed; it does not
- * derive one.
- */
-function parseWeight(text: string): number | null {
-  const trimmed = text.trim()
-  if (trimmed.length === 0) return null
-
-  const value = Number(trimmed)
-  if (!Number.isFinite(value) || value <= 0 || value > MAX_WEIGHT_KG) return null
-  return value
-}
 
 /**
  * The screen frame: a header that is always there, whatever state the body is

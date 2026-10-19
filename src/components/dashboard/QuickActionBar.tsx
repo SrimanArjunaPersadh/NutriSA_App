@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { BarcodeIcon, SearchIcon, SparkleIcon } from "@/components/icons/UiIcons"
+import { PinnedBar } from "@/components/ui/PinnedBar"
 
 /**
  * The three logging entry points, pinned above the tab bar: search a food, scan
@@ -29,30 +29,22 @@ import { BarcodeIcon, SearchIcon, SparkleIcon } from "@/components/icons/UiIcons
  * barcode icon could open search *and* the scanner. Two siblings in a row
  * container look identical and cannot do that.
  *
- * ## The one number to tune on device
+ * ## Positioning and the backdrop belong to `PinnedBar`
  *
- * `TAB_BAR_CLEARANCE` is how far this sits above the bottom of the screen, on
- * top of the home-indicator inset. It is a guess: the iOS 26 tab bar's height
- * is not something the screen is told, and whether `insets.bottom` already
- * includes it under native tabs is exactly the kind of thing that differs
- * between the simulator and the phone. If the row tucks under the tab bar or
- * floats too high, change it here — `(tabs)/index.tsx` derives its scroll
- * padding from these exports, so nothing else needs touching.
+ * This component is only the three controls. Where the row sits above the tab
+ * bar (`TAB_BAR_CLEARANCE`) and the scrim that stops the scroll content showing
+ * through behind it both live in `@/components/ui/PinnedBar`, shared with
+ * Nutrition and Weight. `(tabs)/index.tsx` derives its scroll padding from
+ * `TAB_BAR_CLEARANCE` and `CONTROL_HEIGHT`.
  */
-
-export const TAB_BAR_CLEARANCE = 62
 
 /** Height of the pill and the assistant button — they sit on one baseline. */
 export const CONTROL_HEIGHT = 52
 
 export function QuickActionBar() {
-  const insets = useSafeAreaInsets()
-
   return (
-    <View
-      className="absolute inset-x-0 bottom-0 flex-row items-center gap-[10px] px-[16px]"
-      style={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
-    >
+    <PinnedBar>
+      <View className="flex-row items-center gap-[10px]">
       <View className="h-[52px] flex-1 flex-row items-center rounded-full border border-cardBorder bg-secondary px-[16px]">
         <Pressable
           accessibilityRole="button"
@@ -92,8 +84,9 @@ export function QuickActionBar() {
         accessibilityState={{ disabled: true }}
         className="h-[52px] w-[52px] items-center justify-center rounded-full border border-cardBorder bg-secondary active:opacity-80"
       >
-        <SparkleIcon size={22} />
-      </Pressable>
-    </View>
+          <SparkleIcon size={22} />
+        </Pressable>
+      </View>
+    </PinnedBar>
   )
 }

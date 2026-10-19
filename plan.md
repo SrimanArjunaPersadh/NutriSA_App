@@ -43,8 +43,14 @@ items stay open and both need the phone: the ten-second stopwatch and the 44×44
 **468 tests green across 24 files** offline. The chart itself was already built on
 `dashboard-live-data` and moved into `src/components/weight/TrendChart.tsx` so both
 surfaces draw the same one. **Still unverified on the device, and no write route in this
-app has yet been confirmed end to end with a real Clerk token** · Phases 6–12 not started ·
-v1.1 deferred
+app has yet been confirmed end to end with a real Clerk token** ·
+**Expo SDK 54 → 57 on 2026-09-09, forced rather than chosen** — the App Store Expo Go
+binary moved to 57 and stopped opening the 54 project, which is the exact condition the pin
+always named as its release. React Native 0.81.5 → 0.86.3. One compile break in the repo
+(the Native Tabs element shape), no config changes, 468 tests still green. **This makes the
+device pass more urgent, not less: every SDK-54 device verification in this file — the tab
+bar, the fonts, the sign-in — was measured against packages that have now moved** ·
+Phases 6–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -188,10 +194,22 @@ No code. Blocks Phase 1.
       passed `expo-doctor` 20/20, then died on the device: *"Project is incompatible with
       this version of Expo Go."*
       **The lesson, which outranks the docs: App Store Expo Go supports exactly one SDK at
-      a time, and the iPhone reports SDK 54.** Newer SDKs ship on npm and in the docs long
-      before the Expo Go binary clears Apple review — SDK 57's was still in the queue.
-      `eas go` builds a personal Expo Go for a newer SDK but needs the paid Apple account,
-      i.e. Phase 12. **The device decides the SDK, not `docs.expo.dev/versions/latest`.**
+      a time, and at that date the iPhone reported SDK 54.** Newer SDKs ship on npm and in
+      the docs long before the Expo Go binary clears Apple review — SDK 57's was still in
+      the queue. `eas go` builds a personal Expo Go for a newer SDK but needs the paid Apple
+      account, i.e. Phase 12. **The device decides the SDK, not
+      `docs.expo.dev/versions/latest`.**
+- [x] **SDK 57 upgrade done and kept — 2026-09-09.** The same upgrade, thirty days later,
+      for the same reason it failed the first time: Expo Go on the iPhone now reports **SDK
+      57** and Metro refused the 54 project against it. `expo` 54.0.36 → ^57.0.0,
+      `react-native` 0.81.5 → 0.86.3, `react` 19.1.0 → 19.2.3, `typescript` 5.9 → 6.0.3,
+      every `expo-*` module to `57.x` (SDK-aligned versioning, not six API generations).
+      **One hard compile break in the whole repo** — the Native Tabs element shape, below.
+      `app.json`, `babel.config.js`, `metro.config.js` and `tailwind.config.js` needed no
+      change; `typedRoutes` and `reactCompiler` still exist in the 57 config types.
+      NativeWind stayed on v4.2.6. Typecheck clean, 468 tests green, `expo-doctor` 21/21 —
+      **and none of that is proof, because the first attempt passed all three too.** The
+      device is the proof. Research: `docs/research/expo-sdk-57-upgrade.md`
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
@@ -618,11 +636,15 @@ comes in through the front door, the same way an attacker would.
       verified on the iPhone 2026-08-12. **Not Library**, which is what this line said
       and what the design mock shows: Sriman chose the AI Assistant as the fourth tab.
       Library moved inside Nutrition rather than being dropped — see Phase 6.
-      Native Tabs via `expo-router/unstable-native-tabs`, SDK 54 API (`Icon` / `Label`
-      imported alongside `NativeTabs`, not the compound form of SDK 55+).
-      SF Symbols on iOS; **Android renders labels with no icons** because SDK 54's `Icon`
-      wants an Android drawable resource and this project has none — a config-plugin job,
-      not a blocker while iPhone is the target
+      Native Tabs via `expo-router/unstable-native-tabs`, **SDK 57 API** since 2026-09-09
+      (the compound `NativeTabs.Trigger.Icon` / `NativeTabs.Trigger.Label`, not the
+      top-level `Icon` / `Label` of SDK 54). The import path did not change and every
+      `<NativeTabs>` prop survived unrenamed.
+      SF Symbols on iOS; **Android still renders labels with no icons**, but that is now a
+      choice rather than a limit — SDK 54's `Icon` wanted an Android drawable and this
+      project has none, while SDK 57's also accepts `md` (Material Symbols) and needs no
+      drawable. A small branch, not a config-plugin job, and not a blocker while iPhone is
+      the target
 - [x] Clerk provider + secure token cache
 - [x] **Google sign-in working in Expo Go** — verified on device 2026-08-10
 - [x] **Apple sign-in working in Expo Go** — verified the same day, via Clerk browser
@@ -1012,6 +1034,62 @@ listed:
   arithmetic; it added a surface. Keep or cut is Sriman's call, and cutting it is a
   20-line deletion with nothing else depending on it.
 
+### The device pass — 2026-09-09, on the iPhone, SDK 57
+
+The first time any of Phase 5 was looked at on hardware, and the first time **any write in
+this app went out from a device**. Four things were confirmed and three defects fell out.
+
+**Confirmed:**
+
+- **`POST /weight-logs` works end to end with a real Clerk token.** 98,70 saved. Every write
+  route had been proven against real Postgres and none had ever been exercised through the
+  device's own token until now — that was the single largest unknown in the project and it
+  is closed.
+- **`DELETE /weight-logs/:id` works from the device**, confirm dialog and all.
+- **`TAB_BAR_CLEARANCE + 96` clears the native tab bar.** It was a guess carried over from
+  the Nutrition tab. The answer it settles, worth more than the number: `insets.bottom` does
+  **not** already include the iOS 26 native tab bar, so pinned controls must add their own
+  clearance. The constant now lives in `@/components/ui/PinnedBar`.
+- **`keyboardVerticalOffset={0}` is right on `log-weight`.** No band of ground colour above
+  the keys. The long note in `log-meal.tsx` stands.
+
+**Defect 1 — a weigh-in of 98.70 could not be entered.** `parseWeight` did `Number(text)`,
+which is `NaN` for `"98,70"`, so the reading never parsed and Save stayed disabled. It reads
+on the device as "it won't let me type a decimal". The cause is that `decimal-pad` draws the
+**locale's** decimal separator and this app's locale is South Africa, where that separator is
+a comma. Now `parseKg` in `src/lib/format.ts` — moved out of the screen so it could be
+tested, since nothing under `src/app/` is unit-testable by this repo's convention — and it
+accepts both separators. Fifteen cases in `tests/format.test.ts`, including the round-trip
+against `formatKg`.
+
+**This class of bug is invisible off-device**: a US-locale simulator draws a full stop and
+every offline test until now typed one. Worth remembering for any other numeric input.
+
+**Defect 2 — the pinned bars had no backdrop.** All three screens had grown the same
+absolutely-positioned wrapper by hand, and all three were transparent behind the control: the
+pill is opaque but the gutters beside it and the ~62pt band between it and the tab bar were
+not, so scroll content ran visibly underneath. On the dashboard you could watch the weight
+trend, then Insights and Analytics, slide through the gap. Now one shared
+`@/components/ui/PinnedBar` owns the positioning **and** a gradient scrim — transparent at the
+top, solid `ground` by the time it reaches the control, so text fades out under the bar
+instead of vanishing at a seam. Fixing it in three places would have left a fourth screen
+free to repeat it.
+
+**Defect 3 — the chart could not be read per-day.** Raised as "I can't cross-reference each
+day": the curve had no per-point readout, and the history list below it is no substitute
+because it shows **raw weigh-ins** while the curve shows the **smoothed trend** — different
+numbers, by design. `TrendChart` now takes `scrubbable`, and the Weight tab passes it: drag
+along the chart for a vertical rule, a highlighted point and a readout giving the date, the
+trend, and the raw reading when that day has one. Opt-in rather than always-on, because the
+dashboard's 150pt card is a summary you tap to get here and a scrub gesture there would
+compete with both the tap and the dashboard's own scrolling.
+
+The readout is transient — it leaves on release rather than latching — and every number in it
+is transcribed from a point the engine already computed. The scrub only selects *which* point.
+
+**Still not done on device:** the chart has not been checked against `trend-oracle.test.ts`
+now that the scrubber makes it possible. That is the last unticked Phase 5 box.
+
 ### Decisions made on `weight-and-trend`
 
 - **No `PATCH /weight-logs/:id`, by design.** A weigh-in is one number on one day with no
@@ -1284,7 +1362,12 @@ Only after v1.0 is in daily use.
       lives in `react-native-screens` 4.16.0, which is already inside the Expo Go
       binary, and `expo-router` 6.0.24 carries an explicit 4.16-vs-4.18 icon branch
       (`NativeTabsView.js:220`) — it was written for exactly this pairing.
-      **The tab shell does not force the $99 forward.** Two caveats for later:
+      **The tab shell does not force the $99 forward.**
+      ⚠️ **This result is void as of the 2026-09-09 SDK 57 upgrade** — it was measured
+      against `react-native-screens` 4.16.0 and `expo-router` 6.0.24, both of which moved
+      (4.26.0 and 57.0.20). The conclusion is likely to survive and the two caveats below
+      still apply, but it has to be re-confirmed on the phone before it counts again.
+      Two caveats for later:
       - `sf=` icons are iOS-only. Android needs `drawable=` or `VectorIcon`, or the
         tabs render as labels with no icons.
       - Android renders Material 3 / Jetpack Compose navigation, not liquid glass —
@@ -1339,6 +1422,9 @@ Only after v1.0 is in daily use.
       same 98.84. Low effort if the code is still around, worth nothing if it is gone.
 - [ ] **Which SDK does App Store Expo Go support?** A moving external dependency that gates
       the entire free runway. Re-check before any SDK bump; verify on the device.
+      **54 on 2026-08-10; 57 on 2026-09-09.** It moved once mid-build and forced an upgrade
+      with no warning, so this stays open by design — it is a standing re-check, not a
+      question with a final answer.
 - [ ] Client-side engine for optimistic offline totals? *(v1.1)*
 - [ ] EAS free-tier build count — Expo's docs don't state it; check expo.dev/pricing
       when you reach the paid step
