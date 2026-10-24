@@ -8,7 +8,9 @@ import {
   formatGrams,
   formatKcal,
   formatKg,
+  formatShare,
   formatSignedKg,
+  parseDecimal,
   parseKg,
   withThousands,
 } from "../src/lib/format"
@@ -185,5 +187,40 @@ describe("parseKg", () => {
 
   it("accepts MAX_WEIGHT_KG itself — the bound is inclusive", () => {
     expect(parseKg(String(MAX_WEIGHT_KG))).toBe(MAX_WEIGHT_KG)
+  })
+})
+
+describe("parseDecimal", () => {
+  it("reads the comma the SA decimal pad types", () => {
+    expect(parseDecimal("1,5")).toBe(1.5)
+  })
+
+  it("reads a full stop too", () => {
+    expect(parseDecimal("1.5")).toBe(1.5)
+  })
+
+  it("accepts zero — black coffee has no fat", () => {
+    expect(parseDecimal("0")).toBe(0)
+    expect(parseDecimal("0,0")).toBe(0)
+  })
+
+  it("treats a trailing separator mid-typing as the number so far", () => {
+    expect(parseDecimal("12,")).toBe(12)
+  })
+
+  it.each(["", "  ", ",", "-1", "1,2,3", "abc"])("refuses %j", (text) => {
+    expect(parseDecimal(text)).toBeNull()
+  })
+})
+
+describe("formatShare", () => {
+  it("prints a whole percentage", () => {
+    expect(formatShare(0.8)).toBe("80%")
+    expect(formatShare(0.1849)).toBe("18%")
+  })
+
+  it("clamps what a share cannot be", () => {
+    expect(formatShare(-0.2)).toBe("0%")
+    expect(formatShare(1.4)).toBe("100%")
   })
 })

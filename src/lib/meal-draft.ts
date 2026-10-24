@@ -1,15 +1,26 @@
 import {
   currentClockTime,
   isPortionUnit,
+  measureLabel,
   normaliseMacros,
+  perHundredFrom,
   portionLabel,
   scalePortion,
   sumMacros,
   type Macros,
+  type Measure,
   type PortionUnit,
 } from "@engine"
-import type { DayMeal, DayMealItem, WriteMeal } from "@shared"
+import {
+  commonMeasure,
+  foodDisplayName,
+  weightFromQty,
+  type DayMealItem,
+  type Food,
+  type WriteMeal,
+} from "@shared"
 
+import { parseDecimal } from "@/lib/format"
 import { uuidv7 } from "@/lib/uuid"
 
 /**
@@ -70,6 +81,13 @@ export type DraftItem = {
   /** `direct` mode: the free text as stored, and the absolute macros. */
   qty: string
   macros: MacroText
+  /**
+   * The natural unit a g or ml amount is shown and entered in — "banana",
+   * 118 g — when the food has one. `quantity` stays in grams (or ml) either
+   * way; this only changes the label ("1.5 bananas (177 g)") and lets the
+   * amount panel count in bananas. See `@shared`'s `measures.ts`.
+   */
+  measure: Measure | null
 }
 
 const ZERO_TEXT: MacroText = { kcal: "", protein: "", carbs: "", fat: "" }
@@ -82,10 +100,13 @@ const ZERO_TEXT: MacroText = { kcal: "", protein: "", carbs: "", fat: "" }
  * survive the multiplication, and print "NaN" against every macro on the screen.
  * Negative is clamped for the same reason the schema refuses it — a macro below
  * zero is not a thing.
+ *
+ * Through `parseDecimal`, not `Number()`. This used to be `Number(text)`, which
+ * reads the SA decimal pad's "1,5" as `NaN` and so as zero — the same bug the
+ * weigh-in field had on the device, on every quantity and macro in this form.
  */
 export function toNumber(text: string): number {
-  const value = Number(text)
-  return Number.isFinite(value) && value > 0 ? value : 0
+  return parseDecimal(text) ?? 0
 }
 
 function macrosFrom(text: MacroText): Macros {
@@ -108,6 +129,7 @@ export function emptyDraftItem(): DraftItem {
     per: ZERO_TEXT,
     qty: "",
     macros: ZERO_TEXT,
+    measure: null,
   }
 }
 
@@ -142,6 +164,12 @@ export function draftItemFromLogged(item: DayMealItem): DraftItem {
       per: textFrom(portion.per),
       qty: item.qty,
       macros: textFrom(item.macros),
+      // A weighed line without its unit (logged in grams before natural units
+      // existed) picks one up when the food is a common one: 76 g of sourdough
+      // reopens as slices.
+      measure:
+        portion.measure ??
+        (portion.unit === "g" || portion.unit === "ml" ? commonMeasure(item.name, portion.unit) : null),
     }
   }
 
@@ -154,7 +182,52 @@ export function draftItemFromLogged(item: DayMealItem): DraftItem {
     per: ZERO_TEXT,
     qty: item.qty,
     macros: textFrom(item.macros),
+    measure: null,
   }
+}
+
+/**
+ * A food from the logger — a search hit, a recent food, a scan — as a line.
+ *
+ * Always `portion` mode: a `Food` is per basis by contract, so it is exactly a
+ * quantity, a unit and the macros one basis-worth contains, and nothing has to
+ * be converted on the way onto the plate. `scalePortion` multiplies it, here
+ * and on save, the same as a line typed by hand.
+ *
+ * `quantity` defaults to the food's serving — the label's serving for a
+ * product, last time's amount for a recent food — which is what makes the `+`
+ * button a one-tap log.
+ *
+ * A unit this build does not know becomes a piece. The server already does
+ * this for stored rows; it is repeated here because the read contract keeps
+ * `unit` a plain string, and a line with an unknown unit cannot be scaled.
+ *
+ * The food's natural unit comes along when it has one (`food.measure`), and
+ * only for g and ml: a slice of bread, a banana.
+ */
+export function draftItemFromFood(food: Food, quantity: number = food.serving.quantity): DraftItem {
+  const unit: PortionUnit = isPortionUnit(food.unit) ? food.unit : "piece"
+  return {
+    key: uuidv7(),
+    name: foodDisplayName(food.name, food.brand),
+    mode: "portion",
+    quantity: String(quantity),
+    unit,
+    per: textFrom(food.per),
+    qty: "",
+    macros: ZERO_TEXT,
+    measure: unit === "g" || unit === "ml" ? (food.measure ?? null) : null,
+  }
+}
+
+/**
+ * What one serving of a food contains — the numbers a search row prints beside
+ * its `+`. The engine's `scalePortion`, with the same unknown-unit fallback as
+ * `draftItemFromFood`, so the row and the line it becomes always agree.
+ */
+export function foodServingMacros(food: Food): Macros {
+  const unit: PortionUnit = isPortionUnit(food.unit) ? food.unit : "piece"
+  return scalePortion(food.per, food.serving.quantity, unit)
 }
 
 /**
@@ -168,10 +241,86 @@ export function draftItemMacros(item: DraftItem): Macros {
   return scalePortion(macrosFrom(item.per), toNumber(item.quantity), item.unit)
 }
 
-/** The `qty` string that will be stored. Built by the engine in portion mode. */
+/**
+ * Whether a line has to be weighed before the amount panel can scale it.
+ *
+ * True for a `direct` line (absolute macros, no portion: the old app's history,
+ * Quick Add) and for a line in the `serving` unit. A serving was the first
+ * answer to these (2026-10-20, "1 serving" of itself), and Sriman rejected it
+ * the same day: "we don't know what one serving entails and how many grams are
+ * in one serving". Every amount the panel scales is now a real weight, or a
+ * unit the user chose themselves (slices of a food they created).
+ */
+export function needsWeight(item: DraftItem): boolean {
+  return item.mode === "direct" || item.unit === "serving"
+}
+
+/**
+ * The line in grams (or ml), once its total weight is known: same macros, now
+ * per 100 of `unit`, so the slider scales it like any weighed food. The per-100
+ * figures are the engine's `perHundredFrom`.
+ *
+ * Null for a weight that is not positive.
+ */
+export function weighedDraftItem(item: DraftItem, amount: number, unit: "g" | "ml"): DraftItem | null {
+  const per = perHundredFrom(draftItemMacros(item), amount)
+  if (!per) return null
+  // Counted in its natural unit when it has one: sourdough in slices (Sriman,
+  // 2026-10-20: "show slices instead of grams"), with the grams beside it.
+  return {
+    ...item,
+    mode: "portion",
+    unit,
+    per: textFrom(per),
+    quantity: String(amount),
+    measure: commonMeasure(item.name, unit),
+  }
+}
+
+/**
+ * The line in grams without asking, when its stored amount already is a real
+ * weight: "200g" of yoghurt at 106 kcal (`weightFromQty`). Null when the
+ * amount is not one ("0.75g" of whey at 99 kcal), and the user is asked.
+ */
+export function autoWeighedDraftItem(item: DraftItem): DraftItem | null {
+  if (!needsWeight(item)) return null
+  const text = item.mode === "direct" ? item.qty : draftItemQty(item)
+  const weight = weightFromQty(text, draftItemMacros(item).kcal)
+  return weight ? weighedDraftItem(item, weight.amount, weight.unit) : null
+}
+
+/**
+ * The `qty` string that will be stored. Built by the engine in portion mode:
+ * "1.5 bananas (177 g)" with a measure, "150 g" or "2 slices" without.
+ */
 export function draftItemQty(item: DraftItem): string {
   if (item.mode === "direct") return item.qty
+  if (item.measure) return measureLabel(toNumber(item.quantity), item.measure, item.unit)
   return portionLabel(toNumber(item.quantity), item.unit)
+}
+
+/**
+ * The amount as a person should read it. A line whose stored amount claims a
+ * weight it cannot be ("2g" of sourdough at 180 kcal) or is only "servings"
+ * says **weight not recorded** instead of repeating the old app's mistake.
+ * Everything else reads as stored.
+ */
+export function honestQty(qty: string, kcal: number, scalable: boolean): string {
+  if (scalable) return qty
+  if (weightFromQty(qty, kcal)) return qty
+  return /\d\s*(g|gr|grams?|ml|servings?)\b/i.test(qty) ? "Weight not recorded" : qty
+}
+
+/** `honestQty` for a stored line. */
+export function storedItemQty(item: DayMealItem): string {
+  const scalable = item.portion !== null && item.portion.unit !== "serving"
+  return honestQty(item.qty, item.macros.kcal, scalable)
+}
+
+/** `honestQty` for a line being edited. */
+export function draftQtyLabel(item: DraftItem): string {
+  const qty = draftItemQty(item)
+  return honestQty(qty, draftItemMacros(item).kcal, !needsWeight(item))
 }
 
 /** The meal's running total. */
@@ -211,26 +360,40 @@ export function toWriteItem(item: DraftItem): WriteMeal["items"][number] {
             quantity: toNumber(item.quantity),
             unit: item.unit,
             per: macrosFrom(item.per),
+            ...(item.measure ? { measure: item.measure } : {}),
           }
         : null,
   }
 }
 
 /**
- * A whole meal, reopened for editing.
+ * A stored line — from a saved meal — in the shape a write takes, unchanged.
  *
- * `loggedTime` becomes "" rather than staying null, because the field it fills
- * is a text input and a null there would render the string "null".
+ * For logging a saved meal as it is, without opening it in an editor. The
+ * stored macros are carried over verbatim rather than recomputed through
+ * `toWriteItem`, because they are what the user agreed to when the meal was
+ * saved — and on the 4 migrated saved meals there is no portion to recompute
+ * from at all.
+ *
+ * A portion in a unit this build does not know is dropped, not invented: the
+ * write schema only accepts known units, and the line's absolute macros are
+ * still correct without it.
  */
-export function draftFromMeal(meal: DayMeal): {
-  name: string
-  loggedTime: string
-  items: DraftItem[]
-} {
+export function writeItemFromLogged(item: DayMealItem): WriteMeal["items"][number] {
+  const portion = item.portion
   return {
-    name: meal.name,
-    loggedTime: meal.loggedTime ?? "",
-    items: meal.items.map(draftItemFromLogged),
+    name: item.name.trim(),
+    qty: item.qty,
+    macros: item.macros,
+    portion:
+      portion && isPortionUnit(portion.unit)
+        ? {
+            quantity: portion.quantity,
+            unit: portion.unit,
+            per: portion.per,
+            ...(portion.measure ? { measure: portion.measure } : {}),
+          }
+        : null,
   }
 }
 

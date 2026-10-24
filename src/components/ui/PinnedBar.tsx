@@ -46,6 +46,56 @@ import { colors, withAlpha } from "@/design/tokens"
  */
 export const TAB_BAR_CLEARANCE = 62
 
+/**
+ * The tallest bottom inset that is only the home indicator. iPhones with a home
+ * indicator report 34; anything taller has the tab bar in it as well.
+ */
+const HOME_INDICATOR_MAX = 34
+
+/**
+ * The gap between the pinned control and the top of the tab bar. 8 sat the bar
+ * on the tabs (iPhone, 2026-10-20: "way too close"); 20 gives it room.
+ */
+const ABOVE_TAB_BAR = 20
+
+/**
+ * How far above the bottom of the screen the pinned control's bottom edge sits.
+ *
+ * ## Two answers to "what is in `insets.bottom`"
+ *
+ * On SDK 54 (iPhone, 2026-09-09) the inset was only the home indicator, 34, and
+ * the control needed `TAB_BAR_CLEARANCE` on top of it to clear the tab bar. On
+ * SDK 57 expo-router wraps every native tab's content in its own
+ * `SafeAreaProvider` (`NativeTabsView.ios.js`), and UIKit's safe area for a
+ * view inside a tab bar controller **includes the tab bar**. Adding the
+ * clearance on top of that left a tab bar's worth of empty band between "Log
+ * food" and the tabs (iPhone, 2026-10-20: "it's not directly above the four
+ * tabs").
+ *
+ * So the inset decides: up to `HOME_INDICATOR_MAX` it is the home indicator and
+ * the clearance is added; above it the tab bar is already counted and the
+ * control sits `ABOVE_TAB_BAR` over it. Both land the control just above the
+ * tabs, whichever way the platform reports.
+ */
+export function usePinnedBarOffset(): number {
+  const insets = useSafeAreaInsets()
+  return insets.bottom > HOME_INDICATOR_MAX ? insets.bottom + ABOVE_TAB_BAR : insets.bottom + TAB_BAR_CLEARANCE
+}
+
+/**
+ * The bottom padding a scroll view under a `PinnedBar` needs, so its last item
+ * can be scrolled fully clear of the bar instead of resting behind it.
+ *
+ * Built from the bar's real geometry: where the bar sits (`usePinnedBarOffset`),
+ * the control's own height, and a gap. The Nutrition tab used a hand-tuned
+ * `TAB_BAR_CLEARANCE + 64` that left out the inset and came up about 20pt short,
+ * so the last meal sat behind "Search for a food" (iPhone, 2026-10-19). A number
+ * that must track the bar is derived from the bar.
+ */
+export function usePinnedBarClearance(controlHeight: number): number {
+  return usePinnedBarOffset() + controlHeight + 24
+}
+
 /** How far the fade extends above the control before it is fully opaque. */
 const FADE_HEIGHT = 72
 
@@ -57,12 +107,12 @@ const SCRIM = [
 ] as const
 
 export function PinnedBar({ children }: { children: ReactNode }) {
-  const insets = useSafeAreaInsets()
+  const offset = usePinnedBarOffset()
 
   return (
     <View
       className="absolute inset-x-0 bottom-0"
-      style={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
+      style={{ paddingBottom: offset }}
       // The scrim is decoration; it must never intercept a tap meant for the
       // content scrolling beneath it. Only the children are interactive.
       pointerEvents="box-none"

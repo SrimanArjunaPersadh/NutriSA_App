@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native"
+import { useRouter } from "expo-router"
 
 import { BarcodeIcon, SearchIcon, SparkleIcon } from "@/components/icons/UiIcons"
 import { PinnedBar } from "@/components/ui/PinnedBar"
@@ -42,6 +43,8 @@ import { PinnedBar } from "@/components/ui/PinnedBar"
 export const CONTROL_HEIGHT = 52
 
 export function QuickActionBar() {
+  const router = useRouter()
+
   return (
     <PinnedBar>
       <View className="flex-row items-center gap-[10px]">
@@ -49,17 +52,16 @@ export function QuickActionBar() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search for a food"
-          // All three controls here are unwired — see the note in InsightCard.tsx.
-          accessibilityState={{ disabled: true }}
+          // Today, always. The logger's day is the dashboard's day.
+          onPress={() => router.push("/add-food?mode=search&focus=1")}
           className="h-full flex-1 flex-row items-center active:opacity-70"
         >
           <SearchIcon size={20} />
 
           {/*
-            A Text placeholder, not a TextInput. Tapping this will push a search
-            screen rather than raise the keyboard in place, and a real input that
-            accepts characters and does nothing with them is a worse lie than a
-            button that looks like a field.
+            A Text placeholder, not a TextInput. Tapping this pushes the food
+            logger, which owns the real search field — a dashboard has nowhere
+            to show the results.
           */}
           <Text className="ml-[10px] flex-1 font-barlow text-[16px] text-textSecondary">
             Search for a food
@@ -69,7 +71,7 @@ export function QuickActionBar() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Scan a barcode"
-          accessibilityState={{ disabled: true }}
+          onPress={() => router.push("/add-food?mode=scan")}
           // 22pt of ink, slopped out to the 44×44 minimum.
           hitSlop={{ top: 11, bottom: 11, left: 11, right: 11 }}
           className="active:opacity-70"
@@ -81,6 +83,7 @@ export function QuickActionBar() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ask the AI assistant"
+        // Still unwired: the assistant is Phase 9. See the note in InsightCard.tsx.
         accessibilityState={{ disabled: true }}
         className="h-[52px] w-[52px] items-center justify-center rounded-full border border-cardBorder bg-secondary active:opacity-80"
       >

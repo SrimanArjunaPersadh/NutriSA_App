@@ -39,6 +39,16 @@ export const WEIGHT_WORDING: SaveWording = {
   check: "Check the number.",
 }
 
+export const FOOD_WORDING: SaveWording = {
+  thing: "food",
+  check: "Check the numbers.",
+}
+
+export const SAVED_MEAL_WORDING: SaveWording = {
+  thing: "saved meal",
+  check: "Check the numbers.",
+}
+
 /** The one message for anything this cannot name. Never blames the user. */
 const UNKNOWN = "Couldn't save that. This is a problem on our side, not yours."
 

@@ -76,6 +76,15 @@ export function formatGrams(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
 }
 
+/**
+ * A share, 0 to 1, as a whole percentage — "80%". The share itself is the
+ * engine's (`macroEnergyShares`); this only decides how it is printed, the same
+ * way `formatKcal` rounds a figure the engine already rounded.
+ */
+export function formatShare(share: number): string {
+  return `${Math.round(Math.min(1, Math.max(0, share)) * 100)}%`
+}
+
 /** Bodyweight: always one decimal, so a column of them lines up. */
 export function formatKg(value: number): string {
   return value.toFixed(1)
@@ -126,6 +135,27 @@ export function parseKg(text: string): number | null {
   const value = Number(normalised)
   if (!Number.isFinite(value) || value <= 0 || value > MAX_WEIGHT_KG) return null
   return value
+}
+
+/**
+ * A decimal typed on the decimal pad — a quantity or a macro — back to a number.
+ *
+ * Same comma rule as `parseKg`, for the same reason: the SA decimal pad offers
+ * "," and `Number("1,5")` is `NaN`. The meal form fed its quantity and macro
+ * fields straight to `Number()`, so on the iPhone "1,5 slices" became zero
+ * slices with no error anywhere. Found by reading after `parseKg`'s fix
+ * (2026-10-19) — the weigh-in field was not the only one on that keyboard.
+ *
+ * `null` for anything that is not a finite, non-negative number. Zero is a
+ * real answer here — black coffee has zero fat — so unlike `parseKg` it is
+ * accepted.
+ */
+export function parseDecimal(text: string): number | null {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return null
+
+  const value = Number(trimmed.replace(",", "."))
+  return Number.isFinite(value) && value >= 0 ? value : null
 }
 
 export function formatSignedKg(value: number): string {

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { PORTION_UNITS } from "@engine"
 
 import { logDaySchema, macrosSchema } from "./common"
+import { measureSchema } from "./measures"
 
 /**
  * The write contracts: what the app may send, and what it gets back.
@@ -48,7 +49,7 @@ import { logDaySchema, macrosSchema } from "./common"
 /** `numeric(9,2)` — the kcal columns on `meal_logs` and `targets`. */
 const MAX_KCAL = 9_999_999.99
 /** `numeric(8,2)` — every gram column. */
-const MAX_GRAMS = 999_999.99
+export const MAX_GRAMS = 999_999.99
 /**
  * `numeric(5,2)` — `weight_logs.weight`.
  *
@@ -64,10 +65,10 @@ export const MAX_WEIGHT_KG = 999.99
  * standing between the app and a meal named by a megabyte of pasted rubbish.
  * Generous on purpose — long enough that no honest entry ever meets them.
  */
-const MAX_NAME_CHARS = 200
+export const MAX_NAME_CHARS = 200
 const MAX_QTY_CHARS = 60
 /** Long enough for a big shopping-list meal; short enough to bound the jsonb. */
-const MAX_ITEMS = 100
+export const MAX_ITEMS = 100
 
 /**
  * The idempotency key for every write.
@@ -110,6 +111,12 @@ export const writePortionSchema = z.object({
   quantity: z.number().min(0).max(MAX_GRAMS),
   unit: z.enum(PORTION_UNITS),
   per: writeMacrosSchema,
+  /**
+   * The natural unit the amount was entered in ("banana", 118 g), when it was.
+   * Display only: `quantity` stays in the portion's own unit and the macros
+   * scale from it as before. See `@shared`'s `measures.ts`.
+   */
+  measure: measureSchema.nullish(),
 })
 
 /**

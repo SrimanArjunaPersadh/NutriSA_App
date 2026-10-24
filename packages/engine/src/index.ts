@@ -59,13 +59,30 @@ export {
 } from "./energy"
 
 export {
+  fractionOfQuantity,
   isPortionUnit,
   portionLabel,
+  portionRange,
+  quantityAtFraction,
   scalePortion,
+  servingPresets,
+  stepQuantity,
+  amountForMeasure,
+  gramsPerMeasure,
+  measureCount,
+  measureLabel,
+  pluralNoun,
+  perHundredFrom,
+  isPlausibleWeight,
   PORTION_BASIS,
   PORTION_UNITS,
+  type PortionRange,
   type PortionUnit,
+  type ServingPreset,
+  type Measure,
 } from "./portions"
+
+export { kcalFromKj, KJ_PER_KCAL, MEAL_SLOTS, mealNameFor, slotOfMeal, type MealSlot } from "./foods"
 
 export {
   averageDailyIntake,

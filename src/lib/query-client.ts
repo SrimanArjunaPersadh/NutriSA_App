@@ -1,5 +1,7 @@
 import { QueryClient } from "@tanstack/react-query"
 
+import { clearPlate } from "@/lib/plate"
+
 /**
  * The one React Query client, and the defaults every query inherits.
  *
@@ -44,4 +46,8 @@ export const queryClient = new QueryClient({
  */
 export function clearQueryCache(): void {
   queryClient.clear()
+  // The food logger's plate is not a cached response, but it is the same
+  // kind of thing — health data held in memory for whoever is signed in — and
+  // it must leave with them. See `@/lib/plate`.
+  clearPlate()
 }

@@ -2,6 +2,8 @@ import { z } from "zod"
 
 import type { Macros } from "@engine"
 
+import { measureSchema } from "./measures"
+
 /**
  * The `items` jsonb shape, and the one place it is translated into the engine's
  * macro shape.
@@ -53,6 +55,13 @@ export const mealPortionSchema = z.object({
     carb: z.number(),
     fat: z.number(),
   }),
+  /**
+   * The natural unit the amount was entered in ("banana", 118 g), when it was.
+   * Display only: `quantity` stays in the portion's own unit and the macros
+   * scale from it as before. See `@shared`'s `measures.ts`.
+   */
+  // `.catch`: a malformed measure drops the measure, never the whole line.
+  measure: measureSchema.optional().catch(undefined),
 })
 
 export type MealPortion = z.infer<typeof mealPortionSchema>

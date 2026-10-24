@@ -165,7 +165,7 @@ export default function StreakOverlay() {
           onPress={() => router.back()}
           className="mt-[40px] h-[54px] w-full items-center justify-center rounded-full bg-primary px-[48px] active:opacity-80"
         >
-          <Text className="font-barlow-semibold text-[18px] text-white">Let&apos;s go</Text>
+          <Text className="font-barlow-semibold text-[18px] text-ground">Let&apos;s go</Text>
         </Pressable>
       </Animated.View>
     </View>

@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { logDaySchema, macrosSchema } from "./common"
+import { measureSchema } from "./measures"
 import { mealItemSchema } from "./meal-items"
 
 /**
@@ -47,6 +48,8 @@ export const dayMealItemSchema = z.object({
       quantity: z.number(),
       unit: z.string(),
       per: macrosSchema,
+      /** "banana", 118 g — the unit the amount was entered in, if any. */
+      measure: measureSchema.nullish(),
     })
     .nullable(),
 })

@@ -11,7 +11,8 @@ import {
 } from "@shared"
 
 import type { UserScope } from "../auth/user-scope"
-import { mealLogs, type MealItem } from "../db/schema"
+import { mealLogs } from "../db/schema"
+import { storedItemFromWrite } from "../food/rows"
 import {
   deleteOwned,
   insertOwned,
@@ -38,37 +39,6 @@ import {
  * entered on Friday" at the same time, and both are true.
  */
 
-/**
- * One line of the request, in the shape the jsonb column holds.
- *
- * The macro vocabularies differ on either side of this function — the engine
- * and the wire say `protein`/`carbs`, the column says `pro`/`carb` — and
- * `fromMacros` is the only place that translation is allowed to happen. It runs
- * twice per item here: once for the line's own totals, once for the per-unit
- * figures inside `portion`, which are macros like any others.
- *
- * `portion` is dropped when absent rather than written as `null`. A key that is
- * not in the object reads back as `undefined` through `mealPortionSchema
- * .optional()`, which is the same state the 38 migrated rows are already in —
- * so old rows and new portionless ones are one case downstream instead of two.
- */
-function toStoredItem(item: WriteMeal["items"][number]): MealItem {
-  return {
-    name: item.name,
-    qty: item.qty,
-    ...fromMacros(item.macros),
-    ...(item.portion
-      ? {
-          portion: {
-            quantity: item.portion.quantity,
-            unit: item.portion.unit,
-            per: fromMacros(item.portion.per),
-          },
-        }
-      : {}),
-  }
-}
-
 export async function writeMealLog(
   scope: UserScope,
   day: LogDay,
@@ -76,7 +46,7 @@ export async function writeMealLog(
 ): Promise<WriteOutcome<MealWriteResult>> {
   const sortOrder = input.sortOrder ?? (await appendPosition(scope, day))
 
-  const items = input.items.map(toStoredItem)
+  const items = input.items.map(storedItemFromWrite)
 
   const inserted = await insertOwned(scope, mealLogs, {
     id: input.id,
@@ -211,7 +181,7 @@ export async function patchMealLog(
       ...(movedTo ? { date: movedTo } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.macros !== undefined ? fromMacros(patch.macros) : {}),
-      ...(patch.items !== undefined ? { items: patch.items.map(toStoredItem) } : {}),
+      ...(patch.items !== undefined ? { items: patch.items.map(storedItemFromWrite) } : {}),
       // `null` clears the time and `undefined` leaves it: the two are different
       // requests, so the key is written only when the field was actually sent.
       ...(patch.loggedTime !== undefined ? { loggedTime: patch.loggedTime } : {}),

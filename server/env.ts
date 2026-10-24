@@ -30,4 +30,8 @@ export const env = {
   /** Tags events so a local run is never mistaken for the real thing. */
   SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT ?? "development",
   PORT: Number(process.env.PORT ?? 3000),
+  // Open Food Facts asks every client to identify itself as
+  // "AppName/Version (contact)". Optional, so a missing value never stops the
+  // server — but set it, with a real contact, before this sees real traffic.
+  OFF_USER_AGENT: process.env.OFF_USER_AGENT ?? "NutriSA/0.1 (personal project)",
 };

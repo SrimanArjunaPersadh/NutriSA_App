@@ -194,7 +194,7 @@ export default function Weight() {
           onPress={() => openEntry()}
           className="h-[52px] items-center justify-center rounded-full bg-primary active:opacity-80"
         >
-          <Text className="font-barlow-semibold text-[17px] text-white">Log weight</Text>
+          <Text className="font-barlow-semibold text-[17px] text-ground">Log weight</Text>
         </Pressable>
       </PinnedBar>
     </View>

@@ -1,64 +1,58 @@
 import { Pressable, Text, View } from "react-native"
 
-import { SearchIcon } from "@/components/icons/UiIcons"
+import { BarcodeIcon, SearchIcon } from "@/components/icons/UiIcons"
+import { colors } from "@/design/tokens"
 
 /**
- * The bottom bar — `src/design/nutrition_ui.png`: a search pill that fills the
- * width, and a white "Log Foods" button beside it.
+ * The Nutrition tab's bottom bar: one "Log food" pill, with the scanner at its
+ * right end.
  *
- * ## The white button
+ * ## One way in
  *
- * It is the only white surface in the app, and in the reference it is doing
- * exactly what plan.md's "colour is semantic" rule wants: this is *the* action
- * on the screen, and nothing else competes with it. `primary` blue is used for
- * the dashboard's actions, so white here reads as a step up rather than as a
- * second blue thing.
+ * It used to be two controls, a "Search for a food" pill and a white "Log
+ * Foods" button, from `src/design/nutrition_ui.png`. Once the food logger
+ * existed both opened the same screen, and on the iPhone (2026-10-19) the pair
+ * read as a crowded bar fighting the Meals list for attention. One pill does
+ * the job of both: it opens the logger with the keyboard up. The barcode at its
+ * end goes straight to the scanner, the one other way in that skips typing.
  *
- * Text on it is `ground`, not black — the app has no pure black, and a genuinely
- * black label against a pure white pill is harsher than anything else in the
- * palette.
+ * The meal cards above each have their own `+`, which opens the logger already
+ * on that meal (`MealSlotCard`). This bar is for "I'm eating something now",
+ * and the logger guesses the meal from the clock, visibly, in its title.
  *
  * ## The search field is a Text, not a TextInput
  *
- * Same call as `QuickActionBar` and for the same reason: tapping it will push a
- * search screen rather than raise the keyboard in place, and an input that
- * accepts characters and does nothing with them is a worse lie than a button
- * that looks like a field. Food search is Phase 6.
+ * Same call as `QuickActionBar` and for the same reason: tapping it pushes the
+ * food logger (`src/app/add-food.tsx`), which owns the real search field, rather
+ * than raising the keyboard in place over a day view that has nothing to show
+ * the results in.
  */
 
-export function LogFoodsBar({
-  onSearch,
-  onLog,
-  logLabel = "Log Foods",
-}: {
-  /** Undefined until food search exists — the field then reads as disabled. */
-  onSearch?: (() => void) | undefined
-  onLog: () => void
-  logLabel?: string
-}) {
+/** The bar's height. Exported so a screen can clear it; see `usePinnedBarClearance`. */
+export const LOG_FOODS_BAR_HEIGHT = 50
+
+export function LogFoodsBar({ onSearch, onScan }: { onSearch: () => void; onScan: () => void }) {
   return (
-    <View className="flex-row items-center gap-[10px]">
+    <View className="h-[50px] flex-row items-center rounded-full border border-buttonBorder bg-secondary">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Search for a food"
-        accessibilityState={{ disabled: !onSearch }}
-        disabled={!onSearch}
+        accessibilityLabel="Log food: search for a food"
         onPress={onSearch}
-        className="h-[48px] flex-1 flex-row items-center rounded-full border border-cardBorder bg-secondary px-[16px] active:opacity-70"
+        className="h-full flex-1 flex-row items-center pl-[18px] active:opacity-70"
       >
         <SearchIcon size={18} />
-        <Text className="ml-[10px] flex-1 font-barlow text-[15px] text-textSecondary">
-          Search for a food
-        </Text>
+        <Text className="ml-[10px] flex-1 font-barlow text-[16px] text-textSecondary">Log food</Text>
       </Pressable>
+
+      <View className="h-[24px] w-[1px] bg-buttonBorder" />
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={logLabel}
-        onPress={onLog}
-        className="h-[48px] items-center justify-center rounded-full bg-white px-[22px] active:opacity-80"
+        accessibilityLabel="Scan a barcode"
+        onPress={onScan}
+        className="h-full w-[56px] items-center justify-center rounded-r-full active:opacity-70"
       >
-        <Text className="font-barlow-semibold text-[15px] text-ground">{logLabel}</Text>
+        <BarcodeIcon size={22} color={colors.white} />
       </Pressable>
     </View>
   )

@@ -34,9 +34,31 @@ rate limit the reads do not carry.
 | Route | Does | Answers |
 |---|---|---|
 | `POST /api/meal-logs` | Logs a meal | `201` written · `200` this id was already written |
+| `PATCH /api/meal-logs/:id` | Changes a logged meal: name, time, day, or its lines and header together | `200` · `404` not this user's |
 | `DELETE /api/meal-logs/:id` | Removes one | `200` always, with `deleted` |
+| `DELETE /api/weight-logs/:id` | Removes a weigh-in | `200` always, with `deleted` |
 | `POST /api/weight-logs` | Records a weigh-in | `201` new day · `200` that day's was replaced |
 | `POST /api/targets` | Sets targets from a day | `201` new day · `200` that day's were replaced |
+
+**Foods and saved meals** (branch `food-logger`) — `routes/foods.ts`, mounted
+before the writes router so its reads are not metered by the write limit. The
+writes in it carry the same rate limit and the same client-minted id contract.
+
+| Route | Does |
+|---|---|
+| `GET /api/foods/search?q=` | Your logged foods first (up to 5), then the `foods` table, then Open Food Facts (SA products) |
+| `GET /api/foods/search/local?q=` | The same without Open Food Facts: the fast half the logger draws first |
+| `GET /api/foods/recent?slot=` | Recently logged foods with last time's amount; with `slot`, the foods usual at that meal first |
+| `GET /api/foods/barcode/:code` | Local `foods` row first, else Open Food Facts, cached as a global row |
+| `POST /api/foods` | A food of the user's own (`source='manual'`) |
+| `GET /api/saved-meals` | The saved meal library (`custom_meals`) |
+| `POST /api/saved-meals` | Saves a meal |
+| `PATCH /api/saved-meals/:id` | Renames or re-categorises it, or rewrites its lines and header together |
+| `DELETE /api/saved-meals/:id` | Removes it; meals logged from it stay logged |
+
+Open Food Facts sees the search text and barcodes, the server's IP and
+`OFF_USER_AGENT`; never a user id, token or the phone's IP (the phone does load
+OFF's product photos directly). `food/off.ts` never logs the query text.
 
 **Every write carries a client-minted UUIDv7, and that is the only thing making
 these routes safe to retry.** A logged meal has no natural key — same food, same
@@ -100,10 +122,15 @@ on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
 | `data/weight.ts` | Assembles `GET /weight-logs`, and records a weigh-in |
 | `data/meals.ts` | Writes and deletes a logged meal |
 | `data/targets.ts` | Reads and sets the effective-dated macro targets |
+| `data/foods.ts` | Food search (local half and full), recents by meal, barcode lookup, creating a food |
+| `data/saved-meals.ts` | Lists, creates, patches and deletes saved meals |
+| `food/rows.ts` | Pure mappings: `foods` rows and Open Food Facts products to `Food`, logged lines to recents |
+| `food/off.ts` | The Open Food Facts client: timeouts, a per-minute budget, a 10-minute search cache |
+| `routes/foods.ts` | The food and saved-meal routes |
 | `db/errors.ts` | Tells a unique violation (409) from a real failure (500) |
 | `http/limits.ts` | Per-user write cap; counts unauthenticated volume without storing an IP |
 | `routes/reads.ts` | The three read routes, behind `requireUser` |
-| `routes/writes.ts` | The four write routes, behind `requireUser` + the rate limit |
+| `routes/writes.ts` | The meal, weight and target writes, behind `requireUser` + the rate limit |
 | `observability/sentry.ts` | Sentry init, `sendDefaultPii: false`, scrubbing |
 | `db/schema.ts` | All 11 tables, keyed by Clerk id |
 | `db/index.ts` | Drizzle client over the Neon HTTP driver |

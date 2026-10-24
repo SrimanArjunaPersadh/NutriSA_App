@@ -59,3 +59,9 @@ example
 /android
 
 .scratch/
+
+# Other apps' App Store screenshots and store copy: private design reference, never
+# committed. The notes, README and prototype in research designs/ are ours and are kept.
+research designs/*/app-store/
+research designs/*/contact-sheet.jpg
+research designs/app-store-meta.json

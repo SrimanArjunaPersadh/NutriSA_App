@@ -6,6 +6,7 @@ import { View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Sentry from "@sentry/react-native";
 import { ClerkProvider } from "@clerk/expo";
@@ -21,11 +22,15 @@ import {
 import { BarlowCondensed_800ExtraBold_Italic } from "@expo-google-fonts/barlow-condensed";
 
 import { colors } from "@/design/tokens";
+import { scrubBreadcrumb } from "@/lib/sentry-scrub";
 import { queryClient } from "@/lib/query-client";
 
 Sentry.init({
   dsn: "https://bdb95a636040e72d8b779057d72a2549@o4511882881007616.ingest.us.sentry.io/4511883769085952",
   sendDefaultPii: false,
+  // Search text and barcodes out of breadcrumb URLs; console breadcrumbs out.
+  // See `@/lib/sentry-scrub`.
+  beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
 });
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
@@ -59,6 +64,11 @@ function RootLayout() {
     // QueryClientProvider sits inside ClerkProvider, not outside it: every query
     // reads the Clerk user id for its cache key and calls getToken() to
     // authenticate, so the auth context has to exist above them.
+    //
+    // GestureHandlerRootView is the outermost view so react-native-gesture-handler
+    // gestures work anywhere below it: the swipe-to-delete rows (`SwipeActions`)
+    // need it, and nothing renders a gesture outside it.
+    <GestureHandlerRootView className="flex-1">
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
@@ -73,6 +83,18 @@ function RootLayout() {
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: colors.ground },
+              /*
+                Back is a swipe from the left **edge**, not from anywhere.
+
+                On iOS 26, react-native-screens turns on the native
+                full-screen back gesture by default, so any rightward drag on
+                any pushed screen starts a pop. The food detail sheet's amount
+                slider is dragged rightwards, and on the iPhone (2026-10-19)
+                moving it took the user back a screen instead. The horizontal
+                card strips in the logger have the same problem. The edge swipe
+                every iPhone user expects still works.
+              */
+              fullScreenGestureEnabled: false,
             }}
           >
             {/*
@@ -103,6 +125,7 @@ function RootLayout() {
         </SafeAreaProvider>
       </QueryClientProvider>
     </ClerkProvider>
+    </GestureHandlerRootView>
   );
 }
 

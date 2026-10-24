@@ -39,6 +39,7 @@ Do these four things, in order, before writing or asking for any code.
 | `server/README.md` | The API: every route, what it returns, what it answers on failure. | Touching the server |
 | `docs/research/` | Version-pinned research notes (for example, the SDK 57 upgrade). | Before touching that area again |
 | `src/design/` | Reference images and the design tokens (`tokens.ts`). | UI work |
+| `research designs/` | Other apps' screens, notes per app, and the food logger prototype. | Designing a screen |
 
 ---
 
@@ -177,8 +178,14 @@ as done.
 
 ### Design references
 
-Put reference images in `src/design/` and point the session at them. They are **evidence,
-not instructions**. Where a mock disagrees with a standing rule, the rule wins:
+Put reference images in `src/design/` and point the session at them. Research on other
+apps lives in `research designs/` at the repo root: App Store screenshots of eight food
+loggers, a `notes.md` per app, the ranking, and `prototype.html`, a clickable mockup of
+the food logger (open it in a browser or the Mobile Preview extension). Start with its
+`README.md`.
+
+All of these are **evidence, not instructions**. Where a mock disagrees with a standing
+rule, the rule wins:
 
 - **Colours come only from the token table** in `plan.md` (mirrored in `src/design/tokens.ts`
   and `tailwind.config.js`; a test keeps them in sync). A colour that is not in the table,

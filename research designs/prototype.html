@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Food Logger Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* NutriSA's locked tokens (src/design/tokens.ts). Dark only, like the app. */
+  :root {
+    --ground: #0D0F14; --card: #13161E; --secondary: #1A1E29;
+    --primary: #0066FF; --link: #1A7CFC; --ok: #22C55E; --danger: #FF3B30; --amber: #F59E0B;
+    --protein: #A78BFA; --carbs: #FCD34D; --fats: #2DD4BF;
+    --white: #FFFFFF; --text2: #8A8F98; --muted: #6E7686;
+    --hairline: #1E222B; --cardBorder: #20242D; --buttonBorder: #2A2F3B; --ringTrack: #252A35;
+    --display: "Barlow Condensed", system-ui, sans-serif;
+    --body: "Barlow", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--ground); color: var(--white); font-family: var(--body); overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; color: inherit; background: none; border: 0; outline: none; }
+  .app { position: relative; height: 100dvh; max-width: 430px; margin: 0 auto; overflow: hidden; }
+
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; background: var(--ground); }
+  .screen.on { display: flex; }
+  .status { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-weight: 600; font-size: 15px; }
+  .status i { font-style: normal; font-size: 12px; letter-spacing: 1px; }
+  .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  .display { font-family: var(--display); font-style: italic; font-weight: 800; letter-spacing: .2px; }
+  .t2 { color: var(--text2); }
+  .label { font-size: 12px; font-weight: 500; letter-spacing: .6px; text-transform: uppercase; color: var(--text2); }
+  .card { background: var(--card); border: 1px solid var(--cardBorder); border-radius: 18px; }
+  .press:active { opacity: .7; }
+  .icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 22px; flex: none; }
+  svg { display: block; }
+
+  /* Why? chip, every screen */
+  .why { position: absolute; right: 12px; top: 50px; z-index: 30; height: 30px; padding: 0 12px; border-radius: 15px;
+         background: rgba(0,102,255,.18); border: 1px solid rgba(26,124,252,.5); color: var(--link); font-size: 13px; font-weight: 600; }
+
+  /* ── Research board ─────────────────────────────── */
+  .board { padding: 8px 16px 40px; }
+  .board h1 { font-size: 40px; line-height: 40px; margin: 10px 0 6px; }
+  .finding { padding: 14px 16px; margin-top: 10px; }
+  .finding .src { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+                  color: var(--link); background: rgba(0,102,255,.14); padding: 3px 8px; border-radius: 6px; margin-bottom: 8px; }
+  .finding h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .finding p { font-size: 14px; line-height: 20px; color: var(--text2); }
+  .cta { width: 100%; height: 54px; border-radius: 27px; background: var(--white); color: var(--ground); font-weight: 600; font-size: 16px; margin-top: 20px; }
+  .flsi { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .flsi td, .flsi th { padding: 7px 4px; border-bottom: 1px solid var(--hairline); text-align: right; }
+  .flsi td:first-child, .flsi th:first-child { text-align: left; }
+  .flsi th { color: var(--text2); font-weight: 500; }
+  .flsi tr.us td { color: var(--white); font-weight: 600; }
+
+  /* ── Day (Nutrition tab) ────────────────────────── */
+  .dayhead { padding: 6px 16px 0; display: flex; align-items: baseline; justify-content: space-between; }
+  .dayhead h1 { font-size: 34px; }
+  .left { margin: 14px 16px 0; padding: 18px; }
+  .left .big { font-size: 56px; line-height: 52px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--ringTrack); overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 3px; }
+  .macros3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+  .macros3 .n { font-size: 13px; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .meal { margin: 12px 16px 0; padding: 4px 0 4px 16px; }
+  .mealhead { display: flex; align-items: center; min-height: 52px; padding-right: 4px; }
+  .mealhead .name { font-size: 17px; font-weight: 600; flex: 1; }
+  .mealhead .kc { font-size: 14px; color: var(--text2); margin-right: 4px; }
+  .addbtn { width: 44px; height: 44px; display: grid; place-items: center; }
+  .addbtn span { width: 32px; height: 32px; border-radius: 10px; background: rgba(0,102,255,.2); display: grid; place-items: center; }
+  .line { display: flex; align-items: center; padding: 10px 16px 10px 0; border-top: 1px solid var(--hairline); }
+  .line .nm { font-size: 15px; font-weight: 500; }
+  .line .sv { font-size: 13px; color: var(--text2); }
+  .empty { padding: 0 16px 14px 0; font-size: 14px; color: var(--muted); }
+  .pinned { flex: none; padding: 10px 16px 8px; background: linear-gradient(to top, var(--ground) 70%, rgba(13,15,20,0)); }
+  .pill { height: 50px; border-radius: 25px; background: var(--secondary); border: 1px solid var(--buttonBorder);
+          display: flex; align-items: center; padding: 0 6px 0 16px; width: 100%; }
+  .pill .ph { flex: 1; text-align: left; color: var(--text2); font-size: 16px; margin-left: 10px; }
+  .vdiv { width: 1px; height: 24px; background: var(--buttonBorder); }
+  .tabbar { flex: none; height: 82px; border-top: 1px solid var(--hairline); display: grid; grid-template-columns: repeat(4,1fr); padding-top: 8px; background: rgba(13,15,20,.96); }
+  .tabbar div { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: var(--muted); }
+  .tabbar div.on { color: var(--primary); }
+
+  /* ── Logger ─────────────────────────────────────── */
+  .lhead { flex: none; height: 52px; display: flex; align-items: center; padding: 0 6px; }
+  .slotbtn { flex: 1; display: flex; justify-content: center; }
+  .slotbtn button { height: 40px; padding: 0 14px; border-radius: 20px; display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 600; }
+  .slotbtn button:active { background: var(--secondary); }
+  .search { flex: none; padding: 4px 16px 12px; }
+  .modes { flex: none; display: flex; gap: 8px; padding: 0 16px 12px; border-bottom: 1px solid var(--hairline); }
+  .mode { height: 36px; flex: 1; border-radius: 18px; background: var(--secondary); border: 1px solid var(--buttonBorder);
+          display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 500; }
+  .sect { display: flex; align-items: baseline; justify-content: space-between; padding: 20px 16px 8px; }
+  .sect h2 { font-size: 17px; font-weight: 600; }
+  .row { display: flex; align-items: center; padding: 10px 6px 10px 16px; min-height: 64px; }
+  .row + .row { border-top: 1px solid var(--hairline); }
+  .thumb { width: 42px; height: 42px; border-radius: 12px; background: var(--secondary); display: grid; place-items: center; font-size: 22px; flex: none; margin-right: 12px; }
+  .row .body { flex: 1; min-width: 0; }
+  .row .nm { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .sv { font-size: 13px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .kc { text-align: right; margin-left: 8px; flex: none; }
+  .row .kc b { font-size: 15px; font-weight: 600; }
+  .mc { font-size: 12px; white-space: nowrap; }
+  .mc .p { color: var(--protein); } .mc .c { color: var(--carbs); } .mc .f { color: var(--fats); }
+  .mine { background: rgba(0,102,255,.07); }
+  .badge { font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--link); margin-left: 6px; }
+  .strip { display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px; }
+  .strip::-webkit-scrollbar { display: none; }
+  .tile { flex: none; width: 168px; padding: 12px; }
+  .tile .nm { font-size: 15px; font-weight: 600; }
+  .tile .sv { font-size: 12px; color: var(--text2); margin: 2px 0 10px; line-height: 16px; }
+  .tile .foot { display: flex; align-items: flex-end; justify-content: space-between; }
+  .linkrow { display: flex; align-items: center; height: 52px; padding: 0 16px; gap: 12px; font-size: 15px; font-weight: 500; }
+  .linkrow + .linkrow { border-top: 1px solid var(--hairline); }
+
+  .platebar { flex: none; padding: 8px 12px 30px; }
+  .platecard { height: 64px; border-radius: 18px; background: var(--card); border: 1px solid var(--buttonBorder); display: flex; align-items: center; padding: 0 8px 0 16px; }
+  .platecard .info { flex: 1; text-align: left; }
+  .logpill { height: 48px; padding: 0 24px; border-radius: 24px; background: var(--white); color: var(--ground); font-weight: 600; font-size: 16px; }
+
+  .toast { position: absolute; left: 12px; right: 12px; top: 98px; z-index: 25; padding: 12px 6px 12px 14px; display: flex; align-items: center; gap: 10px;
+           border-radius: 14px; background: #1F2533; border: 1px solid var(--buttonBorder); box-shadow: 0 10px 30px rgba(0,0,0,.5);
+           transform: translateY(-12px); opacity: 0; pointer-events: none; transition: all .22s ease; font-size: 14px; }
+  .toast.on { transform: none; opacity: 1; pointer-events: auto; }
+  .toast .undo { color: var(--link); font-weight: 600; padding: 6px 10px; }
+
+  /* ── Sheets ─────────────────────────────────────── */
+  .scrim { position: absolute; inset: 0; z-index: 40; background: rgba(13,15,20,.75); display: none; }
+  .scrim.on { display: block; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--card); border: 1px solid var(--cardBorder); border-bottom: 0;
+           border-radius: 22px 22px 0 0; padding: 8px 16px 34px; max-height: 92%; overflow-y: auto; transform: translateY(105%); transition: transform .26s cubic-bezier(.2,.8,.2,1); }
+  .sheet.on { transform: none; }
+  .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--buttonBorder); margin: 0 auto 10px; }
+  .hero { height: 120px; margin: 0 -16px 14px; background: var(--secondary); display: grid; place-items: center; font-size: 64px; }
+  .kcbadge { width: 64px; height: 64px; border-radius: 32px; border: 2px solid var(--primary); display: grid; place-items: center; text-align: center; flex: none; }
+  .kcbadge b { font-size: 20px; line-height: 20px; display: block; }
+  .kcbadge small { font-size: 11px; color: var(--text2); }
+  .stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 14px 0 8px; }
+  .legend { display: grid; grid-template-columns: repeat(3,1fr); font-size: 13px; }
+  .legend b { display: block; font-size: 17px; }
+  .amount { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+  .amount .box { flex: 1; height: 56px; border-radius: 14px; background: var(--secondary); border: 1px solid var(--buttonBorder); display: flex; align-items: center; padding: 0 14px; }
+  .amount .box input { flex: 1; font-size: 26px; font-weight: 600; width: 60px; }
+  .step { width: 56px; height: 56px; border-radius: 14px; background: var(--secondary); border: 1px solid var(--buttonBorder); font-size: 24px; }
+  .chips { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .chip { height: 36px; padding: 0 14px; border-radius: 18px; background: var(--secondary); border: 1px solid var(--buttonBorder); font-size: 14px; font-weight: 500; }
+  .chip.on { background: var(--white); color: var(--ground); border-color: var(--white); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; background: transparent; margin-top: 6px; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--ringTrack); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; border-radius: 13px; background: var(--white); margin-top: -10px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .effect { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--secondary); font-size: 14px; display: flex; justify-content: space-between; }
+  .primary { width: 100%; height: 54px; border-radius: 27px; background: var(--white); color: var(--ground); font-weight: 600; font-size: 16px; margin-top: 18px; }
+  .primary:disabled { background: var(--secondary); color: var(--text2); }
+  .textbtn { height: 44px; font-size: 14px; font-weight: 500; }
+  .slotrow { width: 100%; display: flex; align-items: center; height: 56px; padding: 0 4px; border-bottom: 1px solid var(--hairline); font-size: 17px; text-align: left; }
+  .slotrow .hint { font-size: 13px; color: var(--text2); margin-left: 8px; flex: 1; }
+  .radio { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--buttonBorder); }
+  .radio.on { border: 7px solid var(--primary); }
+  .note { padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+  .note:last-child { border-bottom: 0; }
+  .note h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .note p { font-size: 14px; line-height: 20px; color: var(--text2); }
+  .note .src { color: var(--link); font-size: 12px; font-weight: 600; margin-bottom: 4px; letter-spacing: .4px; text-transform: uppercase; }
+  .field { display: flex; align-items: center; height: 52px; border-radius: 12px; background: var(--secondary); border: 1px solid var(--buttonBorder); padding: 0 14px; margin-top: 10px; }
+  .field label { flex: 1; font-size: 15px; }
+  .field input { width: 90px; text-align: right; font-size: 17px; font-weight: 600; }
+
+  /* ── Scan ───────────────────────────────────────── */
+  .cam { flex: 1; position: relative; background: radial-gradient(circle at 50% 40%, #232836, #07080B 70%); display: grid; place-items: center; }
+  .reticle { width: 250px; height: 150px; border-radius: 18px; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
+  .camhint { position: absolute; bottom: 120px; left: 0; right: 0; text-align: center; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ═══════════ 0. Research board ═══════════ -->
+  <section class="screen on" id="board">
+    <div class="status"><span>9:41</span><i>●●● ▮</i></div>
+    <div class="scroll board">
+      <div class="label">Food logger research</div>
+      <h1 class="display">What the fastest loggers do</h1>
+      <p class="t2" style="font-size:14px;line-height:20px">Six patterns from apps that score best on logging speed, each built into the clickable mockup that follows, in NutriSA's colours.</p>
+
+      <div class="card finding">
+        <h3>Taps to log, lower is better</h3>
+        <p>MacroFactor's Food Logging Speed Index counts actions for four tasks. It is MacroFactor's own benchmark, so read it as a guide.</p>
+        <table class="flsi">
+          <tr><th>App</th><th>Search</th><th>Multi</th><th>Scan</th><th>Quick</th></tr>
+          <tr class="us"><td>MacroFactor</td><td>10</td><td>6</td><td>5</td><td>3</td></tr>
+          <tr><td>MyNetDiary</td><td>11</td><td>7</td><td>7</td><td>5</td></tr>
+          <tr><td>Lose It</td><td>13</td><td>7</td><td>7</td><td>5</td></tr>
+          <tr><td>MyFitnessPal</td><td>15</td><td>slow</td><td>7</td><td>5</td></tr>
+          <tr><td>Yazio</td><td>16</td><td>slow</td><td>slow</td><td>slow</td></tr>
+          <tr><td>Cronometer</td><td>slow</td><td>slow</td><td>7</td><td>7</td></tr>
+        </table>
+      </div>
+
+      <div class="card finding"><span class="src">MyFitnessPal · Lose It</span><h3>Pick the meal by where you tap</h3><p>Each meal on the day view has its own add button, so the meal is already chosen when the logger opens. The app never has to guess "Dinner".</p></div>
+      <div class="card finding"><span class="src">MacroFactor</span><h3>Add without leaving search</h3><p>The + on a result adds the remembered serving and clears the search for the next food. A small plate stays in view and shows the running total.</p></div>
+      <div class="card finding"><span class="src">MacroFactor</span><h3>Show what you eat at this hour</h3><p>History is ranked by the time you usually eat each food. Coffee and oats come up at 9am without searching.</p></div>
+      <div class="card finding"><span class="src">MyNetDiary</span><h3>Your foods first in results</h3><p>Up to five foods you have logged before sit at the top of the results, highlighted, above the public database.</p></div>
+      <div class="card finding"><span class="src">MacroFactor</span><h3>Show the effect on your day</h3><p>The food detail shows how much of today is left after adding it, so the number means something.</p></div>
+      <div class="card finding"><span class="src">Lose It</span><h3>Lead with what's left</h3><p>The day opens on calories remaining and a progress bar, not on a table of numbers.</p></div>
+
+      <button class="cta press" onclick="go('day')">Open the prototype</button>
+      <p class="t2" style="font-size:13px;margin-top:12px;text-align:center">Tap <span style="color:var(--link)">Why?</span> on any screen to see where each idea comes from.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════ 1. Day (Nutrition tab) ═══════════ -->
+  <section class="screen" id="day">
+    <div class="status"><span>9:41</span><i>●●● ▮</i></div>
+    <button class="why" onclick="why('day')">Why?</button>
+    <div class="scroll" id="dayScroll">
+      <div class="dayhead"><h1 class="display">Today</h1></div>
+      <div class="card left">
+        <div class="label">Calories left</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+          <span class="display big" id="leftKcal">0</span>
+          <span class="t2" id="leftSub" style="font-size:14px"></span>
+        </div>
+        <div class="bar" style="margin-top:12px"><span id="kcalBar" style="background:var(--primary)"></span></div>
+        <div class="macros3" id="dayMacros"></div>
+      </div>
+      <div id="meals"></div>
+      <div style="height:20px"></div>
+    </div>
+    <div class="pinned">
+      <button class="pill press" onclick="openLogger(suggestedSlot())">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A8F98" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="ph">Log food</span>
+        <span class="vdiv"></span>
+        <span class="icon" onclick="event.stopPropagation();openLogger(suggestedSlot());go('scan')" aria-label="Scan a barcode">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M16 8v8"/></svg>
+        </span>
+      </button>
+    </div>
+    <div class="tabbar">
+      <div><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>Home</div>
+      <div class="on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v8a3 3 0 0 0 2 2.8V22h2V2h-1v8H9V2H8v8H7zM15 2c-1.7 0-3 2.5-3 6 0 2.4 1 4 2 4.6V22h2V2z"/></svg>Nutrition</div>
+      <div><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4h14l2 16H3zM12 7a3 3 0 0 0-3 3h2a1 1 0 1 1 2 0h2a3 3 0 0 0-3-3z"/></svg>Weight</div>
+      <div><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>Profile</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 2. Logger ═══════════ -->
+  <section class="screen" id="log">
+    <div class="status"><span>9:41</span><i>●●● ▮</i></div>
+    <div class="lhead">
+      <button class="icon press" onclick="go('day')" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg>
+      </button>
+      <div class="slotbtn"><button onclick="openSheet('slotSheet')"><span id="slotTitle">Breakfast</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A8F98" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg></button></div>
+      <button class="why" style="position:static;margin-right:6px" onclick="why('log')">Why?</button>
+    </div>
+    <div class="search">
+      <div class="pill">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A8F98" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" class="ph" style="color:#fff" placeholder="Search foods or brands" oninput="render()" autocomplete="off" />
+        <span id="clearQ" class="icon press" style="display:none" onclick="setQ('')">
+          <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#2A2F3B"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2"/></svg>
+        </span>
+      </div>
+    </div>
+    <div class="modes" id="modes">
+      <button class="mode press" onclick="go('scan')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M16 8v8"/></svg>Scan</button>
+      <button class="mode press" onclick="openSheet('quickSheet')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Quick add</button>
+      <button class="mode press" onclick="flash('Creating a food opens the existing form')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New food</button>
+    </div>
+    <div class="scroll" id="logBody"></div>
+    <div class="platebar" id="plateBar"></div>
+    <div class="toast" id="toast"><span id="toastText" style="flex:1"></span><button class="undo" id="undoBtn">Undo</button></div>
+  </section>
+
+  <!-- ═══════════ 3. Scan ═══════════ -->
+  <section class="screen" id="scan">
+    <div class="status" style="position:absolute;left:0;right:0;z-index:2"><span>9:41</span><i>●●● ▮</i></div>
+    <div class="cam">
+      <div class="reticle"></div>
+      <button class="icon press" style="position:absolute;top:50px;left:8px;background:rgba(0,0,0,.4)" onclick="go('log')" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5 5 19"/></svg>
+      </button>
+      <button class="why" onclick="why('scan')">Why?</button>
+      <div class="camhint">Point at a barcode<br><span class="t2" style="font-size:13px">It opens in the same food panel as search</span></div>
+      <button class="chip press" style="position:absolute;bottom:50px;left:50%;transform:translateX(-50%)" onclick="go('log');openDetail('koo')">Simulate a scan</button>
+    </div>
+  </section>
+
+  <!-- ═══════════ Sheets ═══════════ -->
+  <div class="scrim" id="scrim" onclick="closeSheets()"></div>
+
+  <div class="sheet" id="detailSheet"></div>
+
+  <div class="sheet" id="plateSheet"></div>
+
+  <div class="sheet" id="slotSheet">
+    <div class="grab"></div>
+    <div class="label" style="margin-bottom:6px">Add to</div>
+    <div id="slotRows"></div>
+  </div>
+
+  <div class="sheet" id="quickSheet">
+    <div class="grab"></div>
+    <h2 class="display" style="font-size:28px">Quick add</h2>
+    <p class="t2" style="font-size:14px;margin-top:2px">Calories only, macros if you know them.</p>
+    <div class="field"><label>Calories</label><input id="qk" inputmode="decimal" value="250" /></div>
+    <div class="field"><label style="color:var(--protein)">Protein g</label><input id="qp" inputmode="decimal" placeholder="optional" /></div>
+    <div class="field"><label style="color:var(--carbs)">Carbs g</label><input id="qc" inputmode="decimal" placeholder="optional" /></div>
+    <div class="field"><label style="color:var(--fats)">Fat g</label><input id="qf" inputmode="decimal" placeholder="optional" /></div>
+    <button class="primary press" onclick="quickAdd()">Add to <span class="slotName"></span></button>
+  </div>
+
+  <div class="sheet" id="whySheet"></div>
+</div>
+
+<script>
+// Mock data. Per-serving values; amounts scale by grams.
+const FOODS = {
+  fage:   { name: "Total 0% Greek Yogurt", brand: "Fage", e: "🥣", unit: "g", serving: 170, label: "1 tub", kcal: 90, p: 18, c: 5, f: 0, mine: true },
+  oats:   { name: "Jungle Oats", brand: "Tiger Brands", e: "🌾", unit: "g", serving: 40, label: "½ cup", kcal: 150, p: 5, c: 25, f: 3, mine: true },
+  blue:   { name: "Blueberries", brand: "", e: "🫐", unit: "g", serving: 80, label: "½ cup", kcal: 45, p: 0.6, c: 11, f: 0.3, mine: true },
+  coffee: { name: "Flat white", brand: "Vida e Caffè", e: "☕", unit: "ml", serving: 250, label: "1 regular", kcal: 120, p: 7, c: 9, f: 6, mine: true },
+  eggs:   { name: "Large eggs", brand: "Nulaid", e: "🥚", unit: "piece", serving: 2, label: "2 large", kcal: 140, p: 12, c: 1, f: 10, mine: true },
+  banana: { name: "Banana", brand: "", e: "🍌", unit: "piece", serving: 1, label: "1 medium", kcal: 105, p: 1.3, c: 27, f: 0.4, mine: false },
+  gourmet:{ name: "Low Fat Strained Greek Yogurt", brand: "Gourmet Greek", e: "🥛", unit: "g", serving: 175, label: "1 tub", kcal: 130, p: 15, c: 8, f: 4, mine: false },
+  chobani:{ name: "Plain 0% Greek Yogurt", brand: "Chobani", e: "🥛", unit: "g", serving: 170, label: "1 tub", kcal: 100, p: 17, c: 6, f: 0, mine: false },
+  danone: { name: "Greek Style Yoghurt", brand: "Danone", e: "🥛", unit: "g", serving: 150, label: "1 tub", kcal: 165, p: 6, c: 15, f: 9, mine: false },
+  chicken:{ name: "Chicken breast fillets", brand: "Woolworths", e: "🍗", unit: "g", serving: 150, label: "1 fillet", kcal: 165, p: 35, c: 0, f: 3, mine: true },
+  bread:  { name: "Brown bread", brand: "Albany", e: "🍞", unit: "piece", serving: 2, label: "2 slices", kcal: 180, p: 7, c: 32, f: 2, mine: false },
+  pb:     { name: "Smooth peanut butter", brand: "Black Cat", e: "🥜", unit: "g", serving: 16, label: "1 tbsp", kcal: 95, p: 4, c: 3, f: 8, mine: true },
+  koo:    { name: "Baked Beans in Tomato Sauce", brand: "Koo", e: "🥫", unit: "g", serving: 205, label: "½ can", kcal: 160, p: 9, c: 27, f: 1, mine: false },
+};
+const USUAL = { Breakfast: ["coffee", "oats", "blue", "fage", "eggs"], Lunch: ["chicken", "bread", "fage"], Dinner: ["chicken", "koo"], Snack: ["banana", "pb", "fage"] };
+const SAVED = [
+  { id: "ob", name: "Oats and berries", items: [["oats", 40], ["blue", 80], ["fage", 170]] },
+  { id: "pw", name: "Post-workout", items: [["chicken", 150], ["bread", 2]] },
+  { id: "pbt", name: "PB toast", items: [["bread", 2], ["pb", 16]] },
+];
+const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const TARGET = { kcal: 2200, p: 160, c: 220, f: 70 };
+
+const state = {
+  slot: "Breakfast",
+  plate: [],
+  day: { Breakfast: [], Lunch: [{ key: "x1", id: "chicken", qty: 150 }, { key: "x2", id: "bread", qty: 2 }], Dinner: [], Snack: [] },
+  detail: null,
+};
+let keySeq = 0;
+const $ = (id) => document.getElementById(id);
+const r0 = (n) => Math.round(n);
+const fmt = (n) => r0(n).toLocaleString("en-ZA").replace(/ /g, ",");
+
+function macros(item) {
+  if (item.quick) return item.quick;
+  const f = FOODS[item.id], k = item.qty / f.serving;
+  return { kcal: f.kcal * k, p: f.p * k, c: f.c * k, f: f.f * k };
+}
+function sum(items) {
+  return items.reduce((a, it) => { const m = macros(it); return { kcal: a.kcal + m.kcal, p: a.p + m.p, c: a.c + m.c, f: a.f + m.f }; }, { kcal: 0, p: 0, c: 0, f: 0 });
+}
+const allLogged = () => sum(SLOTS.flatMap((s) => state.day[s]));
+function qtyText(item) {
+  if (item.quick) return "Quick add";
+  const f = FOODS[item.id];
+  if (item.qty === f.serving) return `${f.label} · ${f.serving}${f.unit === "piece" ? "" : " " + f.unit}`.replace(/ · \d+$/, "");
+  return f.unit === "piece" ? `${item.qty} × ${f.label.replace(/^\d+\s*/, "")}` : `${item.qty} ${f.unit}`;
+}
+const mc = (m) => `<span class="mc"><span class="p">P${r0(m.p)}</span> <span class="c">C${r0(m.c)}</span> <span class="f">F${r0(m.f)}</span></span>`;
+function suggestedSlot() { return "Breakfast"; /* 9:41 in the mock */ }
+
+// ── Navigation ─────────────────────────────────────
+function go(id) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === id));
+  closeSheets();
+  if (id === "day") renderDay();
+  if (id === "log") render();
+}
+function openLogger(slot) { state.slot = slot; setQ(""); go("log"); }
+function openSheet(id) {
+  closeSheets(true);
+  if (id === "slotSheet") renderSlots();
+  if (id === "plateSheet") renderPlateSheet();
+  document.querySelectorAll(".slotName").forEach((e) => (e.textContent = state.slot));
+  $("scrim").classList.add("on");
+  $(id).classList.add("on");
+}
+function closeSheets(keepScrim) {
+  document.querySelectorAll(".sheet").forEach((s) => s.classList.remove("on"));
+  if (!keepScrim) $("scrim").classList.remove("on");
+}
+
+// ── Day view ───────────────────────────────────────
+function renderDay() {
+  const t = allLogged();
+  $("leftKcal").textContent = fmt(TARGET.kcal - t.kcal);
+  $("leftSub").textContent = `of ${fmt(TARGET.kcal)} · ${fmt(t.kcal)} eaten`;
+  $("kcalBar").style.width = Math.min(100, (t.kcal / TARGET.kcal) * 100) + "%";
+  $("dayMacros").innerHTML = [["Protein", "p", "protein"], ["Carbs", "c", "carbs"], ["Fat", "f", "fats"]].map(([n, k, col]) =>
+    `<div><div class="n"><span>${n}</span><span class="t2">${r0(t[k])}/${TARGET[k]}g</span></div>
+     <div class="bar"><span style="width:${Math.min(100, (t[k] / TARGET[k]) * 100)}%;background:var(--${col})"></span></div></div>`).join("");
+  $("meals").innerHTML = SLOTS.map((s) => {
+    const items = state.day[s], m = sum(items);
+    return `<div class="card meal">
+      <div class="mealhead"><span class="name">${s}</span>${items.length ? `<span class="kc">${fmt(m.kcal)} kcal</span>` : ""}
+        <button class="addbtn press" aria-label="Add to ${s}" onclick="openLogger('${s}')"><span>${plus()}</span></button></div>
+      ${items.length ? items.map((it) => `<div class="line"><div style="flex:1;min-width:0"><div class="nm">${it.quick ? "Quick add" : FOODS[it.id].name}</div><div class="sv">${qtyText(it)}</div></div>
+        <div style="text-align:right"><div style="font-size:14px">${fmt(macros(it).kcal)} kcal</div>${mc(macros(it))}</div></div>`).join("")
+        : `<div class="empty">Nothing yet. Tap + to add ${s.toLowerCase()}.</div>`}
+    </div>`;
+  }).join("");
+}
+const plus = (c = "#1A7CFC") => `<svg width="16" height="16" viewBox="0 0 24 24" stroke="${c}" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
+
+// ── Logger ─────────────────────────────────────────
+function setQ(v) { $("q").value = v; render(); }
+function foodRow(id, opts = {}) {
+  const f = FOODS[id], m = { kcal: f.kcal, p: f.p, c: f.c, f: f.f };
+  return `<div class="row ${opts.mine ? "mine" : ""}">
+    <button class="press" style="display:flex;align-items:center;flex:1;min-width:0;text-align:left" onclick="openDetail('${id}')">
+      <div class="thumb">${f.e}</div>
+      <div class="body"><div class="nm">${f.name}${opts.mine ? '<span class="badge">Yours</span>' : ""}</div>
+        <div class="sv">${f.label}${f.unit !== "piece" ? ` (${f.serving} ${f.unit})` : ""}${f.brand ? " · " + f.brand : ""}</div></div>
+      <div class="kc"><b>${f.kcal}</b> <span class="t2" style="font-size:12px">kcal</span><br>${mc(m)}</div>
+    </button>
+    <button class="addbtn press" aria-label="Add ${f.name}" onclick="addFood('${id}')"><span>${plus()}</span></button>
+  </div>`;
+}
+function render() {
+  $("slotTitle").textContent = state.slot;
+  const q = $("q").value.trim().toLowerCase();
+  $("clearQ").style.display = q ? "grid" : "none";
+  $("modes").style.display = q ? "none" : "flex";
+  let html = "";
+  if (!q) {
+    html += `<div class="sect"><h2>Usually at ${state.slot.toLowerCase()}</h2><span class="t2" style="font-size:13px">by time of day</span></div>`;
+    html += USUAL[state.slot].map((id) => foodRow(id)).join("");
+    html += `<div class="sect"><h2>Saved meals</h2><span style="color:var(--link);font-size:14px;font-weight:500">See all</span></div>
+      <div class="strip">${SAVED.map((s) => {
+        const items = s.items.map(([id, qty]) => ({ id, qty })), m = sum(items);
+        return `<div class="card tile"><div class="nm">${s.name}</div><div class="sv">${s.items.map(([id]) => FOODS[id].name).join(", ")}</div>
+          <div class="foot"><div><b style="font-size:15px">${fmt(m.kcal)}</b> <span class="t2" style="font-size:12px">kcal</span><br>${mc(m)}</div>
+          <button class="addbtn press" style="margin:-8px -8px -8px 0" onclick="addSaved('${s.id}')" aria-label="Add ${s.name}"><span>${plus()}</span></button></div></div>`;
+      }).join("")}</div><div style="height:24px"></div>`;
+  } else {
+    const hits = Object.keys(FOODS).filter((id) => (FOODS[id].name + " " + FOODS[id].brand).toLowerCase().includes(q));
+    const mine = hits.filter((id) => FOODS[id].mine).slice(0, 5), off = hits.filter((id) => !mine.includes(id));
+    if (!hits.length) html = `<div style="padding:40px 24px;text-align:center"><div style="font-size:16px;font-weight:600">No match for "${$("q").value}"</div>
+      <p class="t2" style="font-size:14px;margin:6px 0 16px">Scan the barcode, or add it yourself.</p>
+      <button class="chip press" onclick="go('scan')">Scan barcode</button> <button class="chip press" onclick="openSheet('quickSheet')">Quick add</button></div>`;
+    if (mine.length) html += `<div class="sect"><h2>Your foods</h2></div>` + mine.map((id) => foodRow(id, { mine: true })).join("");
+    if (off.length) html += `<div class="sect"><h2>All foods</h2><span class="t2" style="font-size:12px">Open Food Facts</span></div>` + off.map((id) => foodRow(id)).join("");
+    html += `<div style="height:24px"></div>`;
+  }
+  $("logBody").innerHTML = html;
+  renderPlateBar();
+}
+function renderPlateBar() {
+  const n = state.plate.length;
+  if (!n) { $("plateBar").innerHTML = ""; return; }
+  const t = sum(state.plate);
+  $("plateBar").innerHTML = `<div class="platecard">
+    <button class="info press" onclick="openSheet('plateSheet')">
+      <div style="font-size:15px;font-weight:600">${state.slot} · ${n} ${n === 1 ? "item" : "items"}</div>
+      <div style="font-size:14px"><b>${fmt(t.kcal)} kcal</b> &nbsp;${mc(t)}</div>
+    </button>
+    <button class="logpill press" onclick="logPlate()">Log</button></div>`;
+}
+let toastTimer;
+function flash(text, undo) {
+  $("toastText").innerHTML = text;
+  $("undoBtn").style.display = undo ? "block" : "none";
+  $("undoBtn").onclick = () => { undo && undo(); $("toast").classList.remove("on"); };
+  $("toast").classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("on"), 2600);
+}
+function addFood(id, qty) {
+  const item = { key: "k" + ++keySeq, id, qty: qty ?? FOODS[id].serving };
+  state.plate.push(item);
+  setQ("");
+  flash(`Added to ${state.slot}: <b>${FOODS[id].name}</b>`, () => { state.plate = state.plate.filter((i) => i !== item); render(); });
+}
+function addSaved(sid) {
+  const s = SAVED.find((x) => x.id === sid);
+  const items = s.items.map(([id, qty]) => ({ key: "k" + ++keySeq, id, qty }));
+  state.plate.push(...items);
+  render();
+  flash(`Added to ${state.slot}: <b>${s.name}</b>`, () => { state.plate = state.plate.filter((i) => !items.includes(i)); render(); });
+}
+function quickAdd() {
+  const n = (id) => parseFloat(($(id).value || "0").replace(",", ".")) || 0;
+  state.plate.push({ key: "k" + ++keySeq, quick: { kcal: n("qk"), p: n("qp"), c: n("qc"), f: n("qf") } });
+  closeSheets(); render();
+  flash(`Added to ${state.slot}: <b>${fmt(n("qk"))} kcal</b>`);
+}
+function logPlate() {
+  const n = state.plate.length, slot = state.slot;
+  state.day[slot].push(...state.plate);
+  state.plate = [];
+  go("day");
+  setTimeout(() => {
+    const t = document.createElement("div");
+    t.className = "toast on"; t.style.top = "50px";
+    t.innerHTML = `<span style="flex:1">${slot} logged · ${n} ${n === 1 ? "item" : "items"}</span>`;
+    $("day").appendChild(t); setTimeout(() => t.remove(), 2200);
+  }, 50);
+}
+
+// ── Food detail ────────────────────────────────────
+function openDetail(id, editKey) {
+  const f = FOODS[id];
+  const editing = editKey ? state.plate.find((i) => i.key === editKey) : null;
+  state.detail = { id, qty: editing ? editing.qty : f.serving, editKey };
+  const max = f.unit === "piece" ? Math.max(4, f.serving * 3) : Math.max(300, f.serving * 3);
+  const step = f.unit === "piece" ? 0.5 : 5;
+  const chips = f.unit === "piece"
+    ? [[f.serving, f.label], [f.serving * 1.5, "1½×"], [f.serving * 2, "2×"]]
+    : [[f.serving, `${f.label} (${f.serving} ${f.unit})`], [100, `100 ${f.unit}`], [r0(f.serving / 2), "Half"]];
+  $("detailSheet").innerHTML = `<div class="grab"></div>
+    <div class="hero">${f.e}</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0"><div class="display" style="font-size:28px;line-height:30px">${f.name}</div>
+        <div class="t2" style="font-size:14px;margin-top:2px">${f.brand || "Generic"} · ${f.mine ? "you've logged this" : "Open Food Facts"}</div></div>
+      <div class="kcbadge"><div><b id="dK"></b><small>kcal</small></div></div>
+    </div>
+    <div class="stack" id="dStack"></div>
+    <div class="legend" id="dLegend"></div>
+    <div class="amount">
+      <button class="step press" onclick="nudge(-1)">−</button>
+      <div class="box"><input id="dQty" inputmode="decimal" oninput="setQty(this.value, true)" /><span class="t2">${f.unit === "piece" ? f.label.replace(/^\d+\s*/, "") : f.unit}</span></div>
+      <button class="step press" onclick="nudge(1)">+</button>
+    </div>
+    <div class="chips" id="dChips">${chips.map(([q, l]) => `<button class="chip press" data-q="${q}" onclick="setQty(${q})">${l}</button>`).join("")}</div>
+    <input type="range" id="dRange" min="${step}" max="${max}" step="${step}" oninput="setQty(this.value)" aria-label="Amount" />
+    <div class="effect"><span class="t2">Left today after this</span><b id="dLeft"></b></div>
+    <button class="primary press" id="dGo" onclick="confirmDetail()"></button>`;
+  $("detailSheet").dataset.step = step;
+  openSheet("detailSheet");
+  setQty(state.detail.qty);
+}
+function setQty(v, typing) {
+  const q = parseFloat(String(v).replace(",", "."));
+  const d = state.detail, f = FOODS[d.id];
+  d.qty = isFinite(q) && q > 0 ? q : 0;
+  const m = macros({ id: d.id, qty: d.qty });
+  if (!typing) $("dQty").value = String(d.qty).replace(".", ",");
+  $("dRange").value = d.qty;
+  $("dK").textContent = fmt(m.kcal);
+  const e = { p: m.p * 4, c: m.c * 4, f: m.f * 9 }, tot = e.p + e.c + e.f || 1;
+  $("dStack").innerHTML = [["p", "protein"], ["c", "carbs"], ["f", "fats"]].map(([k, col]) => e[k] ? `<span style="flex:${e[k] / tot};background:var(--${col})"></span>` : "").join("");
+  $("dLegend").innerHTML = [["Protein", "p", "protein"], ["Carbs", "c", "carbs"], ["Fat", "f", "fats"]].map(([n, k, col]) =>
+    `<div><span style="color:var(--${col})">${n}</span><b>${r0(m[k] * 10) / 10}g</b><span class="t2">${r0((e[k] / tot) * 100)}%</span></div>`).join("");
+  document.querySelectorAll("#dChips .chip").forEach((c) => c.classList.toggle("on", parseFloat(c.dataset.q) === d.qty));
+  const used = allLogged().kcal + sum(state.plate.filter((i) => i.key !== d.editKey)).kcal + m.kcal;
+  $("dLeft").textContent = `${fmt(TARGET.kcal - used)} kcal`;
+  $("dGo").disabled = d.qty <= 0;
+  $("dGo").textContent = d.editKey ? `Update · ${fmt(m.kcal)} kcal` : `Add to ${state.slot} · ${fmt(m.kcal)} kcal`;
+}
+function nudge(dir) { const s = parseFloat($("detailSheet").dataset.step); setQty(Math.max(s, r0((state.detail.qty + dir * s) * 100) / 100)); }
+function confirmDetail() {
+  const d = state.detail;
+  if (d.editKey) { state.plate.find((i) => i.key === d.editKey).qty = d.qty; closeSheets(); render(); openSheet("plateSheet"); return; }
+  closeSheets(); addFood(d.id, d.qty);
+}
+
+// ── Plate sheet ────────────────────────────────────
+function renderPlateSheet() {
+  const t = sum(state.plate);
+  $("plateSheet").innerHTML = `<div class="grab"></div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between">
+      <div><h2 class="display" style="font-size:30px;line-height:32px">${state.slot}</h2>
+        <div class="t2" style="font-size:14px">${state.plate.length} items · ${fmt(t.kcal)} kcal</div></div>
+      <button class="chip press" onclick="flash('Logs at the current time unless you change it')">Today, 09:41</button>
+    </div>
+    <div style="background:var(--secondary);border-radius:14px;padding:0 14px;margin-top:14px">
+      ${state.plate.map((it) => `<button class="press" style="display:flex;width:100%;text-align:left;padding:11px 0;border-bottom:1px solid var(--cardBorder)" ${it.quick ? "" : `onclick="openDetail('${it.id}','${it.key}')"`}>
+        <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">${it.quick ? "Quick add" : FOODS[it.id].name}</div><div class="t2" style="font-size:13px">${qtyText(it)}</div></div>
+        <div style="text-align:right"><div style="font-size:14px">${fmt(macros(it).kcal)} kcal</div>${mc(macros(it))}</div></button>`).join("")}
+      <div style="display:flex;padding:11px 0"><span class="label" style="flex:1">Total</span><div style="text-align:right"><b>${fmt(t.kcal)} kcal</b><br>${mc(t)}</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px">
+      <button class="textbtn press" style="color:var(--link)" onclick="flash('Asks for a name, then saves')">Save as a meal for later</button>
+      <button class="textbtn press t2" onclick="state.plate=[];closeSheets();render()">Clear plate</button>
+    </div>
+    <button class="primary press" onclick="logPlate()">Log ${state.slot} · ${fmt(t.kcal)} kcal</button>`;
+}
+
+// ── Meal (slot) picker ─────────────────────────────
+function renderSlots() {
+  $("slotRows").innerHTML = SLOTS.map((s) => `<button class="slotrow press" onclick="state.slot='${s}';closeSheets();render()">
+    <span>${s}</span><span class="hint">${s === suggestedSlot() ? "suggested for 09:41" : ""}</span><span class="radio ${s === state.slot ? "on" : ""}"></span></button>`).join("");
+}
+
+// ── Why? notes ─────────────────────────────────────
+const WHY = {
+  day: [
+    ["MyFitnessPal · Lose It", "Each meal has its own +", "You pick Breakfast or Dinner by which card you tap, so the logger opens already knowing. This replaces the app guessing from the clock."],
+    ["Lose It", "Calories left comes first", "Lose It opens on what's left for the day with one progress bar. The macro bars sit under it, smaller."],
+    ["NutriSA fix", "One way in at the bottom", "\"Search for a food\" and \"Log Foods\" opened the same screen. One bar, with scan on the right, is lighter and stops it fighting the Meals list."],
+  ],
+  log: [
+    ["MyFitnessPal", "The meal is the title", "The meal you are adding to is the header, with a dropdown to change it. The row of four buttons that crowded the search bar is gone."],
+    ["MacroFactor", "Usually at this time", "MacroFactor ranks your history by the hour you eat each food. Open the logger at 9am and your coffee and oats are already there. Switch to Dinner from the title to see the list change."],
+    ["MacroFactor", "+ adds and clears the search", "Multi-add puts the remembered serving on the plate and resets search for the next food. It is the fastest pattern in their speed index: 6 actions for two foods."],
+    ["MyNetDiary", "Your foods first", "Type \"yog\": foods you've logged before sit on top, marked Yours, above the public database."],
+    ["MacroFactor", "The plate, minified", "A bar at the bottom shows the meal, item count and total, with Log beside it. Tap it to open the plate."],
+  ],
+  scan: [
+    ["Lose It · MyFitnessPal", "A scan lands in the same panel", "A scanned product opens in the same food panel as a search result, so there is only one place to learn."],
+    ["MacroFactor", "5 actions to log a scan", "The fastest score in the index. No extra confirm screen between the scan and the amount."],
+  ],
+};
+function why(screen) {
+  $("whySheet").innerHTML = `<div class="grab"></div><h2 class="display" style="font-size:28px;margin-bottom:4px">Why this design</h2>` +
+    WHY[screen].map(([src, h, p]) => `<div class="note"><div class="src">${src}</div><h3>${h}</h3><p>${p}</p></div>`).join("") +
+    `<button class="primary press" style="margin-top:12px" onclick="closeSheets()">Got it</button>`;
+  openSheet("whySheet");
+}
+
+renderDay();
+</script>
+</body>
+</html>
