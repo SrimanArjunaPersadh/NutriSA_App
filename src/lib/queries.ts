@@ -4,17 +4,20 @@ import { useAuth } from "@clerk/expo"
 import { currentLoggingDay, type LogDay } from "@engine"
 import {
   daySummarySchema,
-  mealDeleteResultSchema,
+  deleteResultSchema,
   mealPatchResultSchema,
   mealWriteResultSchema,
   weightSeriesSchema,
+  weightWriteResultSchema,
   type DaySummary,
-  type MealDeleteResult,
+  type DeleteResult,
   type MealPatchResult,
   type MealWriteResult,
   type PatchMeal,
   type WeightSeries,
+  type WeightWriteResult,
   type WriteMeal,
+  type WriteWeight,
 } from "@shared"
 
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api"
@@ -52,6 +55,16 @@ export const queryKeys = {
   allDays: (userId: string | null | undefined) => ["day", userId ?? "anonymous"] as const,
   weightSeries: (userId: string | null | undefined, days: number | "all") =>
     ["weight-logs", userId ?? "anonymous", days] as const,
+  /**
+   * Every window of the series this user has cached.
+   *
+   * The prefix a weigh-in invalidates. One weigh-in moves 30-day, 90-day and
+   * all-time alike — they are three slices of one computation, not three
+   * datasets — so there is no version of this that invalidates only the range
+   * currently on screen and stays correct.
+   */
+  allWeightSeries: (userId: string | null | undefined) =>
+    ["weight-logs", userId ?? "anonymous"] as const,
 }
 
 /**
@@ -206,8 +219,72 @@ export function useDeleteMeal() {
   const { getToken } = useAuth()
   const invalidateDays = useInvalidateDays()
 
-  return useMutation<MealDeleteResult, ApiError, string>({
-    mutationFn: (id) => apiDelete(`/api/meal-logs/${id}`, mealDeleteResultSchema, getToken),
+  return useMutation<DeleteResult, ApiError, string>({
+    mutationFn: (id) => apiDelete(`/api/meal-logs/${id}`, deleteResultSchema, getToken),
     onSuccess: () => void invalidateDays(),
+  })
+}
+
+/**
+ * Throw away every cached weight window after a weigh-in is written or removed.
+ *
+ * The mirror of `useInvalidateDays`, and separate from it on purpose: the day
+ * summary carries no weight and the weight series carries no macros, so a meal
+ * write has nothing to say to this cache and a weigh-in has nothing to say to
+ * the other. Invalidating both from both would double the refetches after every
+ * save to keep one line of code shorter.
+ */
+function useInvalidateWeight() {
+  const { userId } = useAuth()
+  const client = useQueryClient()
+
+  return () => client.invalidateQueries({ queryKey: queryKeys.allWeightSeries(userId) })
+}
+
+/**
+ * Record a weigh-in.
+ *
+ * ## The id comes from the caller, same as a meal
+ *
+ * And for the same reason — a retried save must carry the id its first attempt
+ * carried, or a lost response becomes a second row. Here the stakes are a
+ * little different: a fresh id retried onto the same day does not duplicate the
+ * weigh-in, because `(user_id, date)` is unique and the server upserts. It
+ * comes back `replaced: true` instead, which would tell the user their reading
+ * overwrote an earlier one when it overwrote its own first attempt.
+ *
+ * ## Nothing here computes a trend
+ *
+ * The raw scale reading goes up; the trend comes back down from the server,
+ * where the engine has the whole history to run over. A client that adjusted
+ * the trend line optimistically would be doing the one arithmetic this project
+ * does not allow, on the one number the whole screen exists to show.
+ */
+export function useLogWeight() {
+  const { getToken } = useAuth()
+  const invalidateWeight = useInvalidateWeight()
+
+  return useMutation<WeightWriteResult, ApiError, WriteWeight>({
+    mutationFn: (input) =>
+      apiPost("/api/weight-logs", input, weightWriteResultSchema, getToken),
+    onSuccess: () => void invalidateWeight(),
+  })
+}
+
+/**
+ * Remove a weigh-in.
+ *
+ * Answers `deleted: false` when there was nothing to remove, which is a success
+ * — the route refuses to say whether an id it cannot see exists. The series is
+ * refetched either way, because removing a point re-runs the trend over every
+ * day after it and the client holds none of the arithmetic that would produce.
+ */
+export function useDeleteWeight() {
+  const { getToken } = useAuth()
+  const invalidateWeight = useInvalidateWeight()
+
+  return useMutation<DeleteResult, ApiError, string>({
+    mutationFn: (id) => apiDelete(`/api/weight-logs/${id}`, deleteResultSchema, getToken),
+    onSuccess: () => void invalidateWeight(),
   })
 }

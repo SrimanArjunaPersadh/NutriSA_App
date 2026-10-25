@@ -309,6 +309,7 @@ describe("user A cannot read user B's rows", () => {
 
     const series = body as {
       points: { weight: number | null }[]
+      entries: { id: string; day: string; weightKg: number }[]
       latest: { trend: number }
       goalWeightKg: number | null
     }
@@ -318,6 +319,20 @@ describe("user A cannot read user B's rows", () => {
     expect(weights).not.toContain(50)
     expect(series.latest.trend).toBe(100)
     expect(series.goalWeightKg).toBe(85)
+
+    /**
+     * `entries` carries row **ids**, and an id is what `DELETE /weight-logs/:id`
+     * takes — so a leak here is not a leak of a number, it is a leak of the
+     * handle needed to destroy somebody else's row. The delete is scoped too
+     * (`write-isolation.test.ts` proves it), but the two locks are on different
+     * doors and this is the one that hands out the key.
+     */
+    expect(series.entries.map((entry) => entry.weightKg)).toEqual([100, 100])
+    expect(series.entries.every((entry) => entry.id.length > 0)).toBe(true)
+    // Newest first, which is the order the history list reads in.
+    expect(series.entries.map((entry) => entry.day)).toEqual(
+      [...series.entries.map((entry) => entry.day)].sort().reverse(),
+    )
   })
 
   it("returns only B's weigh-ins, and B's absent goal weight", async () => {

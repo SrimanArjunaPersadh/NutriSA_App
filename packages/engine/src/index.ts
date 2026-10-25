@@ -96,6 +96,7 @@ export {
   goalDirection,
   goalProgress,
   projectTrend,
+  rateDirection,
   type GoalDirection,
   type GoalProgress,
   type Projection,

@@ -59,7 +59,8 @@ export {
 
 export {
   clientIdSchema,
-  mealDeleteResultSchema,
+  deleteResultSchema,
+  MAX_WEIGHT_KG,
   mealPatchResultSchema,
   mealWriteResultSchema,
   patchMealSchema,
@@ -73,7 +74,7 @@ export {
   writePortionSchema,
   writeTargetsSchema,
   writeWeightSchema,
-  type MealDeleteResult,
+  type DeleteResult,
   type MealPatchResult,
   type MealWriteResult,
   type PatchMeal,
@@ -91,12 +92,14 @@ export {
   projectionSchema,
   trendChangeSchema,
   trendPointSchema,
+  weightEntrySchema,
   weightRangeSchema,
   weightSeriesSchema,
   type GoalProgressResponse,
   type ProjectionResponse,
   type TrendChangeResponse,
   type TrendPointResponse,
+  type WeightEntry,
   type WeightRange,
   type WeightSeries,
 } from "./weight"

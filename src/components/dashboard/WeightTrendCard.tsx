@@ -1,52 +1,20 @@
 import { useState } from "react"
 import { Text, View } from "react-native"
-import Svg, { Circle, Line, Polyline, Text as SvgText } from "react-native-svg"
 
-import {
-  addDays,
-  daysBetween,
-  evenlySpaced,
-  goalDirection,
-  niceScale,
-  type GoalDirection,
-  type LogDay,
-} from "@engine"
+import { goalDirection } from "@engine"
 import type { WeightSeries } from "@shared"
 
 import { Card, CardLabel } from "@/components/dashboard/Card"
 import { Empty, ErrorState, Loading } from "@/components/state"
 import { Dropdown, type DropdownOption } from "@/components/ui/Dropdown"
-import { formatDayShort, formatKg } from "@/lib/format"
+import { DIRECTION_COLOR } from "@/components/weight/direction"
+import { chartHeight, DEFAULT_PLOT_HEIGHT, TrendChart } from "@/components/weight/TrendChart"
+import { formatKg } from "@/lib/format"
 import { useWeightSeries } from "@/lib/queries"
 import { colors } from "@/design/tokens"
 
-const PAD_LEFT = 30 // gutter for the kg labels
-const PAD_RIGHT = 10
-const PAD_TOP = 8
-const PLOT_HEIGHT = 150
-const X_LABEL_BASELINE = PAD_TOP + PLOT_HEIGHT + 22
-const CHART_HEIGHT = X_LABEL_BASELINE + 8
-
-// react-native-svg takes colour values, not classNames — see src/design/tokens.ts.
-const AXIS = colors.textSecondary
-const DOT = colors.dotMuted
-const TREND = colors.primary
-const PROJECTION = colors.amber
-const GOAL = colors.ok
-const AXIS_FONT = "Barlow_400Regular"
-
-/**
- * How a goal direction is painted. The mapping is a design decision and lives
- * here; deciding *which* direction it is, is arithmetic and lives in the engine.
- *
- * `unchanged` is muted rather than green: a week that ended where it started is
- * neither a win nor a loss, and green would congratulate it.
- */
-const DIRECTION_COLOR: Record<GoalDirection, string> = {
-  toward: colors.ok,
-  away: colors.danger,
-  unchanged: colors.textSecondary,
-}
+/** The card's own chart height. The Weight tab draws a taller one. */
+const CHART_HEIGHT = chartHeight(DEFAULT_PLOT_HEIGHT)
 
 /**
  * The windows the range menu offers, shortest first.
@@ -69,45 +37,17 @@ const RANGES: readonly DropdownOption<number | "all">[] = [
 ]
 
 /**
- * Weight over the selected window: every scale reading as a dot, the smoothed
- * line through them, and where that rate lands if it holds.
+ * The dashboard's weight card: the current trend, the week's change, and the
+ * chart under them.
  *
- * The projection is deliberately a different colour *and* dashed. Solid blue is
- * what happened; amber dashes are a guess, and the two must never be mistakeable
- * for each other at a glance.
+ * Everything the chart itself decides — the axis, the goal line, the clipped
+ * projection — lives in `@/components/weight/TrendChart`, which the Weight tab
+ * draws at a larger size. This card owns the range menu, the four states, and
+ * the summary line above the plot.
  *
  * The chart needs a pixel width before it can place anything, so it renders
- * nothing until onLayout reports one. React Native gives that on the first
+ * nothing until `onLayout` reports one. React Native gives that on the first
  * commit, so there is no visible blank frame.
- *
- * ## The axis is computed, not designed
- *
- * The y-ticks used to be `[92, 91, 90, 89, 88]`, typed by hand from a mock.
- * They now come from `niceScale()` in the engine, because a label on an axis is
- * a number the user reads off the screen and the standing rule puts every one
- * of those behind a tested function. Same for which dates get x-labels —
- * `evenlySpaced()`, which guarantees both ends are labelled. The right-hand end
- * is the one people read first, and picking every nth entry silently drops it
- * whenever the length is not a clean multiple.
- *
- * ## The goal line does not get a vote on the scale
- *
- * It did at first, and the real data showed why that is wrong. When the goal is
- * many kilograms from the current trend — which is the normal case at the start
- * of a cut — an axis stretched to include both spans that entire distance, and
- * the kilogram or two of movement the chart exists to show collapses into a
- * sliver at one edge while most of the card draws empty space around a line the
- * user will not reach for months.
- *
- * So the scale is fitted to the trend, the readings and the projection, and the
- * goal is drawn **only when it lands inside that range**. When it does not, it
- * becomes a marker pinned to the edge it lies beyond, with an arrow — which
- * says "your goal is below this chart" honestly, in the space of one line,
- * instead of buying a rendering of it at the cost of the data.
- *
- * The distance to the goal is not lost: `goal.remainingKg` and the "% of the
- * way" progress are on the same response and belong to a surface with room for
- * them.
  */
 export function WeightTrendCard() {
   const [range, setRange] = useState<number | "all">(30)
@@ -214,194 +154,5 @@ function TrendSummary({ series }: { series: WeightSeries }) {
         </Text>
       )}
     </View>
-  )
-}
-
-function TrendChart({ series, width }: { series: WeightSeries; width: number }) {
-  const { points, projection, goalWeightKg, range } = series
-
-  const last = points.at(-1)!
-
-  /**
-   * The x-axis spans the **window**, not the data.
-   *
-   * `range.from` to `range.to`, and `range.to` is today. That is the whole
-   * point of the change on 2026-08-15: scaling to the data would end the axis
-   * at the last weigh-in and make eleven days of not weighing in look like
-   * nothing at all. Now those days are empty space on the right, which is what
-   * they are.
-   *
-   * `range.from` is used rather than the first point for the same reason at the
-   * other end — a 90-day window whose first weigh-in is 60 days old should show
-   * the 30 empty days before it, not start at the data.
-   */
-  const from: LogDay = range.from ?? points[0]!.day
-  const to: LogDay = range.to ?? last.day
-  const span = Math.max(1, daysBetween(from, to))
-
-  /**
-   * The projection is clipped to today along with everything else.
-   *
-   * `projectTrend` returns 30 days of line, which would otherwise run well past
-   * the right-hand edge and, before the axis was pinned to the window, drag the
-   * whole domain into the future. What survives is the segment between the last
-   * weigh-in and today — the dashed line now fills the gap rather than
-   * predicting past it, which is a better use of it anyway.
-   */
-  const projected = (projection?.points ?? []).filter(
-    (point) => daysBetween(point.day, to) >= 0,
-  )
-
-  const scale = niceScale([
-    ...points.map((point) => point.trend),
-    // Raw readings are drawn, so they have to fit. They swing wider than the
-    // trend by definition — that is what the smoothing removes.
-    ...points.flatMap((point) => (point.weight === null ? [] : [point.weight])),
-    ...projected.map((point) => point.trend),
-    // The goal is deliberately absent — see the note on this component.
-  ])
-
-  // `points.length === 0` is handled by the caller, so a null scale here is
-  // unreachable. Returning null rather than asserting keeps it that way.
-  if (!scale) return null
-
-  const plotWidth = width - PAD_LEFT - PAD_RIGHT
-  const kgRange = scale.max - scale.min
-
-  const x = (day: LogDay) => PAD_LEFT + (daysBetween(from, day) / span) * plotWidth
-  const y = (kg: number) => PAD_TOP + ((scale.max - kg) / kgRange) * PLOT_HEIGHT
-  const path = (line: readonly { day: LogDay; trend: number }[]) =>
-    line.map((point) => `${x(point.day)},${y(point.trend)}`).join(" ")
-
-  /**
-   * Ticks step across the **window**, not across the points.
-   *
-   * Taken from the points, they would all bunch into the left-hand portion the
-   * data happens to occupy and leave the trailing gap unlabelled — so the empty
-   * space this change exists to show would have no dates against it, and no way
-   * to tell it is eleven days rather than two.
-   */
-  const xTicks = evenlySpaced(
-    Array.from({ length: span + 1 }, (_, offset) => addDays(from, offset)),
-    5,
-  )
-
-  /**
-   * Where the goal sits relative to what is drawn.
-   *
-   * `inside` gets the full dashed line. `below` / `above` get a label pinned to
-   * that edge with an arrow — the goal is real and off-screen, and saying so is
-   * more use than either omitting it or distorting the axis to reach it.
-   */
-  const goal: { kg: number; place: "inside" | "below" | "above" } | null =
-    goalWeightKg === null
-      ? null
-      : {
-          kg: goalWeightKg,
-          place:
-            goalWeightKg < scale.min
-              ? "below"
-              : goalWeightKg > scale.max
-                ? "above"
-                : "inside",
-        }
-
-  return (
-    <Svg width={width} height={CHART_HEIGHT}>
-      {scale.ticks.map((tick) => (
-        <SvgText
-          key={tick}
-          x={PAD_LEFT - 8}
-          y={y(tick) + 4}
-          textAnchor="end"
-          fontFamily={AXIS_FONT}
-          fontSize={13}
-          fill={AXIS}
-        >
-          {String(tick)}
-        </SvgText>
-      ))}
-
-      {/* Goal sits under the series so a reading landing on it stays readable. */}
-      {goal?.place === "inside" ? (
-        <>
-          <Line
-            x1={PAD_LEFT}
-            y1={y(goal.kg)}
-            x2={width - PAD_RIGHT}
-            y2={y(goal.kg)}
-            stroke={GOAL}
-            strokeWidth={1.5}
-            strokeDasharray={[5, 4]}
-          />
-          <SvgText
-            x={width - PAD_RIGHT}
-            y={y(goal.kg) - 9}
-            textAnchor="end"
-            fontFamily={AXIS_FONT}
-            fontSize={13}
-            fill={GOAL}
-          >
-            {`Goal ${formatKg(goal.kg)} kg`}
-          </SvgText>
-        </>
-      ) : goal ? (
-        <SvgText
-          x={width - PAD_RIGHT}
-          // Just inside the plot's edge, so it reads as part of the chart
-          // rather than as a caption that fell off it.
-          y={goal.place === "below" ? PAD_TOP + PLOT_HEIGHT - 5 : PAD_TOP + 12}
-          textAnchor="end"
-          fontFamily={AXIS_FONT}
-          fontSize={13}
-          fill={GOAL}
-        >
-          {`${goal.place === "below" ? "↓" : "↑"} Goal ${formatKg(goal.kg)} kg`}
-        </SvgText>
-      ) : null}
-
-      {/* Dots only on days with an actual weigh-in. The trend line runs across
-          every calendar day; the scatter must not invent readings for the gaps. */}
-      {points.map((point) =>
-        point.weight === null ? null : (
-          <Circle key={point.day} cx={x(point.day)} cy={y(point.weight)} r={2.2} fill={DOT} />
-        ),
-      )}
-
-      <Polyline
-        points={path(points.map((point) => ({ day: point.day, trend: point.trend })))}
-        fill="none"
-        stroke={TREND}
-        strokeWidth={2.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {projected.length > 0 ? (
-        <Polyline
-          // Anchored on the last real point, so the dashed run continues the
-          // solid one instead of starting a day adrift of it.
-          points={path([{ day: last.day, trend: last.trend }, ...projected])}
-          fill="none"
-          stroke={PROJECTION}
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeDasharray={[7, 6]}
-        />
-      ) : null}
-
-      {xTicks.map((day) => (
-        <SvgText
-          key={day}
-          x={x(day)}
-          y={X_LABEL_BASELINE}
-          textAnchor="middle"
-          fontFamily={AXIS_FONT}
-          fontSize={13}
-          fill={AXIS}
-        >
-          {formatDayShort(day)}
-        </SvgText>
-      ))}
-    </Svg>
   )
 }

@@ -167,6 +167,13 @@ async function request<T extends z.ZodType>(
     // Logged in full because this one is always a bug in this repo — the two
     // sides import the same schema, so a mismatch means one of them shipped
     // without the other. The user still only sees the error state.
+    //
+    // ⚠️ `issues` and not `error`, and that is a privacy boundary rather than
+    // brevity. A zod issue carries `code`, `expected`, `path` and `message` —
+    // the *shape* that was expected — and never the value that arrived.
+    // Verified against zod 4.4.3. This path now carries every response in the
+    // app, `GET /weight-logs` included, so anything that starts printing the
+    // received value here is printing somebody's bodyweight to a log.
     console.error(`Response from ${path} did not match its schema:`, parsed.error.issues)
     throw new ApiError("malformed-response", "The server sent an unexpected response.")
   }
@@ -222,7 +229,7 @@ export async function apiPatch<T extends z.ZodType>(
  * A DELETE.
  *
  * Answers 200 with `deleted: false` rather than 404 when there was nothing to
- * remove — see `mealDeleteResultSchema`. So this resolving is not proof that
+ * remove — see `deleteResultSchema`. So this resolving is not proof that
  * anything went, and a caller that needs to know must read the flag.
  */
 export async function apiDelete<T extends z.ZodType>(
