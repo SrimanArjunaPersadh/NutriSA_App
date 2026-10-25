@@ -67,6 +67,8 @@ export {
   mealPatchResultSchema,
   mealWriteResultSchema,
   patchMealSchema,
+  TARGET_BOUNDS,
+  targetMacrosSchema,
   targetRowSchema,
   targetsResponseSchema,
   targetsWriteResultSchema,
@@ -89,6 +91,15 @@ export {
   type WriteTargets,
   type WriteWeight,
 } from "./writes"
+
+export {
+  GOAL_WEIGHT_BOUNDS,
+  goalWeightSchema,
+  profileSchema,
+  writeProfileSchema,
+  type Profile,
+  type WriteProfile,
+} from "./profile"
 
 export {
   barcodeLookupSchema,

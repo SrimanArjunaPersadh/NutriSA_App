@@ -174,6 +174,38 @@ describe("writeTargetsSchema", () => {
         .success,
     ).toBe(false)
   })
+
+  /**
+   * The plausibility bounds, which only targets carry. An extra zero on a
+   * calorie target does not make one bad row, it makes every day after it read
+   * as comfortably under — so 23000 has to be refused, not stored.
+   */
+  it("refuses a calorie target outside 500 to 10,000", () => {
+    const at = (kcal: number) =>
+      writeTargetsSchema.safeParse({ id: V7, macros: { ...macros, kcal } }).success
+
+    expect(at(500)).toBe(true)
+    expect(at(10_000)).toBe(true)
+    expect(at(499)).toBe(false)
+    expect(at(23_000)).toBe(false)
+  })
+
+  it("refuses a macro target over 1,000 g, and accepts zero", () => {
+    const withFat = (fat: number) =>
+      writeTargetsSchema.safeParse({ id: V7, macros: { ...macros, fat } }).success
+
+    expect(withFat(0)).toBe(true)
+    expect(withFat(1_000)).toBe(true)
+    expect(withFat(1_001)).toBe(false)
+    expect(withFat(-1)).toBe(false)
+  })
+
+  it("leaves meal macros on their column ceilings, not the target bounds", () => {
+    // A 12,000 kcal day of logging is unusual and real; only a *target* that
+    // size is refused.
+    const big = { ...MEAL, macros: { kcal: 12_000, protein: 40, carbs: 50, fat: 10 } }
+    expect(writeMealSchema.safeParse(big).success).toBe(true)
+  })
 })
 
 describe("writeMealSchema — portions", () => {

@@ -6,6 +6,7 @@ import { addDays, checkLogDate, currentLoggingDay, type LogDateRejection, type L
 import {
   patchMealSchema,
   writeMealSchema,
+  writeProfileSchema,
   writeTargetsSchema,
   writeWeightSchema,
 } from "@shared"
@@ -13,6 +14,7 @@ import {
 import { getScope, requireUser, type AppEnv } from "../auth/user-scope"
 import { LOGGED_DAYS_WINDOW_DAYS } from "../data/day"
 import { deleteMealLog, patchMealLog, writeMealLog } from "../data/meals"
+import { writeProfile } from "../data/profile"
 import { writeTargets } from "../data/targets"
 import { deleteWeightLog, writeWeightLog } from "../data/weight"
 import { writeRateLimit } from "../http/limits"
@@ -305,4 +307,22 @@ writes.post("/targets", async (c) => {
   if (!outcome.ok) return idTaken(c)
 
   return c.json(outcome.value, outcome.value.replaced ? 200 : 201)
+})
+
+/**
+ * `PUT /profile` — set or clear the goal weight.
+ *
+ * `PUT` rather than `POST` because it is one: the whole of what the client may
+ * set, replacing what was there, and safe to repeat. That is also why it carries
+ * no client-minted id — see `packages/shared/src/profile.ts`. Always 200: the
+ * client never needs to know whether this created the row or updated it.
+ *
+ * On this router, so it is rate-limited like every other write and refused
+ * without a verified token.
+ */
+writes.put("/profile", async (c) => {
+  const body = await parseBody(c, writeProfileSchema)
+  if (!body.ok) return badRequest(c, body.message)
+
+  return c.json(await writeProfile(getScope(c), body.data))
 })

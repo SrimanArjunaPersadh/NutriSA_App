@@ -78,6 +78,31 @@ export function macroEnergyShares(macros: Macros): MacroShares {
 }
 
 /**
+ * The energy a set of macro grams implies, in whole kcal.
+ *
+ * For the Goals screen's "Your macros add up to …" line, which sits under the
+ * calorie target the user typed. It is a note and never a correction: targets
+ * are entered as four independent numbers and stored as typed (decided with
+ * Sriman, 2026-10-25), because the one real target on record is 2300 kcal over
+ * macros that come to 1988, and deriving would have cut it by 312 without
+ * anyone choosing that.
+ *
+ * Whole kcal, because it is printed beside a whole-kcal target. Negative or
+ * non-finite grams count as zero, the same guard `macroEnergyShares` applies, so
+ * a field mid-edit cannot make the note say something absurd.
+ */
+export function kcalFromMacros(grams: Pick<Macros, "protein" | "carbs" | "fat">): number {
+  const usable = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0)
+
+  return roundTo(
+    usable(grams.protein) * ATWATER.protein +
+      usable(grams.carbs) * ATWATER.carbs +
+      usable(grams.fat) * ATWATER.fat,
+    0,
+  )
+}
+
+/**
  * Which macro contributed the most energy, or null when nothing did.
  *
  * Used to colour a meal's accent bar in the day list. That is what makes the

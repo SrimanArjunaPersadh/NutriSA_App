@@ -49,6 +49,20 @@ export const SAVED_MEAL_WORDING: SaveWording = {
   check: "Check the numbers.",
 }
 
+/**
+ * Singular on purpose. "targets" would read "Your targets is still here" in
+ * the network case, so the thing being saved is the change, not the targets.
+ */
+export const TARGETS_WORDING: SaveWording = {
+  thing: "target change",
+  check: "Check the numbers.",
+}
+
+export const GOAL_WORDING: SaveWording = {
+  thing: "goal weight",
+  check: "Check the number.",
+}
+
 /** The one message for anything this cannot name. Never blames the user. */
 const UNKNOWN = "Couldn't save that. This is a problem on our side, not yours."
 

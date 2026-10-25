@@ -5,6 +5,7 @@ import { logDaySchema, weightRangeSchema } from "@shared"
 
 import { getScope, requireUser, type AppEnv } from "../auth/user-scope"
 import { readDaySummary } from "../data/day"
+import { readProfile } from "../data/profile"
 import { readTargets } from "../data/targets"
 import { readWeightSeries } from "../data/weight"
 
@@ -94,3 +95,10 @@ reads.get("/weight-logs", async (c) => {
  * which already resolves them for that day.
  */
 reads.get("/targets", async (c) => c.json(await readTargets(getScope(c))))
+
+/**
+ * `GET /profile` — the goal weight, or null. Here and not on the write router
+ * for the same reason as `GET /targets`. The pair is documented in
+ * `../data/profile.ts`.
+ */
+reads.get("/profile", async (c) => c.json(await readProfile(getScope(c))))

@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
   View,
   type LayoutRectangle,
+  type ViewInstance,
 } from "react-native"
 
 import { ChevronDown, TickIcon } from "@/components/icons/UiIcons"
@@ -61,7 +62,7 @@ export function Dropdown<T extends string | number>({
   /** Describes what the menu selects, e.g. "Chart range". */
   accessibilityLabel: string
 }) {
-  const trigger = useRef<View>(null)
+  const trigger = useRef<ViewInstance>(null)
   const [anchor, setAnchor] = useState<LayoutRectangle | null>(null)
   const { width: screenWidth, height: screenHeight } = useWindowDimensions()
 

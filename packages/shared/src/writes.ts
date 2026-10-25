@@ -317,12 +317,41 @@ export type WriteWeight = z.infer<typeof writeWeightSchema>
  * could only be a mistake, and it would be a silent one: the new targets would
  * appear to do nothing. Lifting that is one line when a scheduling surface
  * exists.
+ *
+ * ## The one write here with plausibility bounds
+ *
+ * Everything else in this file is bounded only by its column, on the principle
+ * in the header: refusing a real user's real number is worse than accepting a
+ * typo. A target is different in kind. It is a setting someone chooses, not a
+ * measurement of something that happened, so no honest one is 50,000 kcal, and a
+ * typo here is not one bad row: it is the yardstick every day is judged by, and
+ * an extra zero turns every day green from then on. Decided with Sriman,
+ * 2026-10-25, along with the numbers in `TARGET_BOUNDS`.
+ *
+ * The Goals screen reads `TARGET_BOUNDS` to gate its Save button, so the form
+ * and the server refuse exactly the same values.
  */
+export const TARGET_BOUNDS = {
+  kcal: { min: 500, max: 10_000 },
+  grams: { min: 0, max: 1_000 },
+} as const
+
+export const targetMacrosSchema = z.object({
+  kcal: z.number().min(TARGET_BOUNDS.kcal.min).max(TARGET_BOUNDS.kcal.max),
+  protein: z.number().min(TARGET_BOUNDS.grams.min).max(TARGET_BOUNDS.grams.max),
+  carbs: z.number().min(TARGET_BOUNDS.grams.min).max(TARGET_BOUNDS.grams.max),
+  fat: z.number().min(TARGET_BOUNDS.grams.min).max(TARGET_BOUNDS.grams.max),
+})
+
 export const writeTargetsSchema = z.object({
   id: clientIdSchema,
-  /** Omit for today — the usual case, "these are my targets from now". */
+  /**
+   * Omit for today — the usual case, "these are my targets from now". The Goals
+   * screen always omits it; back-dating a target was considered and declined
+   * (plan.md, Phase 7b), and only the API still accepts one.
+   */
   validFrom: logDaySchema.optional(),
-  macros: writeMacrosSchema,
+  macros: targetMacrosSchema,
 })
 
 export type WriteTargets = z.infer<typeof writeTargetsSchema>

@@ -30,15 +30,25 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
  * rather than removing the limit.
  */
 
+/**
+ * C and D exist for the profile tests alone. The write limit is per user, and
+ * A already spends most of a minute's budget on the meal and weigh-in cases;
+ * giving the profile its own pair keeps every user well under it rather than
+ * loosening the limit the header warns about.
+ */
 const ids = vi.hoisted(() => ({
   userA: "",
   userB: "",
+  userC: "",
+  userD: "",
 }))
 
 vi.mock("@clerk/backend", () => ({
   verifyToken: async (token: string) => {
     if (token === "token-a") return { sub: ids.userA }
     if (token === "token-b") return { sub: ids.userB }
+    if (token === "token-c") return { sub: ids.userC }
+    if (token === "token-d") return { sub: ids.userD }
     throw new Error("Token verification failed")
   },
 }))
@@ -114,6 +124,9 @@ const patch = (path: string, token: string | undefined, body: Json) =>
 const del = (path: string, token: string | undefined) =>
   send(writes, "DELETE", path, token)
 
+const put = (path: string, token: string | undefined, body: Json) =>
+  send(writes, "PUT", path, token, body)
+
 /** A complete, valid meal body. Spread it and override the interesting field. */
 function meal(overrides: Json = {}): Json {
   return {
@@ -143,6 +156,8 @@ beforeAll(async () => {
 
   ids.userA = `user_sectest_wa_${randomUUID().replace(/-/g, "")}`
   ids.userB = `user_sectest_wb_${randomUUID().replace(/-/g, "")}`
+  ids.userC = `user_sectest_wc_${randomUUID().replace(/-/g, "")}`
+  ids.userD = `user_sectest_wd_${randomUUID().replace(/-/g, "")}`
 
   const dbModule = await import("../../server/db")
   db = dbModule.db
@@ -159,6 +174,8 @@ beforeAll(async () => {
     db.insert(schema.users).values([
       { clerkId: ids.userA, email: "wa@sectest.invalid" },
       { clerkId: ids.userB, email: "wb@sectest.invalid" },
+      { clerkId: ids.userC, email: "wc@sectest.invalid" },
+      { clerkId: ids.userD, email: "wd@sectest.invalid" },
     ]),
   )
 })
@@ -166,7 +183,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (!db || !withRetry) return
   await setup("cleanup", () =>
-    db.delete(schema.users).where(inArray(schema.users.clerkId, [ids.userA, ids.userB])),
+    db
+      .delete(schema.users)
+      .where(inArray(schema.users.clerkId, [ids.userA, ids.userB, ids.userC, ids.userD])),
   )
 })
 
@@ -191,6 +210,13 @@ describe("an unauthenticated write is refused, and writes nothing", () => {
     expect((await post("/weight-logs", "forged", { id: uuidv7(), weightKg: 90 })).status).toBe(401)
     expect((await del("/meal-logs/" + randomUUID(), "forged")).status).toBe(401)
     expect((await del("/weight-logs/" + randomUUID(), "forged")).status).toBe(401)
+    expect(
+      (await post("/targets", "forged", {
+        id: uuidv7(),
+        macros: { kcal: 2300, protein: 167, carbs: 195, fat: 60 },
+      })).status,
+    ).toBe(401)
+    expect((await put("/profile", "forged", { goalWeightKg: 80 })).status).toBe(401)
   })
 })
 
@@ -723,6 +749,144 @@ describe("targets", () => {
       macros,
     })
     expect(res.status).toBe(400)
+  })
+
+  // As B: A's write budget is nearly spent by this point (see `ids` above).
+  it("refuses a target outside the plausible bounds, and stores nothing", async () => {
+    const res = await post("/targets", "token-b", {
+      id: uuidv7(),
+      macros: { ...macros, kcal: 23_000 },
+    })
+    expect(res.status).toBe(400)
+
+    const after = await getTargets("token-b")
+    expect(after.body).toEqual({ current: null, history: [] })
+  })
+
+  it("does not touch A's targets when B sets B's own", async () => {
+    const before = await getTargets("token-a")
+    const res = await post("/targets", "token-b", {
+      id: uuidv7(),
+      macros: { kcal: 1800, protein: 120, carbs: 150, fat: 50 },
+    })
+    expect(res.status).toBe(201)
+
+    expect((await getTargets("token-a")).body).toEqual(before.body)
+    expect((await getTargets("token-b")).body.current).toMatchObject({
+      macros: { kcal: 1800 },
+    })
+  })
+})
+
+/**
+ * `PUT /profile` — the goal weight, the one profile field v1 holds.
+ *
+ * The same guarantees as every other write, plus the one this route adds: the
+ * profile fields no feature reads cannot be written at all (POPIA minimality,
+ * plan.md Phase 7b). That last case asserts on the stored row, not on the
+ * response, because a response that leaves `heightCm` out proves nothing about
+ * whether it was stored.
+ */
+describe("profile", () => {
+  async function getProfile(token: string) {
+    const res = await reads.request("/profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return { status: res.status, body: (await res.json()) as Json }
+  }
+
+  async function profileRows(userId: string) {
+    return setup("read profiles", () =>
+      db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId)),
+    )
+  }
+
+  it("reads a user with no profile row as having no goal", async () => {
+    const read = await getProfile("token-c")
+    expect(read.status).toBe(200)
+    expect(read.body).toEqual({ goalWeightKg: null })
+  })
+
+  it("sets a goal and reads it back", async () => {
+    const res = await put("/profile", "token-c", { goalWeightKg: 80.5 })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ goalWeightKg: 80.5 })
+
+    expect((await getProfile("token-c")).body).toEqual({ goalWeightKg: 80.5 })
+  })
+
+  it("updates the one row rather than adding a second", async () => {
+    await put("/profile", "token-c", { goalWeightKg: 78 })
+    const rows = await profileRows(ids.userC)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.goalWeightKg).toBe(78)
+  })
+
+  it("shows B none of A's profile, and B's write leaves A's alone", async () => {
+    expect((await getProfile("token-d")).body).toEqual({ goalWeightKg: null })
+
+    const res = await put("/profile", "token-d", { goalWeightKg: 65 })
+    expect(res.status).toBe(200)
+
+    expect((await getProfile("token-c")).body).toEqual({ goalWeightKg: 78 })
+    expect((await getProfile("token-d")).body).toEqual({ goalWeightKg: 65 })
+  })
+
+  it("stores nothing but the goal, whatever else the body carries", async () => {
+    const res = await put("/profile", "token-c", {
+      goalWeightKg: 77,
+      heightCm: 180,
+      age: 30,
+      sex: "male",
+      activity: "high",
+      goalRate: -0.5,
+      user_id: ids.userD,
+      userId: ids.userD,
+    })
+    expect(res.status).toBe(200)
+
+    const [row] = await profileRows(ids.userC)
+    expect(row).toMatchObject({
+      userId: ids.userC,
+      goalWeightKg: 77,
+      heightCm: null,
+      age: null,
+      sex: null,
+      activity: null,
+      goalRate: null,
+    })
+    expect((await getProfile("token-d")).body).toEqual({ goalWeightKg: 65 })
+  })
+
+  it("clears the goal with null, keeping the row", async () => {
+    const res = await put("/profile", "token-c", { goalWeightKg: null })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ goalWeightKg: null })
+
+    const rows = await profileRows(ids.userC)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.goalWeightKg).toBeNull()
+  })
+
+  it("refuses a goal outside 30 to 300 kg, and an empty body", async () => {
+    expect((await put("/profile", "token-c", { goalWeightKg: 25 })).status).toBe(400)
+    expect((await put("/profile", "token-c", { goalWeightKg: 82.35 })).status).toBe(400)
+    expect((await put("/profile", "token-c", {})).status).toBe(400)
+  })
+
+  it("names the field that failed without echoing the value", async () => {
+    const res = await put("/profile", "token-c", { goalWeightKg: 412 })
+    expect(res.status).toBe(400)
+
+    const message = String(res.body.message)
+    expect(message).toContain("goalWeightKg")
+    expect(message).not.toContain("412")
+  })
+
+  it("refuses a read and a write with no token", async () => {
+    const read = await reads.request("/profile")
+    expect(read.status).toBe(401)
+    expect((await put("/profile", undefined, { goalWeightKg: 80 })).status).toBe(401)
   })
 })
 

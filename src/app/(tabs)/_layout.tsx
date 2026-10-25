@@ -1,6 +1,6 @@
 import { View } from "react-native"
 import { Redirect } from "expo-router"
-import { NativeTabs } from "expo-router/unstable-native-tabs"
+import { NativeTabs } from "expo-router/native-tabs"
 import { useAuth } from "@clerk/expo"
 
 import { colors } from "@/design/tokens"
@@ -10,19 +10,22 @@ import { colors } from "@/design/tokens"
  * AGENTS.md; the JavaScript `Tabs` and @react-navigation/bottom-tabs are both
  * off the table.
  *
- * The `unstable-native-tabs` import path is correct and expected, and it did not
- * change in the SDK 54 → 57 upgrade. The element shape did: `Icon` and `Label`
- * were top-level exports on 54 and are compound members on 57 —
+ * Native Tabs went stable in SDK 58, so the import is `expo-router/native-tabs`.
+ * The old `unstable-native-tabs` path still resolves on 58 but is deprecated and
+ * `console.warn`s on every launch; it re-exports the same component. Do not
+ * shorten the path to `expo-router/tabs`: on 58 that is the JavaScript tab bar.
+ * The element shape last changed in the SDK 54 → 57 upgrade: `Icon` and `Label`
+ * were top-level exports on 54 and are compound members since 57 —
  * `NativeTabs.Trigger.Icon` / `NativeTabs.Trigger.Label`. Verified against
- * node_modules/expo-router/build/native-tabs/NativeTabs.d.ts, which exports only
- * `NativeTabs` and `NativeTabTrigger`. Every prop on the `<NativeTabs>` tag below
- * survived the jump unrenamed.
+ * node_modules/expo-router/build/native-tabs/index.d.ts. Every prop on the
+ * `<NativeTabs>` tag below survived both jumps unrenamed.
  *
  * Android still gets labels without icons. That is now a choice rather than a
  * limit: SDK 54's `Icon` needed a `drawable` resource name and this project has
- * no android/ drawables (CNG owns that folder), but SDK 57's `Icon` also accepts
- * `md` for Material Symbols, which needs no drawable. iPhone is the target, so
- * closing that gap is its own small branch, not this one.
+ * no android/ drawables (CNG owns that folder), but `Icon` also accepts `md` for
+ * Material Symbols, which needs no drawable. On SDK 58 `md` additionally needs
+ * the optional peer `expo-symbols` installed. iPhone is the target, so closing
+ * that gap is its own small branch, not this one.
  *
  * The auth guard lives here rather than on a screen so that every tab is behind
  * it at once, and `isLoaded` is checked before `isSignedIn` for the same reason

@@ -91,7 +91,7 @@ export function isAuthError(error: unknown): boolean {
  * Sending an unauthenticated call to a route that will certainly refuse it just
  * turns one clear local state into a round-trip and a 401.
  *
- * ## One function, four verbs
+ * ## One function, five verbs
  *
  * The write helpers below are the same request with a body and a method. They
  * were nearly copied — a `apiPost` with its own `fetch`, its own ngrok header
@@ -101,7 +101,7 @@ export function isAuthError(error: unknown): boolean {
  * there is a body at all — three conditionals, all visible in one place.
  */
 async function request<T extends z.ZodType>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   schema: T,
   getToken: () => Promise<string | null>,
@@ -213,6 +213,20 @@ export async function apiPost<T extends z.ZodType>(
   getToken: () => Promise<string | null>,
 ): Promise<z.infer<T>> {
   return request("POST", path, schema, getToken, body)
+}
+
+/**
+ * A PUT — the whole of a resource replaced, safe to repeat. Only `/profile`
+ * uses it, and it carries no client-minted id: see
+ * `packages/shared/src/profile.ts` for why a profile does not need one.
+ */
+export async function apiPut<T extends z.ZodType>(
+  path: string,
+  body: unknown,
+  schema: T,
+  getToken: () => Promise<string | null>,
+): Promise<z.infer<T>> {
+  return request("PUT", path, schema, getToken, body)
 }
 
 /** A PATCH — a partial correction to a row that already exists. */

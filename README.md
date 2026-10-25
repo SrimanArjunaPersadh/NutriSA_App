@@ -49,8 +49,8 @@ Do these four things, in order, before writing or asking for any code.
   `&&`: run commands one per line, or use `;`.
 - **Node 22 and npm.**
 - **An iPhone with Expo Go from the App Store.** Expo Go supports exactly one SDK at a time,
-  and **this project is pinned to SDK 57** because that is what the App Store build runs
-  (React Native 0.86.3). Do not upgrade the SDK until Expo Go on the phone reports a newer
+  and **this project is pinned to SDK 58** because that is what the App Store build runs
+  (React Native 0.88.0). Do not upgrade the SDK until Expo Go on the phone reports a newer
   one. `tests/expo-sdk-pin.test.ts` enforces the pin. Full history in `AGENTS.md`.
 - **Accounts:** Neon (database), Clerk (sign-in), ngrok (free plan, with its one permanent
   domain), Sentry (optional). Open Food Facts needs no account.
@@ -64,7 +64,6 @@ Do these four things, in order, before writing or asking for any code.
 | `CLERK_WEBHOOK_SIGNING_SECRET` | Verifies Clerk's user-created / user-deleted webhooks |
 | `DATABASE_URL` | Neon, the real database |
 | `TEST_DATABASE_URL` | A separate Neon **branch** for the security tests. Never the real database |
-| `SEED_GOAL_WEIGHT_KG` | Used once by `npm run seed:profile` |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_AUTH_TOKEN` | Error reporting. Leave the DSN empty to keep Sentry off |
 | `OFF_USER_AGENT` | How the server identifies itself to Open Food Facts: `NutriSA/0.1 (your-email)` |
 | `INNGEST_DEV` | Points background jobs at the local Inngest dev server |
@@ -278,7 +277,6 @@ The full list is "Standing rules" in `plan.md`. The ones that matter most day to
 | `npx drizzle-kit generate` | Generates a migration after a schema change |
 | `npm run db:migrate` | Applies migrations to the database in `DATABASE_URL` |
 | `npm run db:studio` | Browse the database in a web UI |
-| `npm run seed:profile` | One-off: seeds the goal weight |
 
 ## Claude skills in this repo
 

@@ -92,9 +92,10 @@ often re-ranks it instantly. Don't block on him if he's away.
 Weight these ahead of the generic ones, because they have already bitten:
 
 - **SDK-version drift.** An API copied from `docs.expo.dev/versions/latest` rather than
-  `v54.0.0`. Native Tabs in particular changed shape between 54 and 55.
+  the pinned SDK's versioned docs (`PINNED_SDK` in `tests/expo-sdk-pin.test.ts`). Native
+  Tabs in particular changed shape between 54 and 55, and its import path between 57 and 58.
 - **Native Tabs vs JS tabs.** A prop that exists in `@react-navigation/bottom-tabs` and
-  not in `expo-router/unstable-native-tabs`.
+  not in `expo-router/native-tabs`.
 - **Time authority.** Any date not from `currentLoggingDay()` — a stray `new Date()`
   resolves to device local time, and Africa/Johannesburg is UTC+2, so the day key flips
   two hours early.

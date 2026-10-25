@@ -18,6 +18,7 @@ Expo app ──Bearer <Clerk session token>──▶ requireUser ──▶ UserS
 | `GET /api/day/:date` | One day: targets, consumed, remaining, ring progress, meals, 7-day average intake, the streak, and the logged days behind the week strip. `:date` may be `today`. |
 | `GET /api/weight-logs?days=30` | The trend series, latest point, 7- and 30-day change, goal weight, goal progress, projection. |
 | `GET /api/targets` | The macro targets in force today, and every set on record. |
+| `GET /api/profile` | The goal weight, or `null`. The only profile field v1 holds. |
 
 Two fields on the day response are **as of today, not as of `:date`**: `streak`
 and `loggedDays`. The flame in the dashboard header answers "have I logged
@@ -38,7 +39,8 @@ rate limit the reads do not carry.
 | `DELETE /api/meal-logs/:id` | Removes one | `200` always, with `deleted` |
 | `DELETE /api/weight-logs/:id` | Removes a weigh-in | `200` always, with `deleted` |
 | `POST /api/weight-logs` | Records a weigh-in | `201` new day · `200` that day's was replaced |
-| `POST /api/targets` | Sets targets from a day | `201` new day · `200` that day's were replaced |
+| `POST /api/targets` | Sets targets from a day. Bounded: 500–10,000 kcal, 0–1,000 g per macro | `201` new day · `200` that day's were replaced |
+| `PUT /api/profile` | Sets or clears (`null`) the goal weight, 30–300 kg. Any other field in the body is dropped | `200` always |
 
 **Foods and saved meals** (branch `food-logger`) — `routes/foods.ts`, mounted
 before the writes router so its reads are not metered by the write limit. The
@@ -122,6 +124,7 @@ on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
 | `data/weight.ts` | Assembles `GET /weight-logs`, and records a weigh-in |
 | `data/meals.ts` | Writes and deletes a logged meal |
 | `data/targets.ts` | Reads and sets the effective-dated macro targets |
+| `data/profile.ts` | Reads and sets the goal weight (one `profiles` row per user) |
 | `data/foods.ts` | Food search (local half and full), recents by meal, barcode lookup, creating a food |
 | `data/saved-meals.ts` | Lists, creates, patches and deletes saved meals |
 | `food/rows.ts` | Pure mappings: `foods` rows and Open Food Facts products to `Food`, logged lines to recents |

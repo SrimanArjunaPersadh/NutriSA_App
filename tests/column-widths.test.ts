@@ -1,7 +1,7 @@
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
 
-import { writeMealSchema, writeTargetsSchema, writeWeightSchema } from "@shared"
+import { TARGET_BOUNDS, writeMealSchema, writeWeightSchema } from "@shared"
 
 import { mealLogs, targets, weightLogs } from "../server/db/schema"
 
@@ -109,20 +109,6 @@ const cases = [
     accepts: (value: number) =>
       writeWeightSchema.safeParse({ id: ID, weightKg: value }).success,
   },
-  {
-    what: "target kcal",
-    column: targets.kcal,
-    accepts: (value: number) =>
-      writeTargetsSchema.safeParse({ id: ID, macros: { kcal: value, protein: 0, carbs: 0, fat: 0 } })
-        .success,
-  },
-  {
-    what: "target protein",
-    column: targets.pro,
-    accepts: (value: number) =>
-      writeTargetsSchema.safeParse({ id: ID, macros: { kcal: 0, protein: value, carbs: 0, fat: 0 } })
-        .success,
-  },
 ] as const
 
 const ID = "01997b9b-5a3f-7000-8000-000000000001"
@@ -140,5 +126,24 @@ describe("every write bound matches the column behind it", () => {
     // One unit of the column's own scale past the maximum: the smallest number
     // that would overflow, which is the one a looser bound would let through.
     expect(accepts(columnMax(column) + step(column))).toBe(false)
+  })
+})
+
+/**
+ * Targets are the exception: since Phase 7b they carry plausibility bounds
+ * (`TARGET_BOUNDS`, decided with Sriman 2026-10-25) that sit far inside their
+ * columns, so the two cases above cannot apply to them. What still has to hold
+ * is the reason this file exists: no value the schema accepts may overflow the
+ * column and come back as a 500. So the bound must fit, and if a column is ever
+ * narrowed below it, this fails.
+ */
+describe("the target bounds fit inside their columns", () => {
+  it.each([
+    { what: "target kcal", column: targets.kcal, max: TARGET_BOUNDS.kcal.max },
+    { what: "target protein", column: targets.pro, max: TARGET_BOUNDS.grams.max },
+    { what: "target carbs", column: targets.carb, max: TARGET_BOUNDS.grams.max },
+    { what: "target fat", column: targets.fat, max: TARGET_BOUNDS.grams.max },
+  ])("$what's bound is no wider than its column", ({ column, max }) => {
+    expect(max).toBeLessThanOrEqual(columnMax(column))
   })
 })

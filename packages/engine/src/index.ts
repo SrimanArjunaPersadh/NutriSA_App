@@ -52,6 +52,7 @@ export {
 
 export {
   macroEnergyShares,
+  kcalFromMacros,
   dominantMacro,
   ATWATER,
   NO_SHARES,
