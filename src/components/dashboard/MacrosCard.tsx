@@ -46,8 +46,8 @@ const CARD_BODY_HEIGHT = 138
  * things.
  *
  * Every surface reads this order: the rings here, the entry form's four fields
- * and its two total lines, `CalorieDonut`'s arcs and the three cards on the
- * Nutrition tab.
+ * and its two total lines, and the Nutrition tab's three macro bars
+ * (`CaloriesLeftCard`).
  *
  * Worth stating plainly because it is not obvious from any one file: **the
  * order a macro is *displayed* in is a design decision made once, and the order
@@ -118,18 +118,25 @@ export function MacrosCard() {
                     // ring and an over-target purple ring look identical.
                     color={over ? colors.danger : ring.color}
                   >
+                    {/* The grams in the macro's colour (2026-10-20), red when over. */}
                     <View className="flex-row items-baseline">
-                      <Text className="font-display text-[23px] leading-[26px] text-white">
+                      <Text
+                        className="font-display text-[23px] leading-[26px]"
+                        style={{ color: over ? colors.danger : ring.color }}
+                      >
                         {formatGrams(consumed)}
                       </Text>
-                      <Text className="ml-[2px] font-barlow-medium text-[12px] text-white">
+                      <Text
+                        className="ml-[2px] font-barlow-bold text-[12px]"
+                        style={{ color: over ? colors.danger : ring.color }}
+                      >
                         g
                       </Text>
                     </View>
                   </ProgressRing>
 
                   <Text
-                    className="mt-[10px] font-barlow-semibold text-[13px] tracking-[0.6px]"
+                    className="mt-[10px] font-barlow-bold text-[13px] tracking-[0.6px]"
                     style={{ color: ring.color }}
                   >
                     {ring.label}

@@ -12,14 +12,14 @@ import { useLocalSearchParams, useRouter } from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { currentLoggingDay, isLogDay, type LogDay } from "@engine"
-import { MAX_WEIGHT_KG, type WriteWeight } from "@shared"
+import { type WriteWeight } from "@shared"
 
 import { ChevronLeft, TrashIcon } from "@/components/icons/UiIcons"
 import { DayStepper } from "@/components/logging/DayStepper"
 import { FieldLabel } from "@/components/logging/fields"
 import { ErrorState, Loading } from "@/components/state"
 import { colors } from "@/design/tokens"
-import { formatDayWithWeekday, formatKg } from "@/lib/format"
+import { formatDayWithWeekday, formatKg, parseKg } from "@/lib/format"
 import { useDeleteWeight, useLogWeight, useWeightSeries } from "@/lib/queries"
 import { deleteErrorMessage, saveErrorMessage, WEIGHT_WORDING } from "@/lib/save-message"
 import { useKeyboardVisible } from "@/lib/use-keyboard-visible"
@@ -33,7 +33,7 @@ import { uuidv7 } from "@/lib/uuid"
  * plan.md, Phase 5: "log today's weight, one-handed". A field inline on a
  * scrolling tab has to live with the keyboard covering whatever is under it,
  * and the meal form already paid for that lesson once — see the
- * `keyboardVerticalOffset` note in `log-meal.tsx`. A pushed screen owns its
+ * `keyboardVerticalOffset` note below. A pushed screen owns its
  * whole height, so the pad comes up, the value is at the top and Save is under
  * the thumb, and nothing else is competing for the space.
  *
@@ -141,7 +141,7 @@ export default function LogWeight() {
     if (logWeight.error?.code === "conflict") pendingId.current = null
   }, [logWeight.error])
 
-  const weightKg = parseWeight(reading)
+  const weightKg = parseKg(reading)
   const canSave = weightKg !== null && !saving
 
   function save() {
@@ -220,8 +220,30 @@ export default function LogWeight() {
         // iOS pushes the whole view; Android's window already resizes, and
         // doubling that up leaves a gap the height of the keyboard.
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        // Zero, and it has to be zero — `log-meal.tsx` carries the full note on
-        // why a positive offset makes the padding larger rather than smaller.
+        /**
+         * Zero, and it has to be zero. (This note lived in the old meal form,
+         * `log-meal.tsx`, deleted on `food-logger`; every keyboard-avoiding
+         * screen in the app points here now.)
+         *
+         * `keyboardVerticalOffset` is **subtracted from the keyboard's screen
+         * Y** inside `KeyboardAvoidingView`, so a positive value makes the
+         * padding *larger*, not smaller. It exists for the case where something
+         * outside this view — a native navigation header — sits between the
+         * view's own coordinate space and the screen.
+         *
+         * Nothing does here. This view is laid out inside a parent that already
+         * carries `paddingTop: insets.top`, and RN's `onLayout` frame includes
+         * that padding and the header above it — so `frame.y + frame.height`
+         * already reaches the bottom of the screen and the keyboard height comes
+         * out exactly right on its own.
+         *
+         * The meal form's first version passed `insets.top + 56`, on the
+         * assumption that the offset compensated for the header. It does the
+         * opposite: it added ~115pt of padding on top of the keyboard, which
+         * rendered as a band of app-ground colour between the Save bar and the
+         * keyboard — about a quarter of the screen, and indistinguishable from a
+         * layout crash. Seen on the iPhone 15, 2026-08-20.
+         */
         keyboardVerticalOffset={0}
       >
         <View className="flex-1 px-[16px]">
@@ -255,6 +277,7 @@ export default function LogWeight() {
                 placeholderTextColor={colors.textSecondary}
                 accessibilityLabel="Weight in kilograms"
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 keyboardAppearance="dark"
                 autoFocus
                 selectTextOnFocus
@@ -311,13 +334,13 @@ export default function LogWeight() {
             accessibilityState={{ disabled: !canSave, busy: saving }}
             disabled={!canSave}
             onPress={save}
-            className={`h-[52px] items-center justify-center rounded-[14px] ${
+            className={`h-[52px] items-center justify-center rounded-full ${
               canSave ? "bg-primary active:opacity-80" : "bg-secondary"
             }`}
           >
             <Text
               className={`font-barlow-semibold text-[17px] ${
-                canSave ? "text-white" : "text-textSecondary"
+                canSave ? "text-ground" : "text-textSecondary"
               }`}
             >
               {saving ? "Saving…" : stored ? "Save weight" : "Log weight"}
@@ -329,31 +352,6 @@ export default function LogWeight() {
   )
 }
 
-/**
- * The typed characters as a weight, or null when they are not one yet.
- *
- * Deliberately **not** `toNumber` from `@/lib/meal-draft`. That one answers 0
- * for everything unusable, which is right for a macro field contributing to a
- * total and wrong here: this screen has to tell "nothing typed" from "zero
- * typed" to decide whether Save is pressable, and a 0 kg weigh-in is not a
- * thing anyone means.
- *
- * The upper bound is `MAX_WEIGHT_KG` — the width of the column, imported rather
- * than restated. Refusing here rather than letting the write make the trip is
- * only a courtesy: `writeWeightSchema` refuses it too, and is the one that
- * counts.
- *
- * Parsing, not arithmetic. It produces the number the user typed; it does not
- * derive one.
- */
-function parseWeight(text: string): number | null {
-  const trimmed = text.trim()
-  if (trimmed.length === 0) return null
-
-  const value = Number(trimmed)
-  if (!Number.isFinite(value) || value <= 0 || value > MAX_WEIGHT_KG) return null
-  return value
-}
 
 /**
  * The screen frame: a header that is always there, whatever state the body is

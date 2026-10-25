@@ -103,7 +103,7 @@ function AverageIntakeTile() {
       title="Avg Intake"
       period={`${loggedDays} of last ${windowDays} days`}
       value={formatKcal(average.kcal)}
-      unit="kcal"
+      unit="cal"
       series={series.map((point) => point.kcal)}
       // The same blue the calories ring uses. Energy is one colour across the
       // dashboard; tinting this tile differently would be decoration.

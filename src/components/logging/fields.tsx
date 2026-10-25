@@ -93,12 +93,14 @@ export function NumberField({
   onChangeText,
   suffix,
   accessibilityLabel,
+  autoFocus,
 }: {
   label: string
   value: string
   onChangeText: (next: string) => void
   suffix?: string
   accessibilityLabel?: string
+  autoFocus?: boolean
 }) {
   return (
     <View className="flex-1">
@@ -112,6 +114,11 @@ export function NumberField({
           accessibilityLabel={accessibilityLabel ?? label}
           keyboardType="decimal-pad"
           keyboardAppearance="dark"
+          autoFocus={autoFocus}
+          // A field that opens focused is holding a default that is usually
+          // about to be replaced, not appended to. Only then — the meal form's
+          // fields keep the platform's ordinary caret behaviour.
+          selectTextOnFocus={autoFocus}
           className="h-full flex-1 font-barlow text-[16px] text-white"
         />
         {suffix ? (

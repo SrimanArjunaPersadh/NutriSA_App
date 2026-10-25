@@ -197,7 +197,7 @@ function SocialButton({
 }) {
   return (
     <Pressable
-      className={`mx-[44.5px] h-[55px] flex-row items-center rounded-[10px] bg-white px-[21px] active:opacity-90 ${className}`}
+      className={`mx-[44.5px] h-[55px] flex-row items-center rounded-[10px] bg-pureWhite px-[21px] active:opacity-90 ${className}`}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"

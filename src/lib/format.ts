@@ -1,4 +1,5 @@
 import { weekdayIndex, type LogDay } from "@engine"
+import { MAX_WEIGHT_KG } from "@shared"
 
 /**
  * Display formatting. **Presentation only — nothing here computes a value.**
@@ -75,6 +76,15 @@ export function formatGrams(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
 }
 
+/**
+ * A share, 0 to 1, as a whole percentage — "80%". The share itself is the
+ * engine's (`macroEnergyShares`); this only decides how it is printed, the same
+ * way `formatKcal` rounds a figure the engine already rounded.
+ */
+export function formatShare(share: number): string {
+  return `${Math.round(Math.min(1, Math.max(0, share)) * 100)}%`
+}
+
 /** Bodyweight: always one decimal, so a column of them lines up. */
 export function formatKg(value: number): string {
   return value.toFixed(1)
@@ -87,6 +97,67 @@ export function formatKg(value: number): string {
  * leading `+` is the only way to make a gain read as a gain without colour,
  * which VoiceOver cannot convey.
  */
+/**
+ * The inverse of `formatKg` — typed characters back to a number.
+ *
+ * ## The comma is a decimal point
+ *
+ * `keyboardType="decimal-pad"` draws the **locale's** decimal separator, and
+ * this app's locale is South Africa, where that separator is a comma. So the
+ * key the keyboard actually offers is "," and `Number("98,70")` is `NaN`.
+ * Unhandled, the reading silently fails to parse, the Save button never
+ * enables, and on the device it reads as "it won't let me type a decimal".
+ * Found on the iPhone, 2026-09-09, which is the only place it *could* be
+ * found — a US-locale simulator draws a full stop and the bug is invisible.
+ *
+ * Both separators are accepted rather than only the local one: the field should
+ * not care whether the number came from a ZA keyboard, a US one, or a paste.
+ *
+ * ## Parsing, not arithmetic
+ *
+ * This produces the number that was typed. It does not derive one, so it is not
+ * a violation of the zero-arithmetic rule — no smoothing, no trend, no average.
+ * Every computed number still comes back from the engine.
+ *
+ * Returns `null` for anything that is not a usable weight, so a caller can gate
+ * a Save button on it. The upper bound is `MAX_WEIGHT_KG`, imported rather than
+ * restated; refusing here is only a courtesy, since `writeWeightSchema` refuses
+ * it too and is the one that counts.
+ */
+export function parseKg(text: string): number | null {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return null
+
+  // Only the first comma. "98,7,0" is not a number in any locale and is left
+  // to fail below rather than be silently repaired into one.
+  const normalised = trimmed.replace(",", ".")
+
+  const value = Number(normalised)
+  if (!Number.isFinite(value) || value <= 0 || value > MAX_WEIGHT_KG) return null
+  return value
+}
+
+/**
+ * A decimal typed on the decimal pad — a quantity or a macro — back to a number.
+ *
+ * Same comma rule as `parseKg`, for the same reason: the SA decimal pad offers
+ * "," and `Number("1,5")` is `NaN`. The meal form fed its quantity and macro
+ * fields straight to `Number()`, so on the iPhone "1,5 slices" became zero
+ * slices with no error anywhere. Found by reading after `parseKg`'s fix
+ * (2026-10-19) — the weigh-in field was not the only one on that keyboard.
+ *
+ * `null` for anything that is not a finite, non-negative number. Zero is a
+ * real answer here — black coffee has zero fat — so unlike `parseKg` it is
+ * accepted.
+ */
+export function parseDecimal(text: string): number | null {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return null
+
+  const value = Number(trimmed.replace(",", "."))
+  return Number.isFinite(value) && value >= 0 ? value : null
+}
+
 export function formatSignedKg(value: number): string {
   const body = Math.abs(value).toFixed(1)
   if (value > 0) return `+${body}`

@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableName, type SQL } from "drizzle-orm"
+import { and, asc, eq, getTableName, isNull, or, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import type { LogDay } from "@engine"
@@ -6,6 +6,7 @@ import type { LogDay } from "@engine"
 import type { UserScope } from "../auth/user-scope"
 import { db } from "../db"
 import { withRetry } from "../db/retry"
+import { foods } from "../db/schema"
 
 /**
  * The scoped query layer. **The only module in `server/` that may import `db`.**
@@ -344,4 +345,83 @@ export async function selectOwnedDays<T extends DatedTable>(
   )) as { day: LogDay }[]
 
   return rows.map((row) => row.day)
+}
+
+// ---------------------------------------------------------------------------
+// Foods — the one table with a nullable owner
+// ---------------------------------------------------------------------------
+
+/**
+ * `user_id = <scope> OR user_id IS NULL [AND …]` — the user's own foods and the
+ * shared ones together.
+ *
+ * Promised at the top of this file: `foods` "gets its own function when Phase
+ * 6/7 need it", and it should look different in the source, because it is the
+ * one table where "scoped to this user" is the wrong question. A global row
+ * belongs to nobody and is readable by everyone; another user's row is still
+ * nobody else's business, and the `OR` is written so that is the only widening.
+ *
+ * The extra condition is ANDed outside the `OR`, never inside it. Inside, a
+ * search for "oats" would read as "mine, or (global and oats)" and hand back
+ * every food this user owns.
+ */
+function visibleTo(scope: UserScope, extra?: SQL | undefined): SQL {
+  const visible = or(eq(foods.userId, scope.userId), isNull(foods.userId)) as SQL
+  return extra ? (and(visible, extra) as SQL) : visible
+}
+
+/** Foods this user can see. Retried like every other read in this file. */
+export async function selectVisibleFoods(
+  scope: UserScope,
+  options: ScopedSelectOptions = {},
+): Promise<(typeof foods.$inferSelect)[]> {
+  const build = () => {
+    let query = db.select().from(foods).where(visibleTo(scope, options.where)).$dynamic()
+    if (options.orderBy) {
+      query = query.orderBy(
+        ...(Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy]),
+      )
+    }
+    if (options.limit !== undefined) query = query.limit(options.limit)
+    return query
+  }
+
+  return withRetry("select foods", () => build().execute())
+}
+
+/**
+ * Cache a resolved Open Food Facts product as a **global** row — `user_id`
+ * NULL, readable by everyone, surviving any one account's deletion.
+ *
+ * plan.md, Phase 7: "Cache every OFF hit permanently as a global row" and
+ * "Never re-fetch a barcode already resolved". The partial unique index on
+ * `(coalesce(user_id, ''), barcode)` is what makes the second rule hold under a
+ * race: two users scanning the same packet in the same second both insert, one
+ * wins, the other's `ON CONFLICT DO NOTHING` returns nothing, and the caller
+ * reads the winner back.
+ *
+ * The scope is required although nothing is stamped from it. A global write is
+ * still a write an anonymous caller must not be able to cause, and taking the
+ * scope makes "this came from a verified session" a precondition the type
+ * checks rather than a convention the router keeps.
+ *
+ * `values` cannot carry a `userId`, for the opposite reason from
+ * `insertOwned`: a cached product must never be attributed to the user who
+ * happened to scan it first, or it would vanish from everyone's search when
+ * they delete their account.
+ *
+ * No conflict target, deliberately: the id is server-minted and fresh, so the
+ * only conflict that can happen is the barcode index, and naming an expression
+ * index as a target is something Drizzle's builder cannot express.
+ */
+export async function insertSharedFood(
+  scope: UserScope,
+  values: Omit<typeof foods.$inferInsert, "userId">,
+): Promise<(typeof foods.$inferSelect)[]> {
+  void scope
+  return db
+    .insert(foods)
+    .values({ ...values, userId: null })
+    .onConflictDoNothing()
+    .returning()
 }

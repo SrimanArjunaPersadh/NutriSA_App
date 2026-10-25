@@ -1,15 +1,15 @@
-import { Pressable, Text, View } from "react-native"
+import { View } from "react-native"
 
-import { PORTION_BASIS, PORTION_UNITS, type Macros, type PortionUnit } from "@engine"
+import { PORTION_BASIS, PORTION_UNITS, type PortionUnit } from "@engine"
 
-import { Dropdown, type DropdownOption } from "@/components/ui/Dropdown"
-import { CloseIcon } from "@/components/icons/UiIcons"
-import { NumberField, TextField, FieldLabel } from "@/components/logging/fields"
-import { formatGrams, formatKcal } from "@/lib/format"
-import type { DraftItem } from "@/lib/meal-draft"
+import { type DropdownOption } from "@/components/ui/Dropdown"
+import { NumberField } from "@/components/logging/fields"
 
 /**
- * One line of the manual entry form.
+ * The food form's unit vocabulary and its macro fields — what is left of the
+ * manual entry form's line editor (`log-meal.tsx` and its `MealItemRow` were
+ * deleted on `food-logger`, 2026-10-20). Used by `create-food.tsx`, the Quick
+ * Add panel and the amount panel.
  *
  * ## The unit is a control, and the label follows it everywhere
  *
@@ -35,145 +35,25 @@ const UNIT_LABELS: Record<PortionUnit, string> = {
   tbsp: "tbsp",
   tsp: "tsp",
   cup: "cups",
+  serving: "servings",
 }
 
-const UNIT_OPTIONS: readonly DropdownOption<PortionUnit>[] = PORTION_UNITS.map((unit) => ({
+/**
+ * Every unit but `serving`: a serving says nothing about grams (Sriman,
+ * 2026-10-20), so it is only ever read back from lines already saved in it,
+ * never offered.
+ */
+export const UNIT_OPTIONS: readonly DropdownOption<PortionUnit>[] = PORTION_UNITS.filter(
+  (unit) => unit !== "serving",
+).map((unit) => ({
   value: unit,
   label: UNIT_LABELS[unit],
 }))
 
 /** "per 100 g", "per slice" — the basis the four fields below are quoted against. */
-function basisLabel(unit: PortionUnit): string {
+export function basisLabel(unit: PortionUnit): string {
   const basis = PORTION_BASIS[unit]
   return basis === 1 ? `per ${unit}` : `per ${basis} ${unit}`
-}
-
-export function MealItemRow({
-  item,
-  macros,
-  index,
-  onChange,
-  onRemove,
-  removable,
-}: {
-  item: DraftItem
-  /** Engine-computed, from the debounced draft. This component never multiplies. */
-  macros: Macros
-  index: number
-  onChange: (next: DraftItem) => void
-  onRemove: () => void
-  /** False for the last remaining line — a meal with no items is not a meal. */
-  removable: boolean
-}) {
-  const set = (patch: Partial<DraftItem>) => onChange({ ...item, ...patch })
-  const setPer = (patch: Partial<DraftItem["per"]>) =>
-    onChange({ ...item, per: { ...item.per, ...patch } })
-  const setMacros = (patch: Partial<DraftItem["macros"]>) =>
-    onChange({ ...item, macros: { ...item.macros, ...patch } })
-
-  return (
-    <View className="rounded-[14px] border border-cardBorder bg-card p-[14px]">
-      <View className="flex-row items-start">
-        <TextField
-          label={`Item ${index + 1}`}
-          value={item.name}
-          onChangeText={(name) => set({ name })}
-          placeholder="What did you eat?"
-          accessibilityLabel={`Item ${index + 1} name`}
-          maxLength={200}
-        />
-        {removable ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Remove item ${index + 1}`}
-            onPress={onRemove}
-            // 18pt of ink slopped out to the 44×44 minimum, the same way the
-            // barcode button in the quick-action bar does it.
-            hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
-            className="ml-[12px] mt-[24px] active:opacity-70"
-          >
-            <CloseIcon size={18} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      {item.mode === "portion" ? (
-        <>
-          <View className="mt-[12px] flex-row items-end gap-[10px]">
-            <NumberField
-              label="Amount"
-              value={item.quantity}
-              onChangeText={(quantity) => set({ quantity })}
-              accessibilityLabel={`Item ${index + 1} amount`}
-            />
-            <View>
-              <FieldLabel>Unit</FieldLabel>
-              <Dropdown
-                value={item.unit}
-                options={UNIT_OPTIONS}
-                onChange={(unit) => set({ unit })}
-                accessibilityLabel={`Item ${index + 1} unit`}
-              />
-            </View>
-          </View>
-
-          <Text className="mt-[14px] font-barlow-medium text-[12px] uppercase tracking-[0.6px] text-textSecondary">
-            Macros {basisLabel(item.unit)}
-          </Text>
-          <MacroFields
-            values={item.per}
-            onChange={setPer}
-            accessibilityPrefix={`Item ${index + 1}`}
-          />
-        </>
-      ) : (
-        <>
-          {/*
-            The migrated-row path. `qty` is free text and is never parsed, so it
-            is shown as text and edited as text — and the macros beside it are
-            the absolute stored figures, not a per-unit rate. The heading says
-            so, because the same four boxes mean something different two lines
-            up in the other mode.
-          */}
-          <View className="mt-[12px]">
-            <TextField
-              label="Amount"
-              value={item.qty}
-              onChangeText={(qty) => set({ qty })}
-              placeholder="1 slice"
-              accessibilityLabel={`Item ${index + 1} amount`}
-              maxLength={60}
-            />
-          </View>
-          <Text className="mt-[14px] font-barlow-medium text-[12px] uppercase tracking-[0.6px] text-textSecondary">
-            Macros for this amount
-          </Text>
-          <MacroFields
-            values={item.macros}
-            onChange={setMacros}
-            accessibilityPrefix={`Item ${index + 1}`}
-          />
-        </>
-      )}
-
-      <View className="mt-[14px] flex-row items-center border-t border-cardBorder pt-[10px]">
-        <Text className="font-barlow text-[13px] text-textSecondary">This item</Text>
-        <View className="flex-1" />
-        <Text className="font-barlow-semibold text-[14px] text-white">
-          {formatKcal(macros.kcal)} kcal
-        </Text>
-        <Text className="ml-[10px] font-barlow text-[13px] text-protein">
-          P {formatGrams(macros.protein)}
-        </Text>
-        <Text className="ml-[8px] font-barlow text-[13px] text-carbs">
-          C {formatGrams(macros.carbs)}
-        </Text>
-        <Text className="ml-[8px] font-barlow text-[13px] text-fats">
-          F {formatGrams(macros.fat)}
-        </Text>
-      </View>
-    </View>
-  )
 }
 
 /**
@@ -184,7 +64,7 @@ export function MealItemRow({
  * argues it — so the eye learns a single sequence and the fields line up with
  * the row the meal will become.
  */
-function MacroFields({
+export function MacroFields({
   values,
   onChange,
   accessibilityPrefix,
@@ -200,7 +80,7 @@ function MacroFields({
           label="Energy"
           value={values.kcal}
           onChangeText={(kcal) => onChange({ kcal })}
-          suffix="kcal"
+          suffix="cal"
           accessibilityLabel={`${accessibilityPrefix} energy in kilocalories`}
         />
         <NumberField

@@ -5,7 +5,9 @@ import { verifyWebhook } from "@clerk/backend/webhooks";
 
 import type { AppEnv, UserScope } from "./auth/user-scope";
 import { env } from "./env";
+import { redactParams } from "./observability/redact";
 import { captureRouteError, initSentry } from "./observability/sentry";
+import { foodRoutes } from "./routes/foods";
 import { reads } from "./routes/reads";
 import { writes } from "./routes/writes";
 import {
@@ -117,6 +119,15 @@ app.on(["GET", "POST", "PUT"], "/api/inngest", (c) => inngestHandler(c));
 app.route("/api", reads);
 
 /**
+ * The food logger — search, recent foods, barcode lookup, create a food.
+ *
+ * **Before `writes`, and it has to be.** `writes` registers its rate limit as
+ * wildcard middleware under `/api`, so anything mounted after it is metered as a
+ * write, and a search fires on every pause in typing. See `routes/foods.ts`.
+ */
+app.route("/api", foodRoutes);
+
+/**
  * The write routes — same path prefix, same session verification, plus a
  * per-user rate limit that the reads do not carry. Two routers rather than one
  * because that limit is the difference between them: a read costs a query, a
@@ -139,7 +150,14 @@ app.route("/api", writes);
  */
 app.onError((err, c) => {
   const scope: UserScope | undefined = c.get("scope");
-  console.error(`Unhandled error on ${c.req.method} ${c.req.path}:`, err);
+  // Redacted before the log as well as before Sentry: a failed query's message
+  // lists its values after `params:`, and on `food-logger` those include a
+  // food search ("%chicken%") and a new food's macros. Privacy axis of
+  // `/nutrisa-review`, 2026-10-20.
+  console.error(
+    `Unhandled error on ${c.req.method} ${c.req.path}:`,
+    redactParams(err instanceof Error ? (err.stack ?? err.message) : String(err)),
+  );
   captureRouteError(err, scope?.userId);
   return c.json(
     { code: "server-error" as const, message: "Something went wrong." },

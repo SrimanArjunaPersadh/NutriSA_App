@@ -28,60 +28,67 @@
 export const colors = {
   // ── plan.md's fixed table ────────────────────────────────────────────────
   /** App ground. */
-  ground: "#0D0F14",
+  ground: "#131211",
   /** Card surfaces. */
-  card: "#13161E",
+  card: "#1C1B19",
   /** Nested surfaces inside a card. */
-  secondary: "#1A1E29",
+  secondary: "#262422",
   /** Primary actions, and the trend line. */
-  primary: "#0066FF",
-  /** Inline text links — brighter than `primary`, which is too dark inside a
-   *  sentence. A deliberate addition to the table, recorded in plan.md. */
-  link: "#1A7CFC",
+  primary: "#D08A5A",
+  /** Inline text links. Was a brighter blue than `primary`; since the
+   *  Graphite & Copper palette (2026-10-20) it is the same copper, which reads
+   *  well inside a sentence on the warm charcoal. Kept as its own token so the
+   *  two can part again without touching every link. */
+  link: "#D08A5A",
   /** Loss / success. */
-  ok: "#22C55E",
+  ok: "#9DB89A",
   /** Gain / over target. */
-  danger: "#FF3B30",
+  danger: "#E5614C",
   /** Warnings, and the dashed projection — a guess is never stated in the same
    *  colour as a fact. */
-  amber: "#F59E0B",
+  amber: "#E3A44A",
   /** Macro — protein. */
-  protein: "#A78BFA",
+  protein: "#4C8DFF",
   /** Macro — carbs. */
-  carbs: "#FCD34D",
+  carbs: "#FFC21A",
   /** Macro — fats. */
-  fats: "#2DD4BF",
+  fats: "#F0468F",
 
   // ── Neutrals, promoted from bare literals ────────────────────────────────
   /**
-   * Primary text, and the only near-full-brightness surface in the app.
+   * Primary text, selected chips and the slider's thumb: a **warm off-white**
+   * since the Graphite & Copper palette (2026-10-20), not pure white. Tailwind's
+   * own `white` is shadowed with this value, so `text-white` and `bg-white` are
+   * this colour too. Where true white is required (the Apple and Google sign-in
+   * buttons, a packshot's background) use `pureWhite`.
    *
-   * Tailwind has always had `white`, so `text-white` and `bg-white` worked
-   * without this — but `react-native-svg` takes a value, and an icon that has to
-   * go white had nowhere to read it from. Registered rather than typed as a hex
-   * at the one call site, because `no-hex-literals.test.ts` forbids that and is
-   * right to: the second call site is how a palette starts drifting.
-   *
-   * `tailwind.config.js` now declares it too. That shadows Tailwind's built-in
-   * `white` with the identical value, which changes nothing and keeps
-   * `tokens.test.ts`'s both-directions check honest.
+   * It is registered rather than left to Tailwind because `react-native-svg`
+   * takes a value, and an icon that has to match the text needs one to read.
    */
-  white: "#FFFFFF",
+  white: "#F3EFE9",
   /** Secondary text: captions, axis labels, units. The most-used unregistered
    *  colour in the app before this module existed. */
-  textSecondary: "#8A8F98",
+  textSecondary: "#A19A91",
   /** Raw scale readings on the chart. Deliberately dimmer than
    *  `textSecondary` — a raw daily weight is never presented as progress. */
-  dotMuted: "#6E7686",
+  dotMuted: "#7A736B",
   /** The tab bar's top hairline. */
-  hairline: "#1E222B",
+  hairline: "#2B2926",
   /** Card border. `card` and `ground` are five points apart in luminance, so
    *  without this the cards vanish on an OLED panel. */
-  cardBorder: "#20242D",
+  cardBorder: "#262422",
   /** Border on secondary buttons sitting on a card. */
-  buttonBorder: "#2A2F3B",
+  buttonBorder: "#36332F",
   /** The unfilled remainder of a progress ring. */
-  ringTrack: "#252A35",
+  ringTrack: "#34312D",
+
+  /**
+   * True white, for surfaces that must not take the warm `white` text colour:
+   * the Apple and Google sign-in buttons (both brands' guidelines ask for
+   * white) and the band behind a product photo, since packshots are shot on
+   * white. Added with the Graphite & Copper palette, 2026-10-20.
+   */
+  pureWhite: "#FFFFFF",
 
   // ── Screen-specific ──────────────────────────────────────────────────────
   /**
@@ -94,7 +101,7 @@ export const colors = {
    * ~1 ΔL*, right at the threshold, and that call belongs to a device check
    * rather than to a refactor. See the note in the branch report.
    */
-  authGradientBase: "#090B10",
+  authGradientBase: "#0E0D0C",
 } as const
 
 export type ColorToken = keyof typeof colors

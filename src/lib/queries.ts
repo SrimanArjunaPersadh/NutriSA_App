@@ -1,22 +1,39 @@
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQueryClient, useQuery } from "@tanstack/react-query"
 import { useAuth } from "@clerk/expo"
 
-import { currentLoggingDay, type LogDay } from "@engine"
+import { currentLoggingDay, type LogDay, type MealSlot } from "@engine"
 import {
+  barcodeLookupSchema,
   daySummarySchema,
   deleteResultSchema,
+  foodSearchSchema,
+  foodWriteResultSchema,
+  recentFoodsSchema,
+  savedMealSchema,
+  savedMealsSchema,
+  savedMealWriteResultSchema,
   mealPatchResultSchema,
   mealWriteResultSchema,
   weightSeriesSchema,
   weightWriteResultSchema,
+  type BarcodeLookup,
   type DaySummary,
   type DeleteResult,
+  type FoodSearch,
+  type FoodWriteResult,
   type MealPatchResult,
   type MealWriteResult,
   type PatchMeal,
+  type PatchSavedMeal,
+  type RecentFoods,
+  type SavedMeal,
+  type SavedMeals,
+  type SavedMealWriteResult,
   type WeightSeries,
   type WeightWriteResult,
+  type WriteFood,
   type WriteMeal,
+  type WriteSavedMeal,
   type WriteWeight,
 } from "@shared"
 
@@ -65,6 +82,21 @@ export const queryKeys = {
    */
   allWeightSeries: (userId: string | null | undefined) =>
     ["weight-logs", userId ?? "anonymous"] as const,
+  foodSearch: (userId: string | null | undefined, query: string) =>
+    ["foods", userId ?? "anonymous", "search", query] as const,
+  /** Under "search" too, so invalidating searches reaches both halves. */
+  localFoodSearch: (userId: string | null | undefined, query: string) =>
+    ["foods", userId ?? "anonymous", "search", "local", query] as const,
+  /** Every slot's list sits under the bare key, so one invalidation reaches all four. */
+  recentFoods: (userId: string | null | undefined, slot?: MealSlot) =>
+    slot
+      ? (["foods", userId ?? "anonymous", "recent", slot] as const)
+      : (["foods", userId ?? "anonymous", "recent"] as const),
+  barcode: (userId: string | null | undefined, code: string) =>
+    ["foods", userId ?? "anonymous", "barcode", code] as const,
+  savedMeals: (userId: string | null | undefined) => ["saved-meals", userId ?? "anonymous"] as const,
+  /** Everything food-shaped this user has cached. What creating a food invalidates. */
+  allFoods: (userId: string | null | undefined) => ["foods", userId ?? "anonymous"] as const,
 }
 
 /**
@@ -155,7 +187,16 @@ function useInvalidateDays() {
   const { userId } = useAuth()
   const client = useQueryClient()
 
-  return () => client.invalidateQueries({ queryKey: queryKeys.allDays(userId) })
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.allDays(userId) }),
+      // Recent foods are read out of the logged meals, so every meal write
+      // moves them too — a food logged a minute ago should be at the top of
+      // the list the next time the logger opens. So does search, which leads
+      // with "your foods" from the same meals.
+      client.invalidateQueries({ queryKey: queryKeys.recentFoods(userId) }),
+      client.invalidateQueries({ queryKey: ["foods", userId ?? "anonymous", "search"] }),
+    ])
 }
 
 /**
@@ -286,5 +327,160 @@ export function useDeleteWeight() {
   return useMutation<DeleteResult, ApiError, string>({
     mutationFn: (id) => apiDelete(`/api/weight-logs/${id}`, deleteResultSchema, getToken),
     onSuccess: () => void invalidateWeight(),
+  })
+}
+
+/**
+ * Food search — the user's own foods, the shared ones, then Open Food Facts.
+ *
+ * `query` must already be debounced by the caller. This hook fires on every
+ * value it is given, and an undebounced search box would spend the server's
+ * per-minute OFF budget on "c", "ch" and "chi".
+ *
+ * `keepPreviousData`, so the list under the thumb holds still while the next
+ * query is in flight instead of blanking to a spinner on every keystroke.
+ */
+export function useFoodSearch(query: string) {
+  const { userId, getToken, isSignedIn } = useAuth()
+  const trimmed = query.trim()
+
+  return useQuery<FoodSearch, ApiError>({
+    queryKey: queryKeys.foodSearch(userId, trimmed.toLowerCase()),
+    queryFn: () =>
+      apiGet(`/api/foods/search?q=${encodeURIComponent(trimmed)}`, foodSearchSchema, getToken),
+    enabled: Boolean(isSignedIn) && trimmed.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
+    retry,
+  })
+}
+
+/**
+ * The fast half of a search: your foods and the saved ones, no Open Food Facts.
+ * The logger shows this the moment it lands and fills in `useFoodSearch`'s
+ * fuller answer when that arrives (2026-10-20, "searching is quite slow").
+ */
+export function useLocalFoodSearch(query: string) {
+  const { userId, getToken, isSignedIn } = useAuth()
+  const trimmed = query.trim()
+
+  return useQuery<FoodSearch, ApiError>({
+    queryKey: queryKeys.localFoodSearch(userId, trimmed.toLowerCase()),
+    queryFn: () =>
+      apiGet(`/api/foods/search/local?q=${encodeURIComponent(trimmed)}`, foodSearchSchema, getToken),
+    enabled: Boolean(isSignedIn) && trimmed.length > 0,
+    staleTime: 60_000,
+    retry,
+  })
+}
+
+/**
+ * What the logger shows before anything is typed: "Usually at breakfast" when
+ * `slot` is Breakfast — the foods eaten at that meal first.
+ */
+export function useRecentFoods(slot?: MealSlot) {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<RecentFoods, ApiError>({
+    queryKey: queryKeys.recentFoods(userId, slot),
+    queryFn: () =>
+      apiGet(`/api/foods/recent${slot ? `?slot=${slot}` : ""}`, recentFoodsSchema, getToken),
+    // Switching meals keeps the old list up until the new one lands, rather
+    // than flashing a spinner between two lists that mostly overlap.
+    placeholderData: keepPreviousData,
+    enabled: Boolean(isSignedIn),
+    staleTime: 60_000,
+    retry,
+  })
+}
+
+/**
+ * One barcode, local first, then Open Food Facts. `null` while nothing has
+ * been scanned yet.
+ *
+ * Cached for the session: a barcode's product does not change between two
+ * scans of the same packet, and the server never re-fetches a resolved one
+ * either.
+ */
+export function useBarcodeLookup(code: string | null) {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<BarcodeLookup, ApiError>({
+    queryKey: queryKeys.barcode(userId, code ?? ""),
+    queryFn: () =>
+      apiGet(`/api/foods/barcode/${encodeURIComponent(code ?? "")}`, barcodeLookupSchema, getToken),
+    enabled: Boolean(isSignedIn) && code !== null,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry,
+  })
+}
+
+/**
+ * Create a food of the user's own. The id comes from the caller, for the same
+ * idempotency reason as every other create — see `useLogMeal`.
+ */
+export function useCreateFood() {
+  const { userId, getToken } = useAuth()
+  const client = useQueryClient()
+
+  return useMutation<FoodWriteResult, ApiError, WriteFood>({
+    mutationFn: (input) => apiPost("/api/foods", input, foodWriteResultSchema, getToken),
+    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.allFoods(userId) }),
+  })
+}
+
+/**
+ * Every saved meal, by name. One list, read whole: the library, the logger's
+ * strip and the detail screen all draw from it, so an edit in one shows in all
+ * three after a single invalidation.
+ */
+export function useSavedMeals() {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<SavedMeals, ApiError>({
+    queryKey: queryKeys.savedMeals(userId),
+    queryFn: () => apiGet("/api/saved-meals", savedMealsSchema, getToken),
+    enabled: Boolean(isSignedIn),
+    staleTime: 5 * 60_000,
+    retry,
+  })
+}
+
+function useInvalidateSavedMeals() {
+  const { userId } = useAuth()
+  const client = useQueryClient()
+  return () => client.invalidateQueries({ queryKey: queryKeys.savedMeals(userId) })
+}
+
+/** Save a meal to the library. Client-minted id, as every create. */
+export function useCreateSavedMeal() {
+  const { getToken } = useAuth()
+  const invalidate = useInvalidateSavedMeals()
+
+  return useMutation<SavedMealWriteResult, ApiError, WriteSavedMeal>({
+    mutationFn: (input) =>
+      apiPost("/api/saved-meals", input, savedMealWriteResultSchema, getToken),
+    onSuccess: () => void invalidate(),
+  })
+}
+
+export function useUpdateSavedMeal() {
+  const { getToken } = useAuth()
+  const invalidate = useInvalidateSavedMeals()
+
+  return useMutation<SavedMeal, ApiError, { id: string; patch: PatchSavedMeal }>({
+    mutationFn: ({ id, patch }) =>
+      apiPatch(`/api/saved-meals/${id}`, patch, savedMealSchema, getToken),
+    onSuccess: () => void invalidate(),
+  })
+}
+
+export function useDeleteSavedMeal() {
+  const { getToken } = useAuth()
+  const invalidate = useInvalidateSavedMeals()
+
+  return useMutation<DeleteResult, ApiError, string>({
+    mutationFn: (id) => apiDelete(`/api/saved-meals/${id}`, deleteResultSchema, getToken),
+    onSuccess: () => void invalidate(),
   })
 }

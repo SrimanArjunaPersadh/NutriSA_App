@@ -1,7 +1,8 @@
 import { Pressable, Text, View } from "react-native"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useRouter } from "expo-router"
 
 import { BarcodeIcon, SearchIcon, SparkleIcon } from "@/components/icons/UiIcons"
+import { PinnedBar } from "@/components/ui/PinnedBar"
 
 /**
  * The three logging entry points, pinned above the tab bar: search a food, scan
@@ -29,45 +30,38 @@ import { BarcodeIcon, SearchIcon, SparkleIcon } from "@/components/icons/UiIcons
  * barcode icon could open search *and* the scanner. Two siblings in a row
  * container look identical and cannot do that.
  *
- * ## The one number to tune on device
+ * ## Positioning and the backdrop belong to `PinnedBar`
  *
- * `TAB_BAR_CLEARANCE` is how far this sits above the bottom of the screen, on
- * top of the home-indicator inset. It is a guess: the iOS 26 tab bar's height
- * is not something the screen is told, and whether `insets.bottom` already
- * includes it under native tabs is exactly the kind of thing that differs
- * between the simulator and the phone. If the row tucks under the tab bar or
- * floats too high, change it here — `(tabs)/index.tsx` derives its scroll
- * padding from these exports, so nothing else needs touching.
+ * This component is only the three controls. Where the row sits above the tab
+ * bar (`TAB_BAR_CLEARANCE`) and the scrim that stops the scroll content showing
+ * through behind it both live in `@/components/ui/PinnedBar`, shared with
+ * Nutrition and Weight. `(tabs)/index.tsx` derives its scroll padding from
+ * `TAB_BAR_CLEARANCE` and `CONTROL_HEIGHT`.
  */
-
-export const TAB_BAR_CLEARANCE = 62
 
 /** Height of the pill and the assistant button — they sit on one baseline. */
 export const CONTROL_HEIGHT = 52
 
 export function QuickActionBar() {
-  const insets = useSafeAreaInsets()
+  const router = useRouter()
 
   return (
-    <View
-      className="absolute inset-x-0 bottom-0 flex-row items-center gap-[10px] px-[16px]"
-      style={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
-    >
+    <PinnedBar>
+      <View className="flex-row items-center gap-[10px]">
       <View className="h-[52px] flex-1 flex-row items-center rounded-full border border-cardBorder bg-secondary px-[16px]">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search for a food"
-          // All three controls here are unwired — see the note in InsightCard.tsx.
-          accessibilityState={{ disabled: true }}
+          // Today, always. The logger's day is the dashboard's day.
+          onPress={() => router.push("/add-food?mode=search&focus=1")}
           className="h-full flex-1 flex-row items-center active:opacity-70"
         >
           <SearchIcon size={20} />
 
           {/*
-            A Text placeholder, not a TextInput. Tapping this will push a search
-            screen rather than raise the keyboard in place, and a real input that
-            accepts characters and does nothing with them is a worse lie than a
-            button that looks like a field.
+            A Text placeholder, not a TextInput. Tapping this pushes the food
+            logger, which owns the real search field — a dashboard has nowhere
+            to show the results.
           */}
           <Text className="ml-[10px] flex-1 font-barlow text-[16px] text-textSecondary">
             Search for a food
@@ -77,7 +71,7 @@ export function QuickActionBar() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Scan a barcode"
-          accessibilityState={{ disabled: true }}
+          onPress={() => router.push("/add-food?mode=scan")}
           // 22pt of ink, slopped out to the 44×44 minimum.
           hitSlop={{ top: 11, bottom: 11, left: 11, right: 11 }}
           className="active:opacity-70"
@@ -89,11 +83,13 @@ export function QuickActionBar() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ask the AI assistant"
+        // Still unwired: the assistant is Phase 9. See the note in InsightCard.tsx.
         accessibilityState={{ disabled: true }}
         className="h-[52px] w-[52px] items-center justify-center rounded-full border border-cardBorder bg-secondary active:opacity-80"
       >
-        <SparkleIcon size={22} />
-      </Pressable>
-    </View>
+          <SparkleIcon size={22} />
+        </Pressable>
+      </View>
+    </PinnedBar>
   )
 }

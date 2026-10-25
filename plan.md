@@ -43,8 +43,19 @@ items stay open and both need the phone: the ten-second stopwatch and the 44×44
 **468 tests green across 24 files** offline. The chart itself was already built on
 `dashboard-live-data` and moved into `src/components/weight/TrendChart.tsx` so both
 surfaces draw the same one. **Still unverified on the device, and no write route in this
-app has yet been confirmed end to end with a real Clerk token** · Phases 6–12 not started ·
-v1.1 deferred
+app has yet been confirmed end to end with a real Clerk token** ·
+**Expo SDK 54 → 57 on 2026-09-09, forced rather than chosen** — the App Store Expo Go
+binary moved to 57 and stopped opening the 54 project, which is the exact condition the pin
+always named as its release. React Native 0.81.5 → 0.86.3. One compile break in the repo
+(the Native Tabs element shape), no config changes, 468 tests still green. **This makes the
+device pass more urgent, not less: every SDK-54 device verification in this file — the tab
+bar, the fonts, the sign-in — was measured against packages that have now moved** ·
+**The food logger landed 2026-10-19 (`food-logger`)** — MacroFactor's plate model:
+food search over own, shared and Open Food Facts rows, recent foods, a serving
+editor, Quick Add, create-a-food, and barcode scanning with OFF lookup cached as
+global rows. The food half of Phase 6 and most of Phase 7; saved meals
+(`custom_meals`) followed the same day. **604 tests green across 27 files; search confirmed on device, the redesign not yet** ·
+Phases 8–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -153,30 +164,31 @@ Copy this block into each branch's review before merging.
 
 | Token | Value | Use |
 |---|---|---|
-| Background | `#0D0F14` | App ground |
-| Card | `#13161E` | Surfaces |
-| Secondary | `#1A1E29` | Nested surfaces |
-| Primary | `#0066FF` | Primary actions |
-| Green | `#22C55E` | Loss / success |
-| Red | `#FF3B30` | Gain / over target |
-| Amber | `#F59E0B` | Warnings |
-| Protein | `#A78BFA` | Macro — reserved |
-| Carbs | `#FCD34D` | Macro — reserved |
-| Fats | `#2DD4BF` | Macro — reserved |
-| White | `#FFFFFF` | Primary text, and the one full-brightness surface |
+| Background | `#131211` | App ground (warm graphite) |
+| Card | `#1C1B19` | Surfaces |
+| Secondary | `#262422` | Nested surfaces, chips, the `+` |
+| Primary | `#D08A5A` | Copper: main action buttons (with `ground` text), accents, links, the trend line |
+| Link | `#D08A5A` | Inline text links; the same copper as Primary, kept as its own token |
+| Green (`ok`) | `#9DB89A` | Loss / success, a muted sage |
+| Red (`danger`) | `#E5614C` | Gain / over target |
+| Amber | `#E3A44A` | Warnings |
+| Protein | `#4C8DFF` | Macro — reserved (bold blue) |
+| Carbs | `#FFC21A` | Macro — reserved (bold yellow) |
+| Fats | `#F0468F` | Macro — reserved (bold pink) |
+| White | `#F3EFE9` | Primary text and selected chips: a warm off-white |
+| Pure white | `#FFFFFF` | Only the Apple / Google sign-in buttons and product-photo bands |
 
-`White` was added to the table on `meal-logging`, 2026-08-20, after a review pointed out
-that it had been registered in `src/design/tokens.ts` and `tailwind.config.js` without
-appearing here — and this table is what "the tokens are fixed" refers to. Tailwind has
-always had `white`, so `text-white` worked without a token; what needed one was
-`react-native-svg`, which takes a value and cannot read a class. The rule the omission
-broke is "no new colour that is not in the token table, **even via a token**".
+**Graphite & Copper, 2026-10-20, Sriman's pick** of four drawn options
+(https://claude.ai/artifact/Jvck67nbkRvfWuqkRp2UjS), after he called the previous palette
+"stock: blue, black and green". A same-day detour through a neutral black with white
+buttons and the system font was reverted; Barlow stays. Neutrals: `textSecondary
+#A19A91`, `dotMuted #7A736B`, `hairline #2B2926`, `cardBorder #262422`, `buttonBorder
+#36332F`, `ringTrack #34312D`, `authGradientBase #0E0D0C`. Still dark only.
 
-The one full-brightness surface is the "Log Foods" button on the Nutrition tab. It is the
-single action on that screen, and `Primary` blue is already spoken for by the dashboard's
-actions, so white reads as a step up rather than as a second blue thing.
+Main action buttons are copper (`bg-primary`) with `text-ground` on them; selected chips
+are `white` with `ground` text.
 
-Typography: **Barlow Condensed 800 italic** for stats and titles, **Barlow 400–600** for body.
+Typography: **Barlow Condensed 800 italic** for stats and titles, **Barlow 400–600** for body. Tried and reverted on 2026-10-20: the system font (SF Pro). Sriman preferred Barlow after seeing it on the phone.
 
 ---
 
@@ -188,10 +200,22 @@ No code. Blocks Phase 1.
       passed `expo-doctor` 20/20, then died on the device: *"Project is incompatible with
       this version of Expo Go."*
       **The lesson, which outranks the docs: App Store Expo Go supports exactly one SDK at
-      a time, and the iPhone reports SDK 54.** Newer SDKs ship on npm and in the docs long
-      before the Expo Go binary clears Apple review — SDK 57's was still in the queue.
-      `eas go` builds a personal Expo Go for a newer SDK but needs the paid Apple account,
-      i.e. Phase 12. **The device decides the SDK, not `docs.expo.dev/versions/latest`.**
+      a time, and at that date the iPhone reported SDK 54.** Newer SDKs ship on npm and in
+      the docs long before the Expo Go binary clears Apple review — SDK 57's was still in
+      the queue. `eas go` builds a personal Expo Go for a newer SDK but needs the paid Apple
+      account, i.e. Phase 12. **The device decides the SDK, not
+      `docs.expo.dev/versions/latest`.**
+- [x] **SDK 57 upgrade done and kept — 2026-09-09.** The same upgrade, thirty days later,
+      for the same reason it failed the first time: Expo Go on the iPhone now reports **SDK
+      57** and Metro refused the 54 project against it. `expo` 54.0.36 → ^57.0.0,
+      `react-native` 0.81.5 → 0.86.3, `react` 19.1.0 → 19.2.3, `typescript` 5.9 → 6.0.3,
+      every `expo-*` module to `57.x` (SDK-aligned versioning, not six API generations).
+      **One hard compile break in the whole repo** — the Native Tabs element shape, below.
+      `app.json`, `babel.config.js`, `metro.config.js` and `tailwind.config.js` needed no
+      change; `typedRoutes` and `reactCompiler` still exist in the 57 config types.
+      NativeWind stayed on v4.2.6. Typecheck clean, 468 tests green, `expo-doctor` 21/21 —
+      **and none of that is proof, because the first attempt passed all three too.** The
+      device is the proof. Research: `docs/research/expo-sdk-57-upgrade.md`
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
@@ -618,11 +642,15 @@ comes in through the front door, the same way an attacker would.
       verified on the iPhone 2026-08-12. **Not Library**, which is what this line said
       and what the design mock shows: Sriman chose the AI Assistant as the fourth tab.
       Library moved inside Nutrition rather than being dropped — see Phase 6.
-      Native Tabs via `expo-router/unstable-native-tabs`, SDK 54 API (`Icon` / `Label`
-      imported alongside `NativeTabs`, not the compound form of SDK 55+).
-      SF Symbols on iOS; **Android renders labels with no icons** because SDK 54's `Icon`
-      wants an Android drawable resource and this project has none — a config-plugin job,
-      not a blocker while iPhone is the target
+      Native Tabs via `expo-router/unstable-native-tabs`, **SDK 57 API** since 2026-09-09
+      (the compound `NativeTabs.Trigger.Icon` / `NativeTabs.Trigger.Label`, not the
+      top-level `Icon` / `Label` of SDK 54). The import path did not change and every
+      `<NativeTabs>` prop survived unrenamed.
+      SF Symbols on iOS; **Android still renders labels with no icons**, but that is now a
+      choice rather than a limit — SDK 54's `Icon` wanted an Android drawable and this
+      project has none, while SDK 57's also accepts `md` (Material Symbols) and needs no
+      drawable. A small branch, not a config-plugin job, and not a blocker while iPhone is
+      the target
 - [x] Clerk provider + secure token cache
 - [x] **Google sign-in working in Expo Go** — verified on device 2026-08-10
 - [x] **Apple sign-in working in Expo Go** — verified the same day, via Clerk browser
@@ -686,7 +714,8 @@ genuinely not started.
       Each meal row is the control that opens it for editing; the items are
       printed under the header rather than hidden behind a disclosure, because a
       day view that shows only totals is one you cannot check
-- [x] Manual entry form — the speed-critical surface. `src/app/log-meal.tsx`,
+- [x] Manual entry form — the speed-critical surface. `src/app/log-meal.tsx` (**deleted on
+      `food-logger`, 2026-10-20**: replaced by the logger and `meal.tsx`; see Phase 7's branch log),
       one screen for both create and edit. `?id=` opens an existing meal and
       patches it; without one it posts a new one. They were nearly two screens,
       and every field and every state would have existed twice with the edit
@@ -707,7 +736,9 @@ genuinely not started.
       *computed* from it. Typing "150" passes through 1 and 15, and undebounced
       the running total flashes 3, then 52, then 525 — three wrong numbers under
       the thumb for every right one
-- [ ] Save a new food to `foods` with `source='manual'` from the entry flow —
+- [x] Save a new food to `foods` with `source='manual'` from the entry flow —
+      **landed on `food-logger`, 2026-10-19**, beside the search that makes it
+      worth having: `POST /foods` and `src/app/create-food.tsx`. Original note:
       **deliberately not on this branch.** It needs `POST /foods`, which needs
       the nullable-`user_id` scoping `server/data/scoped.ts` says it will not
       cover, and it is only worth anything next to food *search* — both of which
@@ -1012,6 +1043,62 @@ listed:
   arithmetic; it added a surface. Keep or cut is Sriman's call, and cutting it is a
   20-line deletion with nothing else depending on it.
 
+### The device pass — 2026-09-09, on the iPhone, SDK 57
+
+The first time any of Phase 5 was looked at on hardware, and the first time **any write in
+this app went out from a device**. Four things were confirmed and three defects fell out.
+
+**Confirmed:**
+
+- **`POST /weight-logs` works end to end with a real Clerk token.** 98,70 saved. Every write
+  route had been proven against real Postgres and none had ever been exercised through the
+  device's own token until now — that was the single largest unknown in the project and it
+  is closed.
+- **`DELETE /weight-logs/:id` works from the device**, confirm dialog and all.
+- **`TAB_BAR_CLEARANCE + 96` clears the native tab bar.** It was a guess carried over from
+  the Nutrition tab. The answer it settles, worth more than the number: `insets.bottom` does
+  **not** already include the iOS 26 native tab bar, so pinned controls must add their own
+  clearance. The constant now lives in `@/components/ui/PinnedBar`.
+- **`keyboardVerticalOffset={0}` is right on `log-weight`.** No band of ground colour above
+  the keys. The long note in `log-meal.tsx` stands.
+
+**Defect 1 — a weigh-in of 98.70 could not be entered.** `parseWeight` did `Number(text)`,
+which is `NaN` for `"98,70"`, so the reading never parsed and Save stayed disabled. It reads
+on the device as "it won't let me type a decimal". The cause is that `decimal-pad` draws the
+**locale's** decimal separator and this app's locale is South Africa, where that separator is
+a comma. Now `parseKg` in `src/lib/format.ts` — moved out of the screen so it could be
+tested, since nothing under `src/app/` is unit-testable by this repo's convention — and it
+accepts both separators. Fifteen cases in `tests/format.test.ts`, including the round-trip
+against `formatKg`.
+
+**This class of bug is invisible off-device**: a US-locale simulator draws a full stop and
+every offline test until now typed one. Worth remembering for any other numeric input.
+
+**Defect 2 — the pinned bars had no backdrop.** All three screens had grown the same
+absolutely-positioned wrapper by hand, and all three were transparent behind the control: the
+pill is opaque but the gutters beside it and the ~62pt band between it and the tab bar were
+not, so scroll content ran visibly underneath. On the dashboard you could watch the weight
+trend, then Insights and Analytics, slide through the gap. Now one shared
+`@/components/ui/PinnedBar` owns the positioning **and** a gradient scrim — transparent at the
+top, solid `ground` by the time it reaches the control, so text fades out under the bar
+instead of vanishing at a seam. Fixing it in three places would have left a fourth screen
+free to repeat it.
+
+**Defect 3 — the chart could not be read per-day.** Raised as "I can't cross-reference each
+day": the curve had no per-point readout, and the history list below it is no substitute
+because it shows **raw weigh-ins** while the curve shows the **smoothed trend** — different
+numbers, by design. `TrendChart` now takes `scrubbable`, and the Weight tab passes it: drag
+along the chart for a vertical rule, a highlighted point and a readout giving the date, the
+trend, and the raw reading when that day has one. Opt-in rather than always-on, because the
+dashboard's 150pt card is a summary you tap to get here and a scrub gesture there would
+compete with both the tap and the dashboard's own scrolling.
+
+The readout is transient — it leaves on release rather than latching — and every number in it
+is transcribed from a point the engine already computed. The scrub only selects *which* point.
+
+**Still not done on device:** the chart has not been checked against `trend-oracle.test.ts`
+now that the scrubber makes it possible. That is the last unticked Phase 5 box.
+
 ### Decisions made on `weight-and-trend`
 
 - **No `PATCH /weight-logs/:id`, by design.** A weigh-in is one number on one day with no
@@ -1055,17 +1142,45 @@ you open it to log a saved meal, which is a nutrition action, so it belongs one 
 the day view rather than across the tab bar. This also keeps the bar at four with the
 AI Assistant in the fourth slot.
 
-- [ ] Entry point on the Nutrition day view — the control that opens the library. Owned
-      by this phase, not Phase 4: the day view ships before the library exists, so the
-      link has to arrive with the thing it links to
-- [ ] Library screen: saved meals list, search, categories
-- [ ] Meal builder: compose from `foods` rows, live engine-computed running totals
-- [ ] Save a composed meal to `custom_meals`
-- [ ] Log a saved meal to today in one or two taps
-- [ ] Edit / delete a saved meal
-- [ ] Food search across own + global rows, single merged result list
-- [ ] Create / edit a food (per100 **or** per_unit — exactly one, enforced)
-- [ ] Verify the 4 migrated `custom_meals` and 11 migrated foods render correctly
+**Landed on `food-logger`, 2026-10-19** — the food half first (search, create, the
+logger), then saved meals the same day at Sriman's request. See "Branch
+`food-logger`" under Phase 7, which covers both phases' worth of work.
+
+- [x] Entry point on the Nutrition day view — "Saved meals ›" in the header opens the
+      library; each meal card's `+` opens the logger on that meal, and the "Log food" bar
+      opens it typing (or scanning, from its barcode). The first version's mode row and
+      Log Foods button are gone (rebuilt from research, 2026-10-20)
+- [x] Library screen: saved meals list, search, categories — `src/app/saved-meals.tsx`.
+      Category chips here; **search is the logger's**, which matches saved meals by
+      name, rather than a second search box doing the same thing
+- [~] Meal builder: compose from `foods` rows, live engine-computed running totals —
+      **the plate** (`src/lib/plate.ts`) is this, for a meal being logged now. Saving
+      a plate as a reusable meal is the `custom_meals` work below
+- [x] Save a composed meal to `custom_meals` — "Save as a meal for later" on the plate
+      sheet, under a name asked for in its own field (never the slot's). `POST /saved-meals`
+- [x] Log a saved meal to today in one or two taps — **one**: "Log to today" on
+      `src/app/saved-meal.tsx`. **Two** from the logger: `+` on its tile, then Log
+      Foods. Either way the logged row's `lib_id` points back at the saved meal, and the
+      saved header is what is logged — from the logger only while the plate is still
+      exactly that meal (`asSaved` in `add-food.tsx`; Spec axis, 2026-10-20)
+- [x] Edit / delete a saved meal — rename, category, note, change an amount, remove a
+      line, delete. `PATCH` / `DELETE /saved-meals/:id`. **A rename never touches the
+      header**: `items` and `macros` change together or not at all
+      (`patchSavedMealSchema`), so the 4 migrated meals' totals cannot move by being
+      renamed
+- [x] Food search across own + global rows, single merged result list — `GET
+      /foods/search`, own rows first, then shared, then Open Food Facts (SA products
+      only), with OFF hits already cached locally dropped from the OFF half
+- [~] Create / edit a food (per100 **or** per_unit — exactly one, enforced) — **create
+      only.** The unit decides the column server-side, so a body cannot ask for both.
+      No edit or delete surface for a food yet
+- [ ] Verify the 4 migrated `custom_meals` and 11 migrated foods render correctly — the
+      11 foods now appear in search; **not checked on device**. `foodFromRow` maps an
+      unknown per-one unit to "piece" with the stored word as the label, because the
+      migrated rows' `unit` values could not be read from this machine (Neon was
+      unreachable from the agent's sandbox on 2026-10-19). Later the same branch Neon was
+      reachable over HTTPS and the 4 saved meals' lines were read (see "One metric");
+      the 11 foods' units were not re-checked
 
 ---
 
@@ -1073,17 +1188,391 @@ AI Assistant in the fourth slot.
 
 **Goal:** the first logging tier, and the start of the SA food-database moat.
 
-- [ ] `expo-camera` `<CameraView>` + `onBarcodeScanned` prop
-      (**not** `launchScanner()` / `onModernBarcodeScanned()` — not in Expo Go)
-- [ ] Camera permission request with a clear rationale, and a denied state
-- [ ] Local `foods` lookup by barcode **first** — cached hit never touches the network
-- [ ] Open Food Facts lookup on miss
-- [ ] **Cache every OFF hit permanently** as a global row (`user_id NULL`, `source='off'`)
-- [ ] **Never re-fetch a barcode already resolved** — first resolution is permanent
-- [ ] Not-found state falls through cleanly to the label-photo tier
-- [ ] OFF timeout / outage handled — degrade to manual, don't hang
-- [ ] Scanned food flows into the log form with quantity prefilled
-- [ ] Confirm the partial unique index actually prevents duplicate global barcodes
+Built on `food-logger`, 2026-10-19, together with the food half of Phase 6. **Nothing
+here has been on the phone yet** — the camera least of all.
+
+- [x] `expo-camera` `<CameraView>` + `onBarcodeScanned` prop —
+      `src/components/food/BarcodeScanner.tsx`. `expo-camera` ~57.0.6 via
+      `npx expo install`, plugin registered in `app.json`, and `CameraView` added to
+      `nativewind-interop.ts` before it ever rendered (unregistered, `className` is
+      dropped and the preview is zero height)
+- [x] Camera permission request with a clear rationale, and a denied state — and a
+      denied-for-good state that opens Settings, since the prompt cannot be re-shown
+- [x] Local `foods` lookup by barcode **first** — `lookupBarcode` in
+      `server/data/foods.ts`, own row before shared
+- [x] Open Food Facts lookup on miss — `server/food/off.ts`, product API v2
+- [x] **Cache every OFF hit permanently** as a global row — `insertSharedFood` in the
+      scoped layer. `user_id` is not settable there by type, so a cached product can
+      never be attributed to whoever scanned it first
+- [x] **Never re-fetch a barcode already resolved** — follows from local-first plus
+      the cache; the security suite asserts B's scan is answered locally after A's
+- [~] Not-found state falls through cleanly to the label-photo tier — **falls through
+      to "Add it from the label"** (`create-food.tsx`, barcode pre-filled, saved with
+      the food so the next scan resolves locally). The photo tier is Phase 8
+- [x] OFF timeout / outage handled — 4s search / 6s product timeouts, a per-minute
+      budget under OFF's published limits, and every failure is a status the screen
+      words, never a throw. Search still returns local results when OFF is down
+- [x] Scanned food flows into the log form with quantity prefilled — into the
+      **serving sheet**, prefilled with the label's serving
+- [~] Confirm the partial unique index actually prevents duplicate global barcodes —
+      **written, not run**: `tests/security/food-isolation.test.ts`. Same merge gate
+      as the rest of the security suite
+
+### Branch `food-logger` — what landed, 2026-10-19
+
+**The ask:** "finish the functionality and UI by end of today and have logging food
+items possible", with MacroFactor and FatSecret as the reference. Scope agreed with
+Sriman the same day: the logger plus barcode (Phases 6-food and 7), and **live Open
+Food Facts search** for the data, rather than seeding a generic food table.
+
+**How MacroFactor was studied:** from its own published descriptions of the logger
+and from `src/design/nutrition_ui.png`, which is a MacroFactor screenshot. REA was
+asked for but had nothing to analyse — no APK, IPA or Android device on this
+machine — and decompiling a commercial app would breach its terms for no gain, since
+the UX is public. What was taken from it, all of which `add-food.tsx` implements:
+
+- **The plate** — foods accumulate, a minified plate at the top shows the running
+  total, one Log action writes the lot. `src/lib/plate.ts`, a module store, because
+  the plate has to survive `create-food.tsx` being pushed on top of it
+- **Two targets per row** — `+` adds the usual serving and stays on the list
+  (MacroFactor's Multi-Add); the row opens the serving editor
+- **Remembered servings** — the empty search box shows recent foods with last
+  time's amount, read out of `meal_logs` (`GET /foods/recent`). FatSecret's
+  "Recently eaten" is the same idea
+- **No Breakfast/Lunch/Dinner buckets** — the meal is named for the time of day by
+  `mealNameFor` in the engine, editable on the plate sheet before logging
+- **Quick Add** — calories and macros, no food behind them, stored as a `direct`
+  line with no invented portion
+
+What was **not** taken: MacroFactor's hourly "picks" ranking (recents are by
+recency only), AI describe (Phase 9), micronutrients (the schema has none).
+
+**Server.** `GET /foods/search`, `GET /foods/recent`, `GET /foods/barcode/:code`,
+`POST /foods` in `server/routes/foods.ts`, **mounted before `writes`** in
+`server/index.ts` — `writes` registers its rate limit as wildcard middleware under
+`/api`, so anything mounted after it would meter every search keystroke as a write.
+`selectVisibleFoods` / `insertSharedFood` in the scoped layer are the two `foods`
+helpers it always said it would grow. The pure mapping (`foodFromRow`, `foodFromOff`,
+`recentFoodsFromMeals`) is in `server/food/rows.ts`, outside `server/data/`, because
+everything there must take a scope and none of this reads anything. Tested in
+`tests/food-rows.test.ts` against the real OFF shapes probed that day.
+
+**Engine.** `kcalFromKj` — SA labels lead with kJ and many OFF records carry no
+kcal at all — and `mealNameFor`. Both in `packages/engine/src/foods.ts`, tested.
+
+**Shared.** `packages/shared/src/foods.ts`: one `Food` shape for own, shared, OFF
+and recent foods, macros always **per basis** so a food goes onto the plate in
+exactly the shape a meal line's `portion.per` is stored in. `foodDisplayName` lives
+here because both sides fold the brand into the name and must agree.
+
+**A defect fixed on the way, same class as the device pass's Defect 1.** The meal
+form's `toNumber` was `Number(text)`, so on the SA decimal pad "1,5 slices" was zero
+slices, silently, on every quantity and macro field. Now `parseDecimal` in
+`src/lib/format.ts`, tested. Found by reading, not on the device — worth confirming
+there.
+
+**Also changed:** the dashboard's search pill and scan button were unwired
+placeholders and now open the logger; `ModeTabs` takes `active: null` so the day
+view can use it as launchers; `NumberField` takes `autoFocus`; the plate is cleared
+on sign-out with the query cache, since it is health data in memory.
+
+**Decisions made on `food-logger`:**
+
+- **No brand column.** A cached OFF product's brand is folded into `foods.name`
+  ("KOO Baked Beans in Tomato Sauce"). A column would mean a migration against the
+  live database for a subtitle; the brand is part of the name people search by.
+- **OFF products missing any of energy, protein, carbs or fat are dropped**, not
+  shown with zeros. "0 g protein" on baked beans would be believed.
+- **An OFF search hit is not cached until it is scanned.** Caching every result of
+  every search would write ~20 global rows per query. A barcode lookup caches; a
+  search reads.
+- **`GET /foods/barcode/:code` writes**, a global cache row, despite being a GET.
+  It is idempotent (one row per barcode, by unique index) and metered by the OFF
+  budget rather than the per-user write limit.
+- **The plate survives closing the logger** for the session, as MacroFactor's
+  does, and is cleared on Log or sign-out.
+
+**Saved meals, the same day.** `packages/shared/src/saved-meals.ts`,
+`server/data/saved-meals.ts`, four routes on the same router as the food routes
+(mounted before `writes` for the reason above, each write with `writeRateLimit`), the
+library and detail screens, the logger's tile strip and "Save as meal". The item
+mapping both directions (`storedItemFromWrite`, `readMealItems`) moved from private
+copies in `meals.ts` and `day.ts` into `server/food/rows.ts` so `custom_meals` could
+share it rather than add a third copy. Five isolation cases appended to
+`tests/security/food-isolation.test.ts`, unexecuted with the rest.
+
+**Device defect fixed the same day — the serving sheet "looks all messed up".**
+Reported on tapping a search result (a Greek yoghurt). Diagnosed from RN 0.86's
+`KeyboardAvoidingView.js`, not yet confirmed on the phone: the component learns the
+keyboard's position only from a `keyboardWillShow` event, and one that **mounts while
+the keyboard is already up** — exactly the sheet, opened from a search the user was
+typing — starts with no padding and lays out under the keyboard. Both sheets now use
+`useKeyboardHeight` (`src/lib/use-keyboard-height.ts`), which reads
+`Keyboard.metrics()` on mount. A second, real bug in the same sheet: it debounced a
+fresh `{ ...item, quantity }` object, which re-armed the debounce every render and
+re-rendered the sheet every 300ms while open. It debounces the string now.
+
+**Redesigned to `src/design/nutrition_tabs.jpeg`, the same day.** Sriman supplied a
+four-screen reference for search; the logger now follows it: "Log Food" with the
+search field and barcode button at the top, "Search Results" rows with the packet
+photo, kcal and P/C/F on the right and a tinted `+`, Recents and Saved meals as
+horizontal cards, a food detail sheet (photo, name and kcal badge, macro bars, amount
+field **and slider**, one full-width "Add to Breakfast"), an "added to Breakfast"
+banner on every add, and the plate inline as a "Breakfast ›" card. The `ModeTabs`
+row left the logger; Scan is the barcode button, Quick Add a row on the home view.
+
+- **The reference is evidence, not instruction.** Its orange is `primary`, because
+  orange is not in the locked token table. Its macro colours are the locked ones.
+  Its tab bar is not drawn. Its direct-to-log adds stay plate adds — the copy says
+  "Add to Breakfast" and the plate *is* Breakfast — because a meal row per food would
+  degrade the day view, saved meals and the editor.
+- **The macro bars are energy shares** (`macroEnergyShares`), which is what the
+  reference's "P 18g / 80%" is: 18 g of protein is 72 of 90 kcal.
+- **The slider's scale is the engine's**: `portionRange`, `quantityAtFraction`,
+  `fractionOfQuantity`, `stepQuantity` in `portions.ts`, tested. The slider itself
+  (`src/components/ui/AmountSlider.tsx`) is React Native's `PanResponder`, no new
+  dependency, and adjustable for VoiceOver.
+- **Product photos are hotlinked from Open Food Facts**, never stored and never
+  through ImageKit (which is for images this app stores). The server passes through
+  only `https://images.openfoodfacts.org/` URLs. Cached rows have no image column,
+  so a scanned product shows its photo on the first scan only — adding
+  `foods.image_url` is a migration, deferred.
+- **The amount field no longer focuses on open**; the slider is the fast path and a
+  keyboard would cover it.
+
+**Device report on the redesign, the same evening — two defects, both fixed:**
+
+- **Dragging the amount slider went back a screen.** On iOS 26, react-native-screens
+  enables the native full-screen back gesture by default (`fullScreenGestureEnabled`,
+  unset means on), so any rightward drag on a pushed screen starts a pop. Now
+  `fullScreenGestureEnabled: false` on the root stack in `src/app/_layout.tsx` (the
+  left-edge swipe still works), and `gestureEnabled: false` on the logger and the saved
+  meal screen while a sheet is open. Confirmed from the library source, not yet on the
+  phone. **Worth remembering for any future horizontal gesture on a pushed screen.**
+- **"It assumes I want to add it to Dinner."** The plate's name came from the clock and
+  could only be changed inside the plate sheet. Now a Breakfast / Lunch / Dinner / Snack
+  row (`MealPicker`, from `MEAL_SLOTS` in the engine) sits under the search field with
+  the clock's guess selected. A saved meal's or custom name shows as its own chip.
+
+**Second device report, the same night: the plate.** Two complaints, one cause each.
+
+- **"279 kcal" in the top corner meant nothing.** It was the minified plate with no
+  label. Removed; the plate's summary is now the bottom bar ("Breakfast · 2 items ·
+  279 kcal", tap to open) beside a Log button.
+- **"Save as meal" clashed with Breakfast.** One "Meal" field held both the meal being
+  logged to and the name a saved meal would get, so saving produced a saved meal called
+  "Breakfast". Split: the slot comes only from the Breakfast / Lunch / Dinner / Snack
+  row and is the plate sheet's title; a saved meal's name is asked for in its own field
+  ("Name this saved meal", placeholder "e.g. Oats and berries") only when saving.
+  Adding a saved meal to the plate no longer renames the plate either; `lib_id` still
+  records where it came from. The plate sheet was redrawn around one primary action
+  ("Log Breakfast · 279 kcal") with saving and clearing as secondary text buttons.
+
+**Third device report, 2026-10-20: spacing.** "Everything doesn't look good", with two
+specifics, both fixed:
+
+- **The meal row sat on the search field.** 6pt between them. Now 14pt below the
+  search field, 14pt below the row, then a hairline that separates the controls from the
+  list; the lists start 16pt under it. Chips are 34pt tall with slop to 44.
+- **Nutrition's pinned bar covered the last meal.** The scroll padding was a constant
+  (`TAB_BAR_CLEARANCE + 64` = 126) but the bar takes `insets.bottom + 62 + 48`, about
+  20pt more on an iPhone with a home indicator. The padding is now derived from the bar
+  by `usePinnedBarClearance(LOG_FOODS_BAR_HEIGHT)` in `PinnedBar.tsx`, so the two
+  cannot drift apart again.
+
+**Rebuilt from research, 2026-10-20.** The general "doesn't look great" was answered with
+research rather than guesses. `research designs/` (repo root) holds the App Store
+screenshots of eight loggers (MacroFactor, MyFitnessPal, Lose It, MyNetDiary,
+Cronometer, Yazio, FatSecret, Cal AI), a notes file per app, MacroFactor's
+logging-speed ranking, and `prototype.html`, a clickable mockup Sriman approved ("I like
+the prototype... make it possible"). What landed:
+
+- **Nutrition tab.** A "Calories left" card (`CaloriesLeftCard`: left as the hero
+  number, eaten and target under it, one bar, three macro bars) replaced the ring that
+  led with eaten. The day's meals sit under four cards, Breakfast / Lunch / Dinner /
+  Snack (`MealSlotCard`), **each with its own `+`** that opens the logger on that meal
+  (`/add-food?slot=`). That is the fix for "it assumes Dinner": the meal is chosen by
+  where you tap. Which card a meal sits under is the engine's new `slotOfMeal` (a slot
+  name wins, otherwise the clock); slot totals are `sumMacros`. The mode-tab row is
+  gone, and the bottom bar is one "Log food" pill with a barcode button
+  (`LogFoodsBar`). "Saved meals ›" moved into the header, replacing a disabled
+  collapse button.
+- **Logger.** The meal is the title, "Breakfast ▾", opening `SlotSheet` (FatSecret,
+  MyFitnessPal); `MealPicker`'s chip row is deleted. Under the search field: Scan ·
+  Quick add · New food. Empty search shows **"Usually at breakfast"**: `GET
+  /foods/recent?slot=` ranks foods eaten at that meal by how often, then the rest
+  newest first (`recentFoodsFromMeals`, MacroFactor's "3 PM Picks"). Search leads with
+  **"Your foods"**, up to five matches from your own logged meals, marked "Yours"
+  (MyNetDiary), then "All foods". `+` clears the search for the next food. The banner
+  has **Undo**. The inline `PlateCard` is gone; the bottom plate bar does that job.
+- **Food panel.** − and + beside the amount, one-tap amounts from the engine's new
+  `servingPresets` (serving, 100 g, half; or half and double for countable units), and
+  **"Left today after this"**: `remainingMacros(sumMacros([consumed, rest of plate,
+  this food]), targets)`. The button reads "Add to Breakfast · 90 kcal", in white like
+  the plate's Log.
+- **Left in place, now unused:** `CalorieDonut`, `MacroMiniCard`, `MealCard`, and
+  `ModeTabs` (still exports the `LogMode` type). Sriman agreed (2026-10-20): delete them
+  once the device has approved the new screens.
+
+**Fourth device report, 2026-10-20.** Two fixes:
+
+- **The slider scrolled the sheet.** Dragging the amount slider moved the thumb, and a
+  thumb drifting up or down scrolled the food panel at the same time: the panel's
+  ScrollView is a native UIScrollView, which a JS responder refusing termination does not
+  stop. `AmountSlider` now reports `onDragging`, and `ServingSheet` turns scrolling off
+  while it is held, with no vertical bounce when the content fits.
+- **A gap between "Log food" and the tab bar.** On SDK 57 expo-router gives each native
+  tab its own `SafeAreaProvider`, so `insets.bottom` already includes the tab bar, and
+  `PinnedBar` added `TAB_BAR_CLEARANCE` on top of it. `usePinnedBarOffset` now reads the
+  inset: up to 34 (home indicator only) it adds the clearance as before; above that it
+  sits 20pt over the tab bar (8 was tried first and sat on the tabs). This moves all three pinned bars (Dashboard, Nutrition,
+  Weight). **If the gap is still there on the phone, the inset is 34 and the cause is
+  elsewhere: get a screenshot before changing anything else.**
+
+`research designs/*/app-store/`, the contact sheets and `app-store-meta.json` are
+gitignored: other companies' images and copy stay on this machine.
+
+**Restyle and scope, 2026-10-20.** The whole app moved to the Graphite & Copper palette
+(see "Design tokens (fixed)"); the compact P / C / F line under calories was spaced out
+and set at 11pt after Sriman found it crowded on the meal cards. `CalorieDonut`, `MacroMiniCard`,
+`MealCard` and `ModeTabs` are deleted (`LogMode` now lives in `add-food.tsx`). The Barlow
+font packages were uninstalled for the system font and **reinstalled the same day** when
+Sriman chose Barlow again; they are in `package.json` and loaded in `_layout.tsx`. **Barcode is parked by Sriman's call:** the scanner
+stays in the app, but its device check and the Phase 7 items still marked `[~]` are not
+being worked on until he picks it back up.
+
+**Meal view, 2026-10-20.** Tapping a logged meal now opens `src/app/meal.tsx`: the name,
+slot, time and day, a totals card (kcal, a stacked energy bar from `macroEnergyShares`,
+each macro's grams and share) and every ingredient with its amount, kcal and P / C / F.
+**Edit meal** turns the same screen into an editor: name and time fields, each
+ingredient opens `ServingSheet` (amount, Remove), Save changes / Cancel, and Delete this
+meal at the foot. Modelled on MacroFactor (view, then Edit) and Foodnoms (open to view,
+delete as its own action); Sriman disliked opening straight into the field-by-field
+`log-meal.tsx` form, which became unreachable and was **deleted** before merge (its
+keyboard-offset note moved to `log-weight.tsx`, its idempotency note to `add-food.tsx`). Same header rule as saved meals: a
+rename or time change sends no `items`/`macros`.
+
+**Less friction, 2026-10-20.** Sriman: locked ingredients on the Greek yogurt fruit bowl,
+and four taps to delete a meal. Fixed:
+
+- **Ingredients with no portion** (migrated lines, Quick Add) open `DirectItemSheet` in
+  edit mode: name, amount in words, the four numbers, Remove. They were disabled before.
+- **Swipe left** on a meal row (Nutrition) or a saved meal (library) reveals **Edit** and
+  **Delete** (`SwipeActions`, on `react-native-gesture-handler`'s `ReanimatedSwipeable`;
+  the app root is now a `GestureHandlerRootView`, registered in `nativewind-interop.ts`).
+  Delete asks once. Edit opens the screen already editing (`edit=1`).
+- **Trash in the header** of both the meal and the saved-meal view: open, trash, confirm.
+- **Saved meal screen rebuilt view-first** like `meal.tsx`, sharing `MealBreakdown`
+  (`TotalsCard`, `IngredientLine`): name, category, note, totals, ingredients, then **Log
+  to today** (main) and **Edit**. Log to today now always logs the meal as saved, never a
+  half-made edit.
+
+**Same day, second round.** Three device reports, three fixes:
+
+- **Swipe directions, and a swipe opening the meal.** Now **swipe right = delete** (asks
+  once) and **swipe left = edit** (opens already editing); the swipe itself is the action,
+  no button to tap. The row's tap moved to gesture-handler's `Pressable` inside
+  `SwipeActions`, which stands down once a swipe owns the touch; React Native's
+  `Pressable` did not, so a long swipe landed as a tap and opened the meal.
+- **No slider on no-portion ingredients.** New engine unit **`serving`** (basis 1). In edit
+  mode a `direct` line opens `ServingSheet` as 1 serving of itself (`scalableDraftItem`),
+  with half and double chips; once changed it is saved as a portion. `DirectItemSheet` is
+  deleted.
+- **Saved meals landing in Snack.** Opening a saved meal from the logger now passes `slot`
+  and `date`; its button reads "Add to Breakfast" and logs the meal **named Breakfast** on
+  that day, then returns to the Nutrition tab. It used to log under the saved meal's own
+  name, which the day view files by the clock. Trade-off: on the day view the line shows
+  its ingredients rather than "English breaky", same as any plate logged from the logger.
+
+**Natural units, 2026-10-20.** Sriman: "one slice of bread or one banana instead of
+defaulting everything to 100 g". A g or ml food can now carry a **measure** (`{ noun,
+grams }`: slice 38 g, banana 118 g):
+
+- **Where it comes from** — `@shared` `naturalMeasure`: the packet's serving if it names a
+  thing ("1 slice (35 g)" → slice 35 g; "2 biscuits (25 g)" → biscuit 12.5 g; "30 g" →
+  none), else a short common-food list (bread, rusks, wraps, fruit, eggs, potatoes,
+  spreads by the tablespoon, milk and juice by the glass; typical weights, USDA standard
+  portions rounded, SA bread slice 38 g). The list only matches the **last** word of a
+  name, so "Baked Beans in Tomato Sauce" is not a tomato and "Milk Chocolate" is not milk.
+- **Where it shows** — the server sets `Food.measure` and makes `serving.quantity` one
+  measure when the packet has no serving, so `+` adds "1 banana (118 g)". Search rows,
+  the plate, meals and saved meals read "1.5 bananas (177 g)" (`measureLabel`). The amount
+  panel counts in bananas by default, with a **bananas | g** switch; − and + move half a
+  banana.
+- **How it is stored** — the amount stays in grams (`portion.quantity`), so macros scale
+  exactly as before; `portion.measure` rides along in the jsonb (optional on read and
+  write, a malformed one is dropped, not the line), and recents bring it back.
+- **Engine:** `Measure`, `measureCount`, `amountForMeasure`, `gramsPerMeasure`,
+  `measureLabel`, `pluralNoun`. Lines logged before this keep showing grams.
+
+**Polish, 2026-10-20.** Three device notes:
+
+- **Cut-off units.** Saved-meal cards widened 152 → 176 and their lines drop the
+  bracketed weight ("2 slices Brown bread"), so the unit survives truncation; the P / C / F
+  line wraps instead of overflowing; search rows give the serving two lines; the amount
+  field holds the number in a fixed 72pt box so "tablespoons" beside it is not squeezed.
+- **Swipes reveal, never act.** Swipe **left** reveals **Delete** (tap, then confirm), swipe
+  **right** reveals **Edit** (tap to open editing). The auto-acting version was too eager.
+- **Bold macro colours** (Sriman: "if protein is bold blue, the number under it in bold
+  blue too"): protein `#4C8DFF`, carbs `#FFC21A`, fat `#F0468F`. Every macro label and its
+  grams now share the colour and are bold: totals card, food panel bars, the Nutrition
+  card, the compact P / C / F line, and the dashboard rings' grams.
+
+**One metric, the whole meal, faster search, 2026-10-20.**
+
+- **No more "1 serving".** The old app stored every amount with a "g": "200g" of yoghurt
+  is real, "0.75g" of whey at 99 kcal and "2g" of sourdough at 180 kcal were scoops and
+  slices (read from Neon: Chocolate Protein Oats, English Brekkie, Greek Yoghurt Fruit
+  Bowl). Engine `isPlausibleWeight` (≤ 9.5 kcal a gram) tells them apart; `weightFromQty`
+  takes the real ones; `perHundredFrom` turns a weighed line into per-100 so it scales in
+  grams. A weightless line is weighed once (`WeighSheet`, prefilled by `suggestedWeight`
+  for common foods: 2 slices of sourdough → 76 g) and then opens on the gram slider. Views
+  say "Weight not recorded" instead of the false "2 g". `serving` is no longer offered
+  (`UNIT_OPTIONS`) and `scalableDraftItem` is gone.
+- **Tap a meal's heading** ("Lunch ›") for `slot.tsx`: that slot's totals and every
+  ingredient of every plate logged under it that day, grouped by plate (each plate's
+  heading opens it), with **Add to Lunch**.
+- **Search speed.** `GET /foods/search/local` (your foods and the `foods` table, no OFF)
+  answers in a few hundred ms and is drawn first; the full search fills Open Food Facts
+  in under it ("Searching Open Food Facts…"). The full search also starts OFF in parallel
+  with its database reads instead of after them. Debounce 400 → 250 ms.
+
+**Last before commit, 2026-10-20.** Meal cards on the Nutrition tab are now a **dropdown**,
+closed by default (slot, kcal, P / C / F); tapping the heading opens every plate with its
+foods, plates still swipe, and "See all of breakfast" opens `slot.tsx`. **Sourdough is 44 g
+a slice** (Sriman's), its own entry ahead of bread at 38 g, and a weighed line keeps its
+common measure, so weighed sourdough counts in slices; gram lines of common foods logged
+before natural units reopen in their unit too.
+
+**`/nutrisa-review`, 2026-10-20 (against the uncommitted branch).**
+
+- **Standards:** one hard violation, the "bananas | g" switch at 42pt (now 44 with
+  slop). Fixed besides: stale token comments (`white`, `link`, `ServingSheet`'s
+  colours), static `contentContainerStyle` objects moved to `contentContainerClassName`,
+  the logger's saved-meal strip given loading and error states, the toast key off
+  `Date.now()` onto a counter, empty-card copy off `dotMuted`. Relative imports inside
+  `src/components/food/` left (same feature).
+- **Spec:** no scope creep. Fixed: a plate started from a saved meal kept its `lib_id`
+  after extras were added, and the logger logged a saved meal's line sum while its own
+  screen logged the stored header. Now both log the stored header, and the logger only
+  while the plate is exactly that meal. `server/README.md` gained the food routes;
+  stale plan lines corrected; `PlateCard.tsx` renamed `AddedToast.tsx`. Still open, by
+  the plan: no edit or delete for a food, migrated foods not checked on device.
+- **Privacy:** no high findings. Fixed: the server's `onError` now runs `redactParams`
+  before `console.error` (a failed query's `params:` could carry a search pattern or a
+  new food's macros), and the app's Sentry gets a `beforeBreadcrumb`
+  (`src/lib/sentry-scrub.ts`, tested) that strips query strings and barcodes from URLs
+  and drops console breadcrumbs. Noted, no change: Open Food Facts is a processor (sees
+  search text and barcodes from the server; product photos load from the phone, which
+  exposes the phone's IP and caches images on device); the shared 10-minute search
+  cache can hint that a term was searched recently.
+
+**Verification state:** `npx tsc --noEmit` clean · `npx vitest` **658 tests / 29
+files** green · OFF client smoke-tested against the live API · security suite **72 / 72
+green** (user-, write- and food-isolation, 2026-10-25) against a new `test` branch:
+the old one had been auto-deleted (Neon's default "After 1 day"), so it was recreated
+schema only (no production rows) with auto-delete set to Never · seen on device
+up to the meal dropdowns; the review fixes are not.
 
 ---
 
@@ -1284,7 +1773,12 @@ Only after v1.0 is in daily use.
       lives in `react-native-screens` 4.16.0, which is already inside the Expo Go
       binary, and `expo-router` 6.0.24 carries an explicit 4.16-vs-4.18 icon branch
       (`NativeTabsView.js:220`) — it was written for exactly this pairing.
-      **The tab shell does not force the $99 forward.** Two caveats for later:
+      **The tab shell does not force the $99 forward.**
+      ⚠️ **This result is void as of the 2026-09-09 SDK 57 upgrade** — it was measured
+      against `react-native-screens` 4.16.0 and `expo-router` 6.0.24, both of which moved
+      (4.26.0 and 57.0.20). The conclusion is likely to survive and the two caveats below
+      still apply, but it has to be re-confirmed on the phone before it counts again.
+      Two caveats for later:
       - `sf=` icons are iOS-only. Android needs `drawable=` or `VectorIcon`, or the
         tabs render as labels with no icons.
       - Android renders Material 3 / Jetpack Compose navigation, not liquid glass —
@@ -1339,6 +1833,9 @@ Only after v1.0 is in daily use.
       same 98.84. Low effort if the code is still around, worth nothing if it is gone.
 - [ ] **Which SDK does App Store Expo Go support?** A moving external dependency that gates
       the entire free runway. Re-check before any SDK bump; verify on the device.
+      **54 on 2026-08-10; 57 on 2026-09-09.** It moved once mid-build and forced an upgrade
+      with no warning, so this stays open by design — it is a standing re-check, not a
+      question with a final answer.
 - [ ] Client-side engine for optimistic offline totals? *(v1.1)*
 - [ ] EAS free-tier build count — Expo's docs don't state it; check expo.dev/pricing
       when you reach the paid step

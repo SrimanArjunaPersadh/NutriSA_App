@@ -1,4 +1,6 @@
-import Svg, { Circle, Line, Polyline, Text as SvgText } from "react-native-svg"
+import { useState } from "react"
+import { View } from "react-native"
+import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from "react-native-svg"
 
 import {
   addDays,
@@ -9,7 +11,7 @@ import {
 } from "@engine"
 import type { WeightSeries } from "@shared"
 
-import { formatDayShort, formatKg } from "@/lib/format"
+import { formatDayShort, formatDayWithWeekday, formatKg } from "@/lib/format"
 import { colors } from "@/design/tokens"
 
 /**
@@ -47,7 +49,17 @@ const DOT = colors.dotMuted
 const TREND = colors.primary
 const PROJECTION = colors.amber
 const GOAL = colors.ok
+const TIP_FILL = colors.secondary
 const AXIS_FONT = "Barlow_400Regular"
+const TIP_FONT = "Barlow_500Medium"
+const TIP_BORDER = colors.buttonBorder
+const TIP_TEXT = colors.white
+const TIP_MUTED = colors.textSecondary
+const SCRUB_LINE = colors.buttonBorder
+
+/** Readout box geometry. Wide enough for "Weighed 100.0 kg" at 13pt. */
+const TIP_WIDTH = 138
+const TIP_LINE = 16
 
 /**
  * Weight over the selected window: every scale reading as a dot, the smoothed
@@ -89,12 +101,33 @@ export function TrendChart({
   series,
   width,
   plotHeight = DEFAULT_PLOT_HEIGHT,
+  scrubbable = false,
 }: {
   series: WeightSeries
   width: number
   plotHeight?: number
+  /**
+   * Drag along the chart to read one day at a time.
+   *
+   * Off by default, and deliberately off on the dashboard card. That card is a
+   * summary you tap to get here — making it scrub would put a gesture on a
+   * 150pt chart that competes with the tap, and claim the touch away from the
+   * dashboard's own scrolling for no gain. The Weight tab's 200pt chart is the
+   * one people came to read.
+   */
+  scrubbable?: boolean
 }) {
   const { points, projection, goalWeightKg, range } = series
+
+  /**
+   * Which day the finger is on, or `null` when nobody is touching the chart.
+   *
+   * The readout is transient by design: it appears under the finger and leaves
+   * on release, rather than latching. A latched readout becomes stale furniture
+   * the moment you scroll away from it, and there is already a permanent,
+   * tappable list of every weigh-in below.
+   */
+  const [activeDay, setActiveDay] = useState<LogDay | null>(null)
 
   const last = points.at(-1)!
 
@@ -152,6 +185,54 @@ export function TrendChart({
     line.map((point) => `${x(point.day)},${y(point.trend)}`).join(" ")
 
   /**
+   * The point nearest a touch, snapped to a real day.
+   *
+   * It snaps to the closest **point** rather than converting the x back into a
+   * date, because the axis spans the window and the window can start before the
+   * first weigh-in. Reading a bare date off the x-axis would happily return a
+   * day the series has no entry for, and the readout would blink empty over the
+   * leading gap instead of holding at the first real day.
+   *
+   * Selection, not calculation: it decides *which* already-computed point to
+   * show. Every number in the readout is transcribed from that point.
+   */
+  const dayNearest = (locationX: number): LogDay => {
+    const offset = ((locationX - PAD_LEFT) / plotWidth) * span
+
+    let best = points[0]!
+    let bestDistance = Infinity
+    for (const point of points) {
+      const distance = Math.abs(daysBetween(from, point.day) - offset)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = point
+      }
+    }
+    return best.day
+  }
+
+  const active = activeDay === null ? null : (points.find((p) => p.day === activeDay) ?? null)
+
+  /**
+   * The readout box, clamped inside the plot.
+   *
+   * `Math.max` wraps the `Math.min` rather than the other way round so that the
+   * left edge wins when the chart is narrower than the box — off the right is
+   * recoverable by reading less, off the left clips the date.
+   */
+  const tip =
+    active === null
+      ? null
+      : {
+          x: Math.max(
+            PAD_LEFT,
+            Math.min(x(active.day) - TIP_WIDTH / 2, width - PAD_RIGHT - TIP_WIDTH),
+          ),
+          y: PAD_TOP + 4,
+          height: 12 + (active.weight === null ? 2 : 3) * TIP_LINE,
+        }
+
+  /**
    * Ticks step across the **window**, not across the points.
    *
    * Taken from the points, they would all bunch into the left-hand portion the
@@ -184,7 +265,7 @@ export function TrendChart({
                 : "inside",
         }
 
-  return (
+  const chart = (
     <Svg width={width} height={height}>
       {scale.ticks.map((tick) => (
         <SvgText
@@ -280,6 +361,99 @@ export function TrendChart({
           {formatDayShort(day)}
         </SvgText>
       ))}
+
+      {/* The scrub readout sits above everything — it is the thing being read. */}
+      {active && tip ? (
+        <>
+          <Line
+            x1={x(active.day)}
+            y1={PAD_TOP}
+            x2={x(active.day)}
+            y2={PAD_TOP + plotHeight}
+            stroke={SCRUB_LINE}
+            strokeWidth={1}
+          />
+
+          {/* The raw reading first, so the trend dot stays on top where they
+              coincide — the trend is the number this chart is about. */}
+          {active.weight === null ? null : (
+            <Circle cx={x(active.day)} cy={y(active.weight)} r={3.5} fill={DOT} />
+          )}
+          <Circle
+            cx={x(active.day)}
+            cy={y(active.trend)}
+            r={4.5}
+            fill={TREND}
+            stroke={colors.ground}
+            strokeWidth={1.5}
+          />
+
+          <Rect
+            x={tip.x}
+            y={tip.y}
+            width={TIP_WIDTH}
+            height={tip.height}
+            rx={8}
+            fill={TIP_FILL}
+            stroke={TIP_BORDER}
+            strokeWidth={1}
+          />
+          <SvgText
+            x={tip.x + 10}
+            y={tip.y + 17}
+            fontFamily={TIP_FONT}
+            fontSize={13}
+            fill={TIP_MUTED}
+          >
+            {formatDayWithWeekday(active.day)}
+          </SvgText>
+          <SvgText
+            x={tip.x + 10}
+            y={tip.y + 17 + TIP_LINE}
+            fontFamily={TIP_FONT}
+            fontSize={13}
+            fill={TREND}
+          >
+            {`Trend ${formatKg(active.trend)} kg`}
+          </SvgText>
+          {active.weight === null ? null : (
+            <SvgText
+              x={tip.x + 10}
+              y={tip.y + 17 + TIP_LINE * 2}
+              fontFamily={TIP_FONT}
+              fontSize={13}
+              fill={TIP_TEXT}
+            >
+              {`Weighed ${formatKg(active.weight)} kg`}
+            </SvgText>
+          )}
+        </>
+      ) : null}
     </Svg>
+  )
+
+  if (!scrubbable) return chart
+
+  /**
+   * The touch surface.
+   *
+   * `onResponderTerminationRequest` returns false so the surrounding ScrollView
+   * cannot take the gesture back mid-drag — without it, a scrub that wanders a
+   * few points vertically is stolen by the scroll and the readout vanishes
+   * under the finger.
+   */
+  return (
+    <View
+      accessibilityLabel="Weight trend chart. Drag across it to read each day."
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderTerminationRequest={() => false}
+      onResponderGrant={(event) => setActiveDay(dayNearest(event.nativeEvent.locationX))}
+      onResponderMove={(event) => setActiveDay(dayNearest(event.nativeEvent.locationX))}
+      onResponderRelease={() => setActiveDay(null)}
+      onResponderTerminate={() => setActiveDay(null)}
+    >
+      {chart}
+    </View>
   )
 }

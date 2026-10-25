@@ -1,6 +1,8 @@
+import { CameraView } from "expo-camera";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { cssInterop } from "nativewind";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 /**
  * NativeWind only maps `className` -> `style` automatically for React Native's
@@ -21,3 +23,20 @@ cssInterop(LinearGradient, { className: "style" });
  * there, so the CSS class applies without any interop.
  */
 cssInterop(Image, { className: "style" });
+
+/**
+ * And a third: the barcode scanner's `CameraView` (food logger, 2026-10-19).
+ * Registered before it ever reached the phone, because the failure is the same
+ * one twice over — unregistered, `className="flex-1"` is dropped and the
+ * preview lays out at zero height, which on the device looks exactly like a
+ * camera that never started.
+ */
+cssInterop(CameraView, { className: "style" });
+
+/**
+ * And a fourth: the root `GestureHandlerRootView` (2026-10-20, for swipe to
+ * delete). It wraps the whole app with `className="flex-1"`; unregistered, the
+ * class would be dropped and the root would lay out at zero height — the whole
+ * app blank, not one component.
+ */
+cssInterop(GestureHandlerRootView, { className: "style" });

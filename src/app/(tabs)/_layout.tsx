@@ -1,6 +1,6 @@
 import { View } from "react-native"
 import { Redirect } from "expo-router"
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs"
+import { NativeTabs } from "expo-router/unstable-native-tabs"
 import { useAuth } from "@clerk/expo"
 
 import { colors } from "@/design/tokens"
@@ -10,16 +10,19 @@ import { colors } from "@/design/tokens"
  * AGENTS.md; the JavaScript `Tabs` and @react-navigation/bottom-tabs are both
  * off the table.
  *
- * The `unstable-native-tabs` import path is correct and expected. Native Tabs is
- * alpha, and its API changed between SDK 54 and 55 — this file uses the **SDK 54**
- * shape (`Icon` / `Label` imported alongside `NativeTabs`), not the compound
- * `NativeTabs.Trigger.Icon` of 55+. The project is pinned to 54 because that is
- * what App Store Expo Go runs.
+ * The `unstable-native-tabs` import path is correct and expected, and it did not
+ * change in the SDK 54 → 57 upgrade. The element shape did: `Icon` and `Label`
+ * were top-level exports on 54 and are compound members on 57 —
+ * `NativeTabs.Trigger.Icon` / `NativeTabs.Trigger.Label`. Verified against
+ * node_modules/expo-router/build/native-tabs/NativeTabs.d.ts, which exports only
+ * `NativeTabs` and `NativeTabTrigger`. Every prop on the `<NativeTabs>` tag below
+ * survived the jump unrenamed.
  *
- * Android gets labels without icons for now: SDK 54's `Icon` takes a `drawable`
- * resource name on Android, and this project has no android/ drawables to point
- * at (CNG owns that folder). iPhone is the Phase 3 target, so that is a gap to
- * close with a config plugin later, not a blocker now.
+ * Android still gets labels without icons. That is now a choice rather than a
+ * limit: SDK 54's `Icon` needed a `drawable` resource name and this project has
+ * no android/ drawables (CNG owns that folder), but SDK 57's `Icon` also accepts
+ * `md` for Material Symbols, which needs no drawable. iPhone is the target, so
+ * closing that gap is its own small branch, not this one.
  *
  * The auth guard lives here rather than on a screen so that every tab is behind
  * it at once, and `isLoaded` is checked before `isSignedIn` for the same reason
@@ -54,23 +57,25 @@ export default function TabsLayout() {
       disableTransparentOnScrollEdge
     >
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }} />
-        <Label>Dashboard</Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }}
+        />
+        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="nutrition">
-        <Icon sf="fork.knife" />
-        <Label>Nutrition</Label>
+        <NativeTabs.Trigger.Icon sf="fork.knife" />
+        <NativeTabs.Trigger.Label>Nutrition</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="weight">
-        <Icon sf={{ default: "scalemass", selected: "scalemass.fill" }} />
-        <Label>Weight</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "scalemass", selected: "scalemass.fill" }} />
+        <NativeTabs.Trigger.Label>Weight</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="assistant">
-        <Icon sf="sparkles" />
-        <Label>AI Assistant</Label>
+        <NativeTabs.Trigger.Icon sf="sparkles" />
+        <NativeTabs.Trigger.Label>AI Assistant</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   )
