@@ -15,8 +15,9 @@ import { colors } from "@/design/tokens"
  * Drawn at the pill's 30pt height for the same reason as the pill: a 44pt
  * circle would push the header taller and open a gap under the status bar. The
  * `hitSlop` of 7 on every side makes the touch target the full 44pt. The pill's
- * own trailing slop is trimmed to 6 so the two targets do not overlap across
- * the 12pt gap between them.
+ * own trailing slop is trimmed to 5, so 5 + 7 fills the 12pt gap between them
+ * exactly and the two targets do not overlap. Sriman kept the 30pt drawing
+ * after review, 2026-10-25.
  */
 export function GoalsButton() {
   const router = useRouter()

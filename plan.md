@@ -237,7 +237,10 @@ No code. Blocks Phase 1.
       every launch). No config file changed. **Install gotcha:** `npx expo install --fix`
       fails with `ERESOLVE` because the lockfile still pins the 57 tree (`@expo/ui`,
       `expo-linking`, …); the fix was dropping the lock entries of every package whose
-      locked version no longer satisfies `package.json`, then `npm install`. Typecheck
+      locked version no longer satisfies `package.json`, then `npm install`. **A recorded
+      exception to "use `npx expo install`"**: `expo install` had already written every
+      version into `package.json` and only the lockfile resolve failed, so `npm install`
+      chose no version of its own; `expo install --check` agrees afterwards. Typecheck
       clean, 658 tests green, `expo-doctor` 20/20, and `expo export --platform ios`
       bundles. **Verified on the iPhone the same day:** the project opens in Expo Go 58, and
       the native tab bar, week strip scroll, Weight chart range dropdown, meal-row swipe
@@ -671,8 +674,9 @@ comes in through the front door, the same way an attacker would.
       Native Tabs via `expo-router/native-tabs` (stable path since SDK 58, 2026-10-25;
       `unstable-native-tabs` before), **SDK 57 API** since 2026-09-09
       (the compound `NativeTabs.Trigger.Icon` / `NativeTabs.Trigger.Label`, not the
-      top-level `Icon` / `Label` of SDK 54). The import path did not change and every
-      `<NativeTabs>` prop survived unrenamed.
+      top-level `Icon` / `Label` of SDK 54). From 54 to 57 the import path did not
+      change; in 58 only the path moved, and every `<NativeTabs>` prop survived
+      unrenamed through both.
       SF Symbols on iOS; **Android still renders labels with no icons**, but that is now a
       choice rather than a limit — SDK 54's `Icon` wanted an Android drawable and this
       project has none, while SDK 57's also accepts `md` (Material Symbols) and needs no
@@ -1704,9 +1708,21 @@ Follow-ups settled in the same session:
       `.env`**
 - [x] `server/README.md` route and file tables updated
 - [x] Entry points: `GoalsButton` in the Dashboard header (drawn at 30pt, 44pt target via
-      `hitSlop`; the streak pill's trailing slop trimmed to 6 so the two do not overlap),
+      `hitSlop`, which **Sriman confirmed over a visible 44pt circle after review,
+      2026-10-25**; the streak pill's trailing slop trimmed to 5 so the two meet across
+      the 12pt gap without overlapping),
       the Weight tab's GOAL card, and `SetGoalRow`. Sign out moved from `TabPlaceholder`
       to the bottom of Goals, which `dismissAll`s before clearing the cache and signing out
+- [x] `/nutrisa-review since main`, 2026-10-25. **Standards** 0 hard, 5 judgement: the
+      pill/button targets overlapped by 1pt (fixed, slop 6 → 5); inset `style` objects
+      in `goals.tsx`, as every other form screen does; two long lines; the SDK upgrade
+      shares the branch; `hasOneDecimalAtMost` multiplies outside the engine, accepted
+      as a shape check that never displays a number. **Spec** nothing missing, no scope
+      creep: the 30pt drawing (kept, above), a stale Native Tabs line in Phase 1 (fixed),
+      the lockfile install (recorded in Phase 0). **Privacy** no high or medium: native
+      Sentry breadcrumbs skip `scrubUrl` (pre-existing; `/api/profile` carries no query),
+      and Expo's `.expo/dev/logs/start.log` held plaintext `.env` secrets (gitignored,
+      deleted)
 - [ ] Device: change targets, see the Calories-left card and the Dashboard follow;
       change and clear the goal weight, see the ring and chart line follow; 44pt targets
 

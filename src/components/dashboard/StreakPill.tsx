@@ -48,10 +48,11 @@ export function StreakPill() {
           : `${days} day streak, not logged today. Open streak details.`
       }
       onPress={() => router.push("/streak")}
-      // Trailing slop is 6, not 12, so it stops short of the Goals button's
-      // target across the 12pt gap. The pill is already wider than 44pt, so
-      // the sides never needed slop to meet the minimum.
-      hitSlop={{ top: 8, bottom: 8, left: 12, right: 6 }}
+      // Trailing slop is 5, not 12: with the Goals button's 7, the two targets
+      // meet exactly across the 12pt gap instead of overlapping. (It was 6 at
+      // first, which overlapped by 1pt; caught by /nutrisa-review.) The pill is
+      // already wider than 44pt, so the sides never needed slop for the minimum.
+      hitSlop={{ top: 8, bottom: 8, left: 12, right: 5 }}
       className="h-[30px] flex-row items-center rounded-full border border-cardBorder bg-secondary px-[10px] active:opacity-70"
     >
       {/* 18, not 16. The flame's hooked tip is what stops it reading as a
