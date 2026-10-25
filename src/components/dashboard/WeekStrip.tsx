@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { ScrollView, Text, useWindowDimensions, View } from "react-native"
+import { ScrollView, Text, useWindowDimensions, View, type ScrollViewInstance } from "react-native"
 import Svg, { Circle } from "react-native-svg"
 
 import { addDays, currentLoggingDay, dayOfMonth, weekOf, weekdayIndex } from "@engine"
@@ -201,7 +201,7 @@ export function WeekStrip({
 
   // A Set, because this is checked 91 times per render.
   const logged = new Set(loggedDays ?? [])
-  const scroller = useRef<ScrollView>(null)
+  const scroller = useRef<ScrollViewInstance>(null)
   const initialised = useRef(false)
 
   // Oldest week first, current week last — so the strip opens at its end and

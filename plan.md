@@ -50,6 +50,9 @@ always named as its release. React Native 0.81.5 → 0.86.3. One compile break i
 (the Native Tabs element shape), no config changes, 468 tests still green. **This makes the
 device pass more urgent, not less: every SDK-54 device verification in this file — the tab
 bar, the fonts, the sign-in — was measured against packages that have now moved** ·
+**Expo SDK 57 → 58 on 2026-10-25, forced the same way** — Expo Go reported 58 and refused
+the 57 project. React Native 0.86.3 → 0.88.0, two code changes (ref instance types, the
+stable `expo-router/native-tabs` path), 658 tests green; device check pending ·
 **The food logger landed 2026-10-19 (`food-logger`)** — MacroFactor's plate model:
 food search over own, shared and Open Food Facts rows, recent foods, a serving
 editor, Quick Add, create-a-food, and barcode scanning with OFF lookup cached as
@@ -218,6 +221,23 @@ No code. Blocks Phase 1.
       NativeWind stayed on v4.2.6. Typecheck clean, 468 tests green, `expo-doctor` 21/21 —
       **and none of that is proof, because the first attempt passed all three too.** The
       device is the proof. Research: `docs/research/expo-sdk-57-upgrade.md`
+- [x] **SDK 58 upgrade done — 2026-10-25.** Forced the same way: Expo Go on the iPhone
+      reported **SDK 58** and refused the 57 project. `expo` → ~58.0.19, `react-native`
+      0.86.3 → 0.88.0, `react` 19.2.3 → 19.3.0, every `expo-*` module to `58.x`, plus two
+      majors: `react-native-gesture-handler` 2.32 → 3.3 and `@sentry/react-native`
+      7.11 → 8.28 (the APIs this app calls, `ReanimatedSwipeable`, RNGH `Pressable`,
+      `Sentry.init` / `wrap` / `beforeBreadcrumb`, all survived). `@clerk/expo`
+      4.2.3 → 4.14.1, because 4.2.3 declares `expo <58`. TypeScript stays 6.0.3.
+      **Two code changes:** RN 0.87's Strict TypeScript API types refs as instances, so
+      `useRef<View>` / `useRef<ScrollView>` became `ViewInstance` / `ScrollViewInstance`
+      (`Dropdown.tsx`, `WeekStrip.tsx`); and Native Tabs went stable, so the import moved
+      to `expo-router/native-tabs` (`unstable-native-tabs` still resolves, but warns on
+      every launch). No config file changed. **Install gotcha:** `npx expo install --fix`
+      fails with `ERESOLVE` because the lockfile still pins the 57 tree (`@expo/ui`,
+      `expo-linking`, …); the fix was dropping the lock entries of every package whose
+      locked version no longer satisfies `package.json`, then `npm install`. Typecheck
+      clean, 658 tests green, `expo-doctor` 20/20, and `expo export --platform ios`
+      bundles. **The device is still the proof:** unverified on the phone at time of writing
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
@@ -644,7 +664,8 @@ comes in through the front door, the same way an attacker would.
       verified on the iPhone 2026-08-12. **Not Library**, which is what this line said
       and what the design mock shows: Sriman chose the AI Assistant as the fourth tab.
       Library moved inside Nutrition rather than being dropped — see Phase 6.
-      Native Tabs via `expo-router/unstable-native-tabs`, **SDK 57 API** since 2026-09-09
+      Native Tabs via `expo-router/native-tabs` (stable path since SDK 58, 2026-10-25;
+      `unstable-native-tabs` before), **SDK 57 API** since 2026-09-09
       (the compound `NativeTabs.Trigger.Icon` / `NativeTabs.Trigger.Label`, not the
       top-level `Icon` / `Label` of SDK 54). The import path did not change and every
       `<NativeTabs>` prop survived unrenamed.

@@ -20,6 +20,9 @@ import { describe, expect, it } from "vitest"
  * 0.86.3. The same evidence that made the first attempt wrong made the second one right.
  * The rule never changed; only the number the device reported did.
  *
+ * It was satisfied again on 2026-10-25: Expo Go on the iPhone reported **SDK 58** and
+ * refused the 57 project, and the pin moved 57 → 58 with react-native 0.86.3 → 0.88.0.
+ *
  * Neither the typechecker nor expo-doctor can catch a pin violation, because nothing is
  * wrong with the code — the constraint lives in the App Store, not in the repo. So it
  * lives here instead. A rule in an instructions file gets violated by the next person in
@@ -33,8 +36,8 @@ import { describe, expect, it } from "vitest"
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PKG = JSON.parse(readFileSync(join(HERE, "..", "package.json"), "utf8"))
 
-const PINNED_SDK = 57
-const PINNED_RN = "0.86.3"
+const PINNED_SDK = 58
+const PINNED_RN = "0.88.0"
 
 describe("Expo SDK pin", () => {
   it(`pins expo to SDK ${PINNED_SDK}`, () => {

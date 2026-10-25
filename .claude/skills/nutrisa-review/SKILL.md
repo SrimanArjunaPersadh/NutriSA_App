@@ -58,10 +58,13 @@ Under 400 words."* Checklist:
   no *new* colour that is not in the token table, even via a token.
 - **NativeWind `className`** for layout. No `StyleSheet.create`, no inline style object.
   Where a platform prop takes a value rather than a class, it reads from `tokens.ts`.
-- **Native Tabs only** — `expo-router/unstable-native-tabs`. Any `@react-navigation/*`
-  import, or the JS `Tabs`, is a hard violation.
-- **Expo SDK stays 54.** Any bump to `expo`, `react-native`, or an `expo-*` package
-  version is a hard violation regardless of how clean it typechecks.
+- **Native Tabs only** — `expo-router/native-tabs`. Any `@react-navigation/*`
+  import, the JS `Tabs`, or `expo-router/tabs` / `expo-router/js-tabs` (both JS on SDK 58)
+  is a hard violation. The deprecated `unstable-native-tabs` path is a finding too.
+- **Expo SDK stays at the pin** — `PINNED_SDK` in `tests/expo-sdk-pin.test.ts`. Any bump
+  to `expo`, `react-native`, or an `expo-*` package version is a hard violation regardless
+  of how clean it typechecks, unless the same diff moves the pin and `AGENTS.md` records
+  the SDK number Expo Go on the device reported.
 - **`npx expo install`, never `npm install`,** for Expo packages.
 - **`packages/engine/` stays dependency-free** and imports nothing but itself.
 - **44×44px minimum touch targets**, primary actions in thumb reach.
