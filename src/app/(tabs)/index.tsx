@@ -10,6 +10,7 @@ import { InsightsSection } from "@/components/dashboard/InsightsSection"
 import { MacrosCard } from "@/components/dashboard/MacrosCard"
 import { CONTROL_HEIGHT, QuickActionBar } from "@/components/dashboard/QuickActionBar"
 import { TAB_BAR_CLEARANCE } from "@/components/ui/PinnedBar"
+import { GoalsButton } from "@/components/dashboard/GoalsButton"
 import { StreakPill } from "@/components/dashboard/StreakPill"
 import { currentMonthLabel, WeekStrip } from "@/components/dashboard/WeekStrip"
 import { WeightTrendCard } from "@/components/dashboard/WeightTrendCard"
@@ -141,6 +142,7 @@ export default function Dashboard() {
             {month}
           </Text>
           <StreakPill />
+          <GoalsButton />
         </View>
 
         {/* No gutter here on purpose. The strip pages one screen-width at a

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { ATWATER, dominantMacro, macroEnergyShares, NO_SHARES } from "./energy"
+import { ATWATER, dominantMacro, kcalFromMacros, macroEnergyShares, NO_SHARES } from "./energy"
 import { ZERO_MACROS, type Macros } from "./macros"
 
 const macros = (protein: number, carbs: number, fat: number, kcal = 0): Macros => ({
@@ -94,5 +94,30 @@ describe("dominantMacro", () => {
     expect(dominantMacro(macros(10, 10, 0))).toBe("protein")
     // 9 g carbs and 4 g fat are both 36 kcal.
     expect(dominantMacro(macros(0, 9, 4))).toBe("carbs")
+  })
+})
+
+describe("kcalFromMacros", () => {
+  /**
+   * The real target on record, and the reason the Goals screen shows this as a
+   * note instead of deriving the calorie target from it: 167 / 195 / 60 is
+   * 668 + 780 + 540 = 1988 kcal, against a confirmed target of 2300.
+   */
+  it("prices the macros at 4 / 4 / 9 kcal per gram", () => {
+    expect(kcalFromMacros({ protein: 167, carbs: 195, fat: 60 })).toBe(1988)
+  })
+
+  it("is zero for no macros at all", () => {
+    expect(kcalFromMacros({ protein: 0, carbs: 0, fat: 0 })).toBe(0)
+  })
+
+  it("rounds to whole kcal, because it sits beside a whole-kcal target", () => {
+    // 12.3 g protein = 49.2 kcal; 0.1 g fat = 0.9 kcal; 50.1 in all.
+    expect(kcalFromMacros({ protein: 12.3, carbs: 0, fat: 0.1 })).toBe(50)
+  })
+
+  it("counts a negative or non-finite gram figure as zero", () => {
+    expect(kcalFromMacros({ protein: -10, carbs: 25, fat: Number.NaN })).toBe(100)
+    expect(kcalFromMacros({ protein: Number.POSITIVE_INFINITY, carbs: 0, fat: 0 })).toBe(0)
   })
 })

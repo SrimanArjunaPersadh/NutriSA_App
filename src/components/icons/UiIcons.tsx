@@ -197,6 +197,25 @@ export function PlusCircleIcon({ size = 18, color = colors.textSecondary }: Icon
   )
 }
 
+/**
+ * Head and shoulders, for the Dashboard header button that opens Goals. The
+ * person glyph rather than a gear: what is behind it is yours (your targets,
+ * your goal, your account), not the app's settings.
+ */
+export function PersonIcon({ size = 20, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={8.5} r={3.8} stroke={color} strokeWidth={1.9} />
+      <Path
+        d="M4.8 19.6c1.2-3.3 4-5 7.2-5s6 1.7 7.2 5"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+      />
+    </Svg>
+  )
+}
+
 /** Magnifier in the food search field. */
 export function SearchIcon({ size = 20, color = colors.textSecondary }: IconProps) {
   return (

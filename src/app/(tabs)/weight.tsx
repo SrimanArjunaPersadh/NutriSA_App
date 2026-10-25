@@ -169,11 +169,26 @@ export default function Weight() {
               </Card>
             </View>
 
-            {data.goal ? (
-              <View className="mt-[12px] px-[16px]">
-                <GoalCard series={data} />
-              </View>
-            ) : null}
+            {/*
+              Both branches open Goals, which is where the goal weight is set
+              (plan.md Phase 7b). The goal line on the chart is not a door: it
+              is a hairline, and it is only drawn when the goal falls inside
+              the plotted range.
+            */}
+            <View className="mt-[12px] px-[16px]">
+              {data.goal ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityHint="Opens Goals, to change or clear your goal weight"
+                  onPress={() => router.push("/goals")}
+                  className="active:opacity-80"
+                >
+                  <GoalCard series={data} />
+                </Pressable>
+              ) : (
+                <SetGoalRow onPress={() => router.push("/goals")} />
+              )}
+            </View>
 
             <View className="mt-[12px] px-[16px]">
               <History entries={data.entries} onOpen={openEntry} />
@@ -388,6 +403,30 @@ function GoalCard({ series }: { series: WeightSeries }) {
           : "Not enough of a trend yet to say when."}
       </Text>
     </Card>
+  )
+}
+
+/**
+ * Where the goal card stands when there is no goal.
+ *
+ * One row, not a card. `GoalCard`'s note says a card explaining that you have
+ * no goal is a card about nothing, and that still holds; this is not an
+ * explanation, it is the only way to set a goal from this tab. Without it the
+ * Weight tab has a door to Goals for people who already have a goal and none
+ * for the people who need one (Sriman, 2026-10-25).
+ */
+function SetGoalRow({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Set a goal weight"
+      onPress={onPress}
+      className="h-[52px] flex-row items-center rounded-[16px] border border-cardBorder bg-card px-[16px] active:opacity-70"
+    >
+      <Text className="font-barlow-medium text-[15px] text-white">Set a goal weight</Text>
+      <View className="flex-1" />
+      <ChevronRight size={16} />
+    </Pressable>
   )
 }
 

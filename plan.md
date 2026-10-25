@@ -52,14 +52,16 @@ device pass more urgent, not less: every SDK-54 device verification in this file
 bar, the fonts, the sign-in — was measured against packages that have now moved** ·
 **Expo SDK 57 → 58 on 2026-10-25, forced the same way** — Expo Go reported 58 and refused
 the 57 project. React Native 0.86.3 → 0.88.0, two code changes (ref instance types, the
-stable `expo-router/native-tabs` path), 658 tests green; device check pending ·
+stable `expo-router/native-tabs` path), 658 tests green, **verified on the iPhone** ·
 **The food logger landed 2026-10-19 (`food-logger`)** — MacroFactor's plate model:
 food search over own, shared and Open Food Facts rows, recent foods, a serving
 editor, Quick Add, create-a-food, and barcode scanning with OFF lookup cached as
 global rows. The food half of Phase 6 and most of Phase 7; saved meals
 (`custom_meals`) followed the same day. **604 tests green across 27 files; search confirmed on device, the redesign not yet** ·
 **`food-logger` finished 2026-10-25**: review fixed, 658 tests, security suite 72 / 72, PR
-open · **Next: Phase 7b `targets-and-profile`** (added 2026-10-25) ·
+open · **Phase 7b `targets-and-profile` built 2026-10-25**: the Goals screen (targets,
+goal weight, sign out), `GET`/`PUT /profile`, target bounds; 677 tests offline, device
+pass not yet done ·
 Phases 8–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
@@ -237,7 +239,9 @@ No code. Blocks Phase 1.
       `expo-linking`, …); the fix was dropping the lock entries of every package whose
       locked version no longer satisfies `package.json`, then `npm install`. Typecheck
       clean, 658 tests green, `expo-doctor` 20/20, and `expo export --platform ios`
-      bundles. **The device is still the proof:** unverified on the phone at time of writing
+      bundles. **Verified on the iPhone the same day:** the project opens in Expo Go 58, and
+      the native tab bar, week strip scroll, Weight chart range dropdown, meal-row swipe
+      actions (RNGH 3) and sign-in (Clerk 4.14.1) all work
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
@@ -1622,46 +1626,87 @@ the macro targets were set by the Phase 1 migration seed and the goal weight by
   was built in Phase 5 partly for this branch's targets sheet
 - Both tables are already in the deletion cascade list (Phase 11)
 
-**Settle with Sriman before code** (use the `grilling` skill; record the answers here):
-- [ ] Where the screen lives. The four Native Tabs are fixed, so it is a pushed screen.
-      Reached from where (Dashboard header, the Calories-left card, the Weight tab's
-      goal line)?
-- [ ] Which profile fields v1 shows. All six exist; only `goal_weight_kg` is read by
-      anything today. Collecting age, sex and height with no feature reading them is
-      health data held for no purpose (POPIA minimality)
-- [ ] How targets are entered: kcal plus P / C / F typed independently, or macros with
-      kcal derived (4 / 4 / 9) by the engine? If derived, what happens to the 38
-      migrated days whose stored kcal disagrees with their macros?
-- [ ] A target change takes effect from today (`currentLoggingDay()`). Is back-dating
-      a change wanted, or is "from today" the only option?
-- [ ] Is the target history shown (`GET /targets` already returns it)?
-- [ ] Out of scope unless Sriman says otherwise: suggesting targets from a TDEE formula
-      (adaptive TDEE is in the deferred backlog), and `goal_rate`
+**Settle with Sriman before code** — grilled and answered 2026-10-25; Sriman took every
+recommendation:
+- [x] **Where the screen lives:** one pushed screen titled **"Goals"**, reached from a
+      Dashboard header button and from the Weight tab (Q8, Q9 below). The Calories card
+      keeps its current behaviour
+- [x] **Profile fields:** goal weight only. Height, age, sex and activity stay
+      unpopulated until a feature reads them (POPIA minimality). `PUT /profile` accepts
+      nothing else, so the API cannot collect them either
+- [x] **Target entry:** kcal, protein, carbs and fat typed independently, **not**
+      derived. The one stored row is 2300 / 167 / 195 / 60, and those macros imply 1988
+      kcal: deriving would silently cut the target by 312. Stored rows are left as they
+      are
+- [x] **Effective date:** from today only. The screen never sends `validFrom`. (The API
+      still accepts a back-dated one; nothing in the app uses it)
+- [x] **History:** not shown in v1. One row so far; cheap to add when there is more
+- [x] **Out of scope:** TDEE-suggested targets and `goal_rate`, both confirmed
 
-**Build:**
-- [ ] `GET /profile` and `PUT /profile`: zod schemas in `packages/shared/`, the
-      scoped query layer, `user_id` from the Clerk token only, the PUT rate-limited
-      like every write. Upsert on `user_id` (the column is unique)
-- [ ] Plausible bounds in the shared schema (goal weight, height, age), the same way
-      `isPlausibleWeight` guards foods
-- [ ] Any number the screen computes (kcal from macros, a macro's share of calories,
-      kg to goal) comes from `packages/engine/`, with tests. Zero arithmetic in `src/`
-- [ ] Targets screen: current targets, edit, save through `POST /targets`. Four
-      states, including "no targets yet" (`current: null` is a real state)
-- [ ] Goal weight edit: after a save the Dashboard ring, "kg to goal" and the Weight
-      chart's goal line follow without a restart (invalidate the right React Query keys)
-- [ ] Clearing the goal weight is allowed and returns those surfaces to their no-goal
-      states, which already exist
-- [ ] Security suite: extend user-isolation to `PUT /profile` (A cannot read or write
-      B's profile) and confirm `POST /targets` is covered
-- [ ] Privacy: profile fields are Special Personal Information. Never in a Sentry
-      event, breadcrumb or server log (the `redactParams` / `sentry-scrub` paths from
-      `food-logger` must cover the new routes)
-- [ ] No new table is expected. If one appears, it joins the cascade **and** the
-      export in this branch
-- [ ] Decide what happens to `npm run seed:profile` once the screen exists (retire, or
-      keep as a dev seed and say so in its header)
-- [ ] `server/README.md` route table updated
+Follow-ups settled in the same session:
+- [x] **Sign out** moves from the Assistant placeholder to the bottom of Goals, well
+      apart from Save, so Phase 9 does not have to rescue it. Immediate, no confirm:
+      signing back in undoes it
+- [x] **Header button (Q8):** a 44pt round person button at the trailing edge, after
+      the streak pill: `[apple] NutriSA   October  🔥12  (👤)`
+- [x] **Weight tab (Q9):** the whole GOAL card opens Goals. With no goal set, a single
+      "Set a goal weight" row stands where the card would be. The chart's goal line is
+      not a tap target: too thin, and only drawn when the goal is in range
+- [x] **Bounds (Q10):** kcal 500–10,000, each macro 0–1,000 g, goal weight 30–300 kg to
+      one decimal; all four target fields required, goal weight optional and clearable.
+      In the shared schema, so the form and the server refuse the same values
+- [x] **Macro note (Q11):** always shown, neutral grey, "Your macros add up to 1,988
+      kcal". No threshold, no warning colour: the gap may be on purpose. The number is
+      the engine's
+- [x] **Save (Q12):** one pinned button, enabled only when something changed, sending
+      only the changed parts. A partial failure says which part failed and keeps the
+      inputs
+- [x] **Unsaved changes (Q13):** discarded silently on back. No dialog
+- [x] **`npm run seed:profile` (Q15):** retired, deleted with its two npm scripts and
+      `SEED_GOAL_WEIGHT_KG`
+
+**Build:** (built 2026-10-25 on `targets-and-profile`)
+- [x] `GET /profile` and `PUT /profile`: `packages/shared/src/profile.ts`,
+      `server/data/profile.ts` through the scoped layer, `user_id` from the Clerk token
+      only, `PUT` on the write router so it is rate-limited. Upserts on `user_id`, with a
+      server-minted id the one time the row is created: a profile has a natural key, so
+      it needs no client UUIDv7. The body carries `goalWeightKg` only; zod drops the rest
+- [x] Plausible bounds in the shared schema: `TARGET_BOUNDS` (a new `targetMacrosSchema`,
+      so meal macros keep their column ceilings) and `GOAL_WEIGHT_BOUNDS` with a
+      one-decimal check. Height and age bounds went with the fields themselves.
+      `tests/column-widths.test.ts` now asserts the target bounds fit inside their
+      columns rather than equal them
+- [x] The one computed number on the screen, the macro energy, is `kcalFromMacros()` in
+      `packages/engine/src/energy.ts`, tested on the real 167 / 195 / 60 → 1988. Kg to
+      goal and macro shares are not on this screen; they stay where the engine already
+      serves them
+- [x] Goals screen, `src/app/goals.tsx`: loading, error (retry refetches whichever read
+      failed), "no targets yet" and no-goal copy, and the form. One pinned Save, gated on
+      the shared schemas, sending only changed parts; a partial failure names the part
+      that failed and keeps the fields
+- [x] A goal save invalidates every weight window and the profile; a targets save
+      invalidates every cached day and the targets read (`useSetProfile`,
+      `useSetTargets` in `src/lib/queries.ts`)
+- [x] Clearing the goal: an empty field saves `null`, the row stays, and the Weight tab
+      shows the "Set a goal weight" row in the card's place
+- [x] Security suite: `write-isolation` gains a `profile` block (its own users C and D,
+      so A's per-user write limit is not exhausted) and two more `targets` cases;
+      `POST /targets` and `PUT /profile` joined the forged-token sweep. **83 / 83 green,
+      2026-10-25** (was 72)
+- [x] Privacy: no new log line carries a value. Request bodies are already dropped from
+      Sentry events wholesale (`server/observability/sentry.ts`), a failed upsert's
+      parameters go through `redactParams` in `app.onError`, and `/api/profile` has no
+      query or path value for `sentry-scrub` to strip. A 400 names the field, not the
+      value (tested)
+- [x] No new table
+- [x] `npm run seed:profile` retired: the script, both npm scripts, `SEED_GOAL_WEIGHT_KG`
+      in `.env.example` and the README rows deleted. **Sriman removes the line from
+      `.env`**
+- [x] `server/README.md` route and file tables updated
+- [x] Entry points: `GoalsButton` in the Dashboard header (drawn at 30pt, 44pt target via
+      `hitSlop`; the streak pill's trailing slop trimmed to 6 so the two do not overlap),
+      the Weight tab's GOAL card, and `SetGoalRow`. Sign out moved from `TabPlaceholder`
+      to the bottom of Goals, which `dismissAll`s before clearing the cache and signing out
 - [ ] Device: change targets, see the Calories-left card and the Dashboard follow;
       change and clear the goal weight, see the ring and chart line follow; 44pt targets
 

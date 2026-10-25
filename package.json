@@ -72,8 +72,6 @@
     "db:studio": "drizzle-kit studio",
     "migrate:supabase": "tsx scripts/migrate-supabase-to-neon.ts",
     "migrate:supabase:dry": "tsx scripts/migrate-supabase-to-neon.ts --dry-run",
-    "seed:profile": "tsx scripts/seed-profile.ts",
-    "seed:profile:dry": "tsx scripts/seed-profile.ts --dry-run",
     "test:security": "vitest run --config vitest.security.config.mts"
   },
   "private": true

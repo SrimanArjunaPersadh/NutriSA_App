@@ -14,6 +14,9 @@ import {
   savedMealWriteResultSchema,
   mealPatchResultSchema,
   mealWriteResultSchema,
+  profileSchema,
+  targetsResponseSchema,
+  targetsWriteResultSchema,
   weightSeriesSchema,
   weightWriteResultSchema,
   type BarcodeLookup,
@@ -25,19 +28,24 @@ import {
   type MealWriteResult,
   type PatchMeal,
   type PatchSavedMeal,
+  type Profile,
   type RecentFoods,
   type SavedMeal,
   type SavedMeals,
   type SavedMealWriteResult,
+  type TargetsResponse,
+  type TargetsWriteResult,
   type WeightSeries,
   type WeightWriteResult,
   type WriteFood,
   type WriteMeal,
+  type WriteProfile,
   type WriteSavedMeal,
+  type WriteTargets,
   type WriteWeight,
 } from "@shared"
 
-import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api"
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, ApiError } from "@/lib/api"
 
 /**
  * Every query and mutation the app makes.
@@ -95,6 +103,8 @@ export const queryKeys = {
   barcode: (userId: string | null | undefined, code: string) =>
     ["foods", userId ?? "anonymous", "barcode", code] as const,
   savedMeals: (userId: string | null | undefined) => ["saved-meals", userId ?? "anonymous"] as const,
+  targets: (userId: string | null | undefined) => ["targets", userId ?? "anonymous"] as const,
+  profile: (userId: string | null | undefined) => ["profile", userId ?? "anonymous"] as const,
   /** Everything food-shaped this user has cached. What creating a food invalidates. */
   allFoods: (userId: string | null | undefined) => ["foods", userId ?? "anonymous"] as const,
 }
@@ -482,5 +492,88 @@ export function useDeleteSavedMeal() {
   return useMutation<DeleteResult, ApiError, string>({
     mutationFn: (id) => apiDelete(`/api/saved-meals/${id}`, deleteResultSchema, getToken),
     onSuccess: () => void invalidate(),
+  })
+}
+
+/**
+ * The targets in force today, and every set on record. The Goals screen's
+ * read; the Dashboard does not use it, because `GET /day/:date` already
+ * resolves the targets for the day it is showing.
+ */
+export function useTargets() {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<TargetsResponse, ApiError>({
+    queryKey: queryKeys.targets(userId),
+    queryFn: () => apiGet("/api/targets", targetsResponseSchema, getToken),
+    enabled: Boolean(isSignedIn),
+    staleTime: 5 * 60_000,
+    retry,
+  })
+}
+
+/**
+ * Set the targets, from today.
+ *
+ * ## What it invalidates, and why both
+ *
+ * Every cached day, because the day summary is where the Dashboard's calorie
+ * and macro cards read their targets: `GET /day/:date` resolves the target for
+ * that day server-side, and "remaining" and the rings are the engine's answer
+ * against it. Patching them in here would be arithmetic in the client. And the
+ * targets read itself, so the Goals screen reopens on what was saved.
+ *
+ * The id comes from the caller, as with every create: a retry must carry the
+ * id its first attempt carried. See `useLogWeight` for why that matters even
+ * on a route that upserts.
+ */
+export function useSetTargets() {
+  const { userId, getToken } = useAuth()
+  const client = useQueryClient()
+
+  return useMutation<TargetsWriteResult, ApiError, WriteTargets>({
+    mutationFn: (input) => apiPost("/api/targets", input, targetsWriteResultSchema, getToken),
+    onSuccess: () =>
+      void Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.allDays(userId) }),
+        client.invalidateQueries({ queryKey: queryKeys.targets(userId) }),
+      ]),
+  })
+}
+
+/** The goal weight, or null. The Goals screen's other read. */
+export function useProfile() {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<Profile, ApiError>({
+    queryKey: queryKeys.profile(userId),
+    queryFn: () => apiGet("/api/profile", profileSchema, getToken),
+    enabled: Boolean(isSignedIn),
+    staleTime: 5 * 60_000,
+    retry,
+  })
+}
+
+/**
+ * Set or clear the goal weight.
+ *
+ * Invalidates every cached weight window as well as the profile, because the
+ * goal reaches the rest of the app only through the weight series: the
+ * Dashboard's weight card, the Weight tab's goal card and the chart's goal line
+ * all read `goalWeightKg` and `goal` off `GET /weight-logs`. `goal.progress` and
+ * `remainingKg` are the engine's, so the series is refetched rather than
+ * patched.
+ */
+export function useSetProfile() {
+  const { userId, getToken } = useAuth()
+  const client = useQueryClient()
+
+  return useMutation<Profile, ApiError, WriteProfile>({
+    mutationFn: (input) => apiPut("/api/profile", input, profileSchema, getToken),
+    onSuccess: () =>
+      void Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.allWeightSeries(userId) }),
+        client.invalidateQueries({ queryKey: queryKeys.profile(userId) }),
+      ]),
   })
 }

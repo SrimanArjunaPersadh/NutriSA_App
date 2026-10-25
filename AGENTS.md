@@ -75,10 +75,9 @@ import { NativeTabs } from 'expo-router/native-tabs';
   members since 57 — `NativeTabs.Trigger.Icon` and `NativeTabs.Trigger.Label`. Check the
   **SDK 58** docs, or read `node_modules/expo-router/build/native-tabs/index.d.ts`, before
   editing the tab layout; do not copy another SDK's API.
-- **Native Tabs on SDK 58 is not yet verified on the device.** It was verified on SDK 54 —
-  iPhone 15, 2026-08-10, liquid-glass bar and SF Symbols drawing — against
-  `react-native-screens` 4.16.0, and is now on 4.30.0, so that result no longer carries.
-  Re-confirm on the phone before trusting it. See the answered open question in `plan.md`
+- **Native Tabs on SDK 58 is verified on the device** — iPhone, 2026-10-25, against
+  `react-native-screens` 4.30.0. That result is tied to those package versions: after the
+  next SDK move, re-confirm on the phone before trusting it. See the answered open question in `plan.md`
   for the two Android caveats; `Icon` also accepts `md` (Material Symbols), which closes
   the Android icon gap without a drawable, but on SDK 58 `md` needs the optional peer
   `expo-symbols` installed.

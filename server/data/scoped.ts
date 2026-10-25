@@ -207,12 +207,14 @@ export type ScopedUpsert = {
 }
 
 /**
- * `INSERT … ON CONFLICT (…) DO UPDATE`, for the two tables where a day may only
- * hold one row: a weigh-in, and a set of targets taking effect.
+ * `INSERT … ON CONFLICT (…) DO UPDATE`, for the tables where a key may only
+ * hold one row: a weigh-in per day, a set of targets per day they take effect,
+ * and one profile per user.
  *
  * ## The conflict target must include `user_id`
  *
- * Both callers conflict on `(user_id, date)` or `(user_id, valid_from)`, so the
+ * The callers conflict on `(user_id, date)`, `(user_id, valid_from)` or
+ * `(user_id)` alone, so the
  * row being updated is by construction the caller's own — Postgres found it by
  * matching this user's id. A target that omitted `user_id` would find *anyone's*
  * row for that day and overwrite it, which is the worst bug this layer could
