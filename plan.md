@@ -55,6 +55,8 @@ food search over own, shared and Open Food Facts rows, recent foods, a serving
 editor, Quick Add, create-a-food, and barcode scanning with OFF lookup cached as
 global rows. The food half of Phase 6 and most of Phase 7; saved meals
 (`custom_meals`) followed the same day. **604 tests green across 27 files; search confirmed on device, the redesign not yet** ·
+**`food-logger` finished 2026-10-25**: review fixed, 658 tests, security suite 72 / 72, PR
+open · **Next: Phase 7b `targets-and-profile`** (added 2026-10-25) ·
 Phases 8–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
@@ -1576,6 +1578,74 @@ up to the meal dropdowns; the review fixes are not.
 
 ---
 
+## Phase 7b — `targets-and-profile`
+
+*Added 2026-10-25, Sriman's call, ahead of Phase 8. Not in the original spec as a phase:
+the profile screen has been "owed, its own branch" since 2026-08-14 (see the goal-weight
+open question below), and the targets were left to a sheet nobody built. Lettered 7b so
+no later phase number moves.*
+
+**Goal:** every number the user aims for can be seen and changed inside the app. Today
+the macro targets were set by the Phase 1 migration seed and the goal weight by
+`npm run seed:profile`, and a script is the only way to move either.
+
+**What already exists, so this branch does not rebuild it:**
+- `GET /targets` (read router) and `POST /targets` (rate-limited write). Rows are
+  effective-dated, posting twice for the same `validFrom` updates that row, and a
+  future `validFrom` is refused. See `writeTargetsSchema` in
+  `packages/shared/src/writes.ts`
+- `profiles`, every column nullable (`height_cm`, `age`, `sex`, `activity`,
+  `goal_rate`, `goal_weight_kg`). An empty profile is a valid state and no surface
+  may require one. See its comment in `server/db/schema.ts`
+- `resolveTargetForDate()` and `goal.ts` in the engine. `src/components/ui/Dropdown.tsx`
+  was built in Phase 5 partly for this branch's targets sheet
+- Both tables are already in the deletion cascade list (Phase 11)
+
+**Settle with Sriman before code** (use the `grilling` skill; record the answers here):
+- [ ] Where the screen lives. The four Native Tabs are fixed, so it is a pushed screen.
+      Reached from where (Dashboard header, the Calories-left card, the Weight tab's
+      goal line)?
+- [ ] Which profile fields v1 shows. All six exist; only `goal_weight_kg` is read by
+      anything today. Collecting age, sex and height with no feature reading them is
+      health data held for no purpose (POPIA minimality)
+- [ ] How targets are entered: kcal plus P / C / F typed independently, or macros with
+      kcal derived (4 / 4 / 9) by the engine? If derived, what happens to the 38
+      migrated days whose stored kcal disagrees with their macros?
+- [ ] A target change takes effect from today (`currentLoggingDay()`). Is back-dating
+      a change wanted, or is "from today" the only option?
+- [ ] Is the target history shown (`GET /targets` already returns it)?
+- [ ] Out of scope unless Sriman says otherwise: suggesting targets from a TDEE formula
+      (adaptive TDEE is in the deferred backlog), and `goal_rate`
+
+**Build:**
+- [ ] `GET /profile` and `PUT /profile`: zod schemas in `packages/shared/`, the
+      scoped query layer, `user_id` from the Clerk token only, the PUT rate-limited
+      like every write. Upsert on `user_id` (the column is unique)
+- [ ] Plausible bounds in the shared schema (goal weight, height, age), the same way
+      `isPlausibleWeight` guards foods
+- [ ] Any number the screen computes (kcal from macros, a macro's share of calories,
+      kg to goal) comes from `packages/engine/`, with tests. Zero arithmetic in `src/`
+- [ ] Targets screen: current targets, edit, save through `POST /targets`. Four
+      states, including "no targets yet" (`current: null` is a real state)
+- [ ] Goal weight edit: after a save the Dashboard ring, "kg to goal" and the Weight
+      chart's goal line follow without a restart (invalidate the right React Query keys)
+- [ ] Clearing the goal weight is allowed and returns those surfaces to their no-goal
+      states, which already exist
+- [ ] Security suite: extend user-isolation to `PUT /profile` (A cannot read or write
+      B's profile) and confirm `POST /targets` is covered
+- [ ] Privacy: profile fields are Special Personal Information. Never in a Sentry
+      event, breadcrumb or server log (the `redactParams` / `sentry-scrub` paths from
+      `food-logger` must cover the new routes)
+- [ ] No new table is expected. If one appears, it joins the cascade **and** the
+      export in this branch
+- [ ] Decide what happens to `npm run seed:profile` once the screen exists (retire, or
+      keep as a dev seed and say so in its header)
+- [ ] `server/README.md` route table updated
+- [ ] Device: change targets, see the Calories-left card and the Dashboard follow;
+      change and clear the goal weight, see the ring and chart line follow; 44pt targets
+
+---
+
 ## Phase 8 — `label-ocr`
 
 **Goal:** the middle tier, fast, with a failure path as polished as the happy path.
@@ -1792,7 +1862,7 @@ Only after v1.0 is in daily use.
 - [x] **How does `goal_weight_kg` get written? — seeded, 2026-08-14, at 85.0 kg
       (Sriman's call).** `npm run seed:profile`, run against Neon. A real profile/settings
       screen is still owed and is still its own branch — it is a whole surface with four
-      states, not a checkbox. Until it exists, re-running the script with a different
+      states, not a checkbox. **That branch is now Phase 7b, `targets-and-profile`.** Until it exists, re-running the script with a different
       constant is the only way to move the goal, which is why it updates rather than skips.
 - [x] **Should the chart window from the last weigh-in, or from today? — from TODAY.
       Sriman's call on the device, 2026-08-15.** `?days=30` used to end at the last
