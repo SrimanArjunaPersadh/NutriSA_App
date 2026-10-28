@@ -46,6 +46,18 @@ export function aiBudgetRung(spentUsd: number): AiBudgetRung {
   return "full"
 }
 
+/**
+ * The month's spend as Goals prints it, "AI this month: $x of $5" (Q26):
+ * whole cents, rounded **down**. Rounded to nearest, $4.996 would read "$5.00"
+ * while the month is still on the cheaper rung (Spec review, 2026-10-28).
+ * Down also never overstates what was spent. The cents are rounded to six
+ * places first so a float such as 0.29 * 100 = 28.999... stays 29.
+ */
+export function aiSpendShown(spentUsd: number): number {
+  if (!Number.isFinite(spentUsd) || spentUsd <= 0) return 0
+  return Math.floor(roundTo(spentUsd * 100, 6)) / 100
+}
+
 export type AiBudgetMonth = {
   /** The first SAST day of the month `today` falls in. */
   firstDay: LogDay

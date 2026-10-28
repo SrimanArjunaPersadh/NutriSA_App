@@ -52,7 +52,7 @@ import {
   toWriteItem,
   type DraftItem,
 } from "@/lib/meal-draft"
-import { addToPlate, clearPlate, removeFromPlate, updatePlateItem, usePlate } from "@/lib/plate"
+import { addToPlate, clearPlate, plateMealId, removeFromPlate, updatePlateItem, usePlate } from "@/lib/plate"
 import {
   useCreateSavedMeal,
   useDaySummary,
@@ -131,7 +131,7 @@ export default function AddFood() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const keyboardVisible = useKeyboardVisible()
-  const params = useLocalSearchParams<{ date?: string; mode?: string; focus?: string; slot?: string }>()
+  const params = useLocalSearchParams<{ date?: string; mode?: string; focus?: string; slot?: string; plate?: string }>()
 
   /** Validated, never trusted: a URL parameter is client input. */
   const [day] = useState<LogDay>(() =>
@@ -156,7 +156,8 @@ export default function AddFood() {
   const totals = useMemo(() => draftTotals(plate), [plate])
 
   const [sheet, setSheet] = useState<Sheet | null>(null)
-  const [plateOpen, setPlateOpen] = useState(false)
+  /** `?plate=1`: open on the plate, as a meal card's Edit does (Phase 9, A2). */
+  const [plateOpen, setPlateOpen] = useState(params.plate === "1")
   const [toast, setToast] = useState<AddToast | null>(null)
 
   const recent = useRecentFoods(slot)
@@ -291,7 +292,9 @@ export default function AddFood() {
 
   function logPlate() {
     if (!canLog) return
-    pendingId.current ??= uuidv7()
+    // A plate loaded from an assistant meal card logs under the card's id, so
+    // the card reads Logged and its Confirm cannot log it twice (Phase 9, A2).
+    pendingId.current ??= plateMealId() ?? uuidv7()
 
     // Back-dates only, never today — the server is the time authority. The
     // comparison is against a fresh `currentLoggingDay()`, so a logger left

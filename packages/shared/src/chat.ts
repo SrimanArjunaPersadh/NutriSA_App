@@ -146,7 +146,8 @@ export type AiAllowance = z.infer<typeof aiAllowanceSchema>
  *
  * - `status`: a lookup started, for the "Checking today's log" line (Q7)
  * - `text`: the next piece of the reply
- * - `proposal`: a meal card, once the reply is done
+ * - `proposal`: a meal card, as soon as it is made, often before the reply's
+ *   text; a second one in the same turn replaces it
  * - `done`: the reply is stored; `rung` says which model answered
  * - `error`: the turn ended without a reply. `code` is the shared error code
  */
@@ -177,3 +178,23 @@ export const aiConsentSchema = z.object({
 })
 
 export type AiConsent = z.infer<typeof aiConsentSchema>
+
+/** `PUT /api/ai/consent`: agree (true) or turn AI features off (false). */
+export const aiConsentWriteSchema = z.object({ granted: z.boolean() })
+
+export type AiConsentWrite = z.infer<typeof aiConsentWriteSchema>
+
+/** `DELETE /api/chat/conversations/:id`. False when there was nothing to delete. */
+export const chatDeleteResultSchema = z.object({ deleted: z.boolean() })
+
+export type ChatDeleteResult = z.infer<typeof chatDeleteResultSchema>
+
+/** `DELETE /api/chat/conversations`: how many chats went. */
+export const chatDeleteAllResultSchema = z.object({ deleted: z.number().int().min(0) })
+
+export type ChatDeleteAllResult = z.infer<typeof chatDeleteAllResultSchema>
+
+/** `POST /api/chat/messages/:id/dismiss`. */
+export const chatDismissResultSchema = z.object({ dismissed: z.boolean() })
+
+export type ChatDismissResult = z.infer<typeof chatDismissResultSchema>

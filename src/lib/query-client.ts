@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query"
 
+import { selectChat } from "@/lib/chat-selection"
 import { clearPlate } from "@/lib/plate"
 
 /**
@@ -50,4 +51,6 @@ export function clearQueryCache(): void {
   // kind of thing — health data held in memory for whoever is signed in — and
   // it must leave with them. See `@/lib/plate`.
   clearPlate()
+  // Which chat the assistant tab was on (Phase 9, Q19).
+  selectChat(null)
 }

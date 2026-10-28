@@ -48,11 +48,12 @@ export function SwipeActions({
   onPress: () => void
   /** VoiceOver label for the tap, e.g. "Breakfast, 380 calories. Open it." */
   pressLabel: string
-  onEdit: () => void
+  /** Left out where a row has nothing to edit (a chat): no right swipe then. */
+  onEdit?: () => void
   /** Called on tapping the revealed Delete; the caller asks "are you sure". */
   onDelete: () => void
   /** VoiceOver labels — "Edit Breakfast", "Delete Breakfast". */
-  editLabel: string
+  editLabel?: string
   deleteLabel: string
 }) {
   const ref = useRef<SwipeableMethods>(null)
@@ -73,7 +74,7 @@ export function SwipeActions({
       overshootRight={false}
       childrenContainerStyle={{ backgroundColor: background }}
       // Swiping right reveals the left side: Edit.
-      renderLeftActions={() => (
+      renderLeftActions={onEdit ? () => (
         <RNPressable
           accessibilityRole="button"
           accessibilityLabel={editLabel}
@@ -83,7 +84,7 @@ export function SwipeActions({
         >
           <Text className="font-barlow-semibold text-[15px] text-white">Edit</Text>
         </RNPressable>
-      )}
+      ) : undefined}
       // Swiping left reveals the right side: Delete.
       renderRightActions={() => (
         <RNPressable
@@ -102,10 +103,10 @@ export function SwipeActions({
         accessibilityRole="button"
         accessibilityLabel={pressLabel}
         accessibilityActions={[
-          { name: "edit", label: editLabel },
+          ...(onEdit ? [{ name: "edit", label: editLabel }] : []),
           { name: "delete", label: deleteLabel },
         ]}
-        onAccessibilityAction={(event) => (event.nativeEvent.actionName === "delete" ? onDelete() : onEdit())}
+        onAccessibilityAction={(event) => (event.nativeEvent.actionName === "delete" ? onDelete() : onEdit?.())}
         onPress={onPress}
         // Runtime press feedback: gesture-handler's Pressable takes a style
         // function, not NativeWind's `active:` classes.

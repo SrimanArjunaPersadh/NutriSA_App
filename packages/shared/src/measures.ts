@@ -89,8 +89,10 @@ type Common = { match: RegExp; noun: string; grams: number; unit?: "g" | "ml" }
  * "peanut butter" is a spread before it is butter.
  */
 const COMMON: readonly Common[] = [
-  // Sourdough is cut thicker: 44 g a slice, Sriman's own (2026-10-20).
-  { match: /\bsourdough\b/i, noun: "slice", grams: 44 },
+  // Sourdough is cut thicker: 44 g a slice, Sriman's own (2026-10-20). The
+  // bread word may follow it: the food word must end the name (see
+  // `commonMeasure`), and "Sourdough bread" used to fall through to 38 g.
+  { match: /\bsourdough(?:\s+(?:bread|loaf|toast))?\b/i, noun: "slice", grams: 44 },
   { match: /\b(bread|toast|loaf|rye)\b/i, noun: "slice", grams: 38 },
   { match: /\brusks?\b/i, noun: "rusk", grams: 30 },
   { match: /\b(wrap|tortilla)s?\b/i, noun: "wrap", grams: 60 },

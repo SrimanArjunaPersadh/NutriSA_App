@@ -52,6 +52,11 @@ module.exports = {
         "barlow-medium": ["Barlow_500Medium"],
         "barlow-semibold": ["Barlow_600SemiBold"],
         "barlow-bold": ["Barlow_700Bold"],
+        // The AI chat only (plan.md, Phase 9, C1, Sriman's pick 2026-10-29):
+        // the coach's replies read in a serif, the user's words and the box in
+        // Inter, so the two voices never look alike. Not for anything else.
+        reply: ["SourceSerif4_400Regular"],
+        chat: ["Inter_400Regular"],
       },
     },
   },

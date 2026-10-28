@@ -10,8 +10,8 @@ import {
 } from "@shared"
 
 import type { UserScope } from "../auth/user-scope"
-import { CHAT_SYSTEM_PROMPT, HELPLINE_NUMBERS, todayLine } from "./chat-prompt"
-import { CHAT_TOOLS, newToolContext, runTool } from "./chat-tools"
+import { CHAT_SYSTEM_PROMPT, HELPLINE_PHRASES, todayLine } from "./chat-prompt"
+import { CHAT_TOOLS, LOOKBACK_PHRASE, newToolContext, runTool, todaySnapshot } from "./chat-tools"
 import {
   anthropic,
   CHAT_EFFORT,
@@ -57,7 +57,17 @@ export type ChatTurnOutcome =
   | "refused"
   | "error"
 
-export type ChatTurnEvent = { type: "status"; tool: ChatToolName } | { type: "text"; text: string }
+/**
+ * What the turn tells the phone while it runs. A meal card goes the moment
+ * `propose_meal_log` makes it, not after the reply's last sentence: the card
+ * is what the user came for, and the sentence after it is a whole model call
+ * (Sriman, iPhone, 2026-10-28: "way too slow"). A second card in the same turn
+ * replaces the first.
+ */
+export type ChatTurnEvent =
+  | { type: "status"; tool: ChatToolName }
+  | { type: "text"; text: string }
+  | { type: "proposal"; proposal: ChatProposal }
 
 export type ChatTurnInput = {
   scope: UserScope
@@ -104,27 +114,85 @@ export async function runChatTurn(input: ChatTurnInput): Promise<ChatTurnResult>
 
   const deadline = AbortSignal.timeout(CHAT_TURN_TIMEOUT_MS)
   const signal = AbortSignal.any([input.signal, deadline])
+  const timings = new TurnTimings()
+
+  // Today's log, read once for both attempts. A failed read is not fatal: the
+  // model still has `get_day_summary`, and that read failing ends the turn.
+  let today: string | null = null
+  const read = timings.start("today")
+  try {
+    today = await todaySnapshot(input.scope, input.today)
+  } catch (error) {
+    console.warn(`Today's log not read for the chat: ${error instanceof Error ? error.constructor.name : "unknown error"}`)
+  }
+  read()
 
   let model: ModelId = input.rung === "cheaper" ? CHAT_FALLBACK_MODEL : CHAT_MODEL
-  let attempt = await attemptTurn(client, model, input, signal)
+  let attempt = await attemptTurn(client, model, input, today, signal, timings)
   let fellBack = false
 
   // The chat model overloaded or down, with nothing shown yet: the turn runs
-  // again on the cheaper model rather than dying (Q8).
-  if (attempt.stop === "unavailable" && model === CHAT_MODEL && attempt.text === "" && !signal.aborted) {
+  // again on the cheaper model rather than dying (Q8). A card already on the
+  // screen counts as shown: a rerun would make a second card with another id.
+  if (
+    attempt.stop === "unavailable" &&
+    model === CHAT_MODEL &&
+    attempt.text === "" &&
+    attempt.proposal === null &&
+    !signal.aborted
+  ) {
     console.warn("Chat model unavailable; retrying the turn on the fallback model")
     model = CHAT_FALLBACK_MODEL
     fellBack = true
-    attempt = await attemptTurn(client, model, input, signal)
+    attempt = await attemptTurn(client, model, input, today, signal, timings)
   }
 
   const rung = model === CHAT_MODEL ? "full" : "cheaper"
-  return settle(attempt, input, rung, fellBack, deadline.aborted)
+  const result = settle(attempt, input, today, rung, fellBack, deadline.aborted)
+  console.info(timings.line(result.outcome))
+  return result
+}
+
+/**
+ * Where a turn's time went, as one server log line (plan.md, Phase 9,
+ * `ai-chat-app`, B1): "today 180ms · model 3100ms (text 2900ms) ·
+ * search_foods 210ms · model 2400ms · total 5900ms". Step names and
+ * milliseconds only, never a message, a result or a user id (Q14).
+ */
+class TurnTimings {
+  private readonly began = performance.now()
+  private readonly steps: string[] = []
+
+  /** Starts a step; the function it returns ends it. */
+  start(label: string): (note?: string) => void {
+    const from = performance.now()
+    return (note) => {
+      const ms = Math.round(performance.now() - from)
+      this.steps.push(`${label} ${ms}ms${note ? ` (${note})` : ""}`)
+    }
+  }
+
+  /** Milliseconds since the step began, for "text arrived at". */
+  since(from: number): number {
+    return Math.round(performance.now() - from)
+  }
+
+  line(outcome: ChatTurnOutcome): string {
+    const total = Math.round(performance.now() - this.began)
+    return `Chat turn ${outcome}: ${[...this.steps, `total ${total}ms`].join(" · ")}`
+  }
+}
+
+/** The model's view of today: the date, then the log it would otherwise look up. */
+function todayMessage(today: LogDay, snapshot: string | null): string {
+  if (!snapshot) return todayLine(today)
+  return `${todayLine(today)}\n\nToday's log and targets, the same as get_day_summary and get_targets return for today:\n${snapshot}`
 }
 
 function settle(
   attempt: Attempt,
   input: ChatTurnInput,
+  snapshot: string | null,
   rung: AiAnsweringRung,
   fellBack: boolean,
   timedOut: boolean,
@@ -143,8 +211,16 @@ function settle(
     }
   }
 
-  const cut = attempt.stop === "aborted" || attempt.stop === "timeout" || attempt.stop === "truncated"
-  if (attempt.stop === "failed" || attempt.stop === "unavailable" || (cut && text === "")) {
+  // A turn that made its card and then lost the sentence after it is cut off,
+  // not failed: the card the phone already shows is stored with it, so it
+  // stays confirmable and its id stays the one on the screen.
+  const lost = attempt.stop === "failed" || attempt.stop === "unavailable"
+  const cut =
+    attempt.stop === "aborted" ||
+    attempt.stop === "timeout" ||
+    attempt.stop === "truncated" ||
+    (lost && attempt.proposal !== null)
+  if ((lost && attempt.proposal === null) || (cut && text === "" && attempt.proposal === null)) {
     return {
       ...base,
       text: "",
@@ -159,10 +235,11 @@ function settle(
   // instead, so they cannot vouch for an invented number (number-check.ts).
   const sources = [
     todayLine(input.today),
+    ...(snapshot ? [snapshot] : []),
     ...input.history.filter((message) => message.role === "user").map((message) => message.content),
     ...attempt.toolResults,
   ]
-  const unsourced = unsourcedNumbers(text, sources, HELPLINE_NUMBERS)
+  const unsourced = unsourcedNumbers(text, sources, [...HELPLINE_PHRASES, LOOKBACK_PHRASE])
 
   if (cut) {
     return {
@@ -171,7 +248,7 @@ function settle(
       unsourced,
       status: "cut_off",
       proposal: attempt.proposal,
-      outcome: attempt.stop === "timeout" || timedOut ? "timeout" : "cut_off",
+      outcome: lost ? "error" : attempt.stop === "timeout" || timedOut ? "timeout" : "cut_off",
       error: null,
     }
   }
@@ -208,18 +285,27 @@ async function attemptTurn(
   client: Anthropic,
   model: ModelId,
   input: ChatTurnInput,
+  snapshot: string | null,
   signal: AbortSignal,
+  timings: TurnTimings,
 ): Promise<Attempt> {
   const ctx = newToolContext(input.scope, input.today)
   const toolResults: string[] = []
   let text = ""
   let lookups = 0
 
-  // History, then the date. A mid-conversation system message keeps the date
-  // out of the cached prefix, so the rules and tools stay cached across days.
+  // History, then the date and today's log, which change every turn, so they
+  // come last, after the cached rules and tools (Q9).
+  //
+  // The history itself is not read back from cache on the next turn. A
+  // breakpoint on the newest history message was tried after the review and
+  // removed (Sriman, 2026-10-29): on the real API turn 2 still read only the
+  // rules and tools, and Anthropic's cache diagnostics said only
+  // `messages_changed`. Worth about half a cent a message in a long chat; look
+  // again if chats get long enough for that to matter.
   const messages: Anthropic.MessageParam[] = [
     ...input.history.map((message) => ({ role: message.role, content: message.content })),
-    { role: "system", content: todayLine(input.today) },
+    { role: "system", content: todayMessage(input.today, snapshot) },
   ]
 
   // Each lookup round is one call; one more lets the model answer after the
@@ -232,14 +318,17 @@ async function attemptTurn(
     // Text after a lookup starts a new paragraph, in the stream and the
     // stored reply alike, so the phone and the database show the same thing.
     let paragraph = text !== "" && !/\s$/.test(text)
+    const callStarted = performance.now()
+    const callDone = timings.start("model")
+    let firstText: number | null = null
     try {
       const stream = client.messages.stream(
         {
           model,
           max_tokens: CHAT_MAX_TOKENS,
           // The breakpoint after the rules caches the tool definitions too,
-          // which render before them. The top-level one caches the
-          // conversation so far, for the next call in this turn and the next turn.
+          // which render before them. The top-level one caches the whole
+          // request so far, for the next call in this turn.
           system: [{ type: "text", text: CHAT_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
           cache_control: { type: "ephemeral" },
           tools: CHAT_TOOLS,
@@ -260,6 +349,7 @@ async function attemptTurn(
           usage.outputTokens = event.usage.output_tokens
           if (event.usage.input_tokens != null) usage.inputTokens = event.usage.input_tokens
         } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          firstText ??= timings.since(callStarted)
           const piece = paragraph ? `\n\n${event.delta.text}` : event.delta.text
           paragraph = false
           text += piece
@@ -268,9 +358,11 @@ async function attemptTurn(
       }
       final = await stream.finalMessage()
     } catch (error) {
+      callDone("ended early")
       if (started) await input.recordUsage(model, usage)
       return { text, stop: classify(error, signal, input.signal), proposal: ctx.proposal, toolResults }
     }
+    callDone(firstText === null ? undefined : `text ${firstText}ms`)
 
     await input.recordUsage(model, usage)
 
@@ -303,7 +395,12 @@ async function attemptTurn(
       // Only a declared tool gets a status line; anything else falls through
       // to `runTool`, which answers the model with an error it can read.
       if (isChatToolName(block.name)) input.emit({ type: "status", tool: block.name })
+      const lookupDone = timings.start(isChatToolName(block.name) ? block.name : "unknown tool")
       const result = await runTool(ctx, block.name, block.input)
+      lookupDone()
+      if (block.name === "propose_meal_log" && !result.isError && ctx.proposal) {
+        input.emit({ type: "proposal", proposal: ctx.proposal })
+      }
       toolResults.push(result.content)
       results.push({
         type: "tool_result",

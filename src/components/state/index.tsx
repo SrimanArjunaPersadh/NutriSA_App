@@ -220,6 +220,29 @@ function describe(error: unknown): {
           detail: "Give it a moment and try again.",
           retryable: true,
         }
+      /**
+       * The three the AI routes add (Phase 9). Screens that call those routes
+       * draw their own designed states for consent and the allowance; these
+       * are the fallback wording if one ever reaches a generic surface.
+       */
+      case "upstream-failed":
+        return {
+          title: "Couldn't get an answer",
+          detail: "The AI service didn't respond. Try again.",
+          retryable: true,
+        }
+      case "ai-consent-required":
+        return {
+          title: "AI features are off",
+          detail: "Turn them on in Goals to use this.",
+          retryable: false,
+        }
+      case "ai-allowance-used":
+        return {
+          title: "This month's AI allowance is used up",
+          detail: "Logging still works.",
+          retryable: false,
+        }
       case "bad-request":
       case "malformed-response":
       case "server-error":

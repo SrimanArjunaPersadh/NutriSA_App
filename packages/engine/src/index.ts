@@ -71,6 +71,7 @@ export {
   stepQuantity,
   amountForMeasure,
   gramsPerMeasure,
+  isSayableCount,
   measureCount,
   measureLabel,
   pluralNoun,
@@ -133,6 +134,7 @@ export {
 export {
   aiBudgetMonth,
   aiBudgetRung,
+  aiSpendShown,
   belowSafeFloor,
   servingsQuantity,
   AI_BUDGET_RUNGS,

@@ -14,7 +14,7 @@ import { Image } from "expo-image"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { labelFoodDraft, PORTION_BASIS, type LabelPer, type PortionUnit } from "@engine"
-import { barcodeSchema, type LabelReading, type WriteFood } from "@shared"
+import { barcodeSchema, type AiAllowance, type LabelReading, type WriteFood } from "@shared"
 
 import { ChevronLeft, CloseIcon, ScanIcon } from "@/components/icons/UiIcons"
 import { FieldLabel, NumberField, TextField } from "@/components/logging/fields"
@@ -22,7 +22,7 @@ import { basisLabel, MacroFields, UNIT_OPTIONS } from "@/components/logging/Meal
 import { Dropdown } from "@/components/ui/Dropdown"
 import { colors } from "@/design/tokens"
 import { ApiError } from "@/lib/api"
-import { parseDecimal } from "@/lib/format"
+import { formatDayMonth, parseDecimal } from "@/lib/format"
 import {
   deletePhotoFile,
   discardLabelPhoto,
@@ -32,7 +32,7 @@ import {
 } from "@/lib/label-photo"
 import { draftItemFromFood, toNumber, type MacroText } from "@/lib/meal-draft"
 import { addToPlate } from "@/lib/plate"
-import { useCreateFood, useReadLabel } from "@/lib/queries"
+import { useAiAllowance, useAiConsent, useCreateFood, useReadLabel } from "@/lib/queries"
 import { FOOD_WORDING, saveErrorMessage } from "@/lib/save-message"
 import { useKeyboardVisible } from "@/lib/use-keyboard-visible"
 import { uuidv7 } from "@/lib/uuid"
@@ -82,9 +82,27 @@ export default function CreateFood() {
   const [serving, setServing] = useState("")
   const [per, setPer] = useState<MacroText>({ kcal: "", protein: "", carbs: "", fat: "" })
 
+  /**
+   * AI consent before the first photo (Phase 9, Q15, A1): without it the camera
+   * waits behind the consent screen, which goes on to the camera on Agree. At
+   * $5 for the month the reader pauses and typing it in is the way (Q8).
+   */
+  const consent = useAiConsent()
+  const consented = Boolean(consent.data?.consentedAt)
+  // An unreadable consent is not taken as a no: the camera opens and the
+  // server, which holds the consent, refuses the read if it must, with its
+  // own "AI features are off" line. Asking again would re-ask someone who agreed.
+  const askConsent = consent.isSuccess && !consented
+  const allowance = useAiAllowance(consented)
+  const pausedUntil = allowance.data?.rung === "exhausted" ? allowance.data.resetsOn : null
+  const openCamera = () => router.push(askConsent ? "/ai-consent?next=camera" : "/label-camera")
+
   const label = useLabelReader({
-    autoOpen: params.read === "1",
-    openCamera: () => router.push("/label-camera"),
+    // `?read=1` waits for the consent read and, once agreed, the allowance
+    // read, so it neither opens the wrong screen nor the camera at $5.
+    autoOpen:
+      params.read === "1" && !consent.isPending && (!consented || !allowance.isPending) && pausedUntil === null,
+    openCamera,
     onReading: (reading) => {
       const draft = labelFoodDraft(reading)
       // A name already typed (it came from the search) is never overwritten.
@@ -166,7 +184,7 @@ export default function CreateFood() {
             </Text>
           ) : null}
 
-          <LabelPanel label={label} openCamera={() => router.push("/label-camera")} />
+          <LabelPanel label={label} openCamera={openCamera} pausedUntil={pausedUntil} />
 
           {/*
             Locked while the label is being read: the answer replaces these
@@ -356,7 +374,27 @@ function useLabelReader({
  * The reader's strip above the form: the entry button with no photo, then the
  * thumbnail with whichever of reading, failed, not-a-label or filled applies.
  */
-function LabelPanel({ label, openCamera }: { label: LabelReader; openCamera: () => void }) {
+function LabelPanel({
+  label,
+  openCamera,
+  pausedUntil,
+}: {
+  label: LabelReader
+  openCamera: () => void
+  /** The day the AI allowance resets, while it is used up (Phase 9, Q8). */
+  pausedUntil: AiAllowance["resetsOn"] | null
+}) {
+  if (!label.photo && pausedUntil) {
+    return (
+      <View className="mb-[16px] rounded-[12px] border border-cardBorder bg-card px-[14px] py-[12px]">
+        <Text className="font-barlow-semibold text-[15px] text-white">Label reading is paused</Text>
+        <Text className="mt-[2px] font-barlow text-[13px] text-textSecondary">
+          {`This month's AI allowance is used up. It resets on ${formatDayMonth(pausedUntil)}. Type it in below.`}
+        </Text>
+      </View>
+    )
+  }
+
   if (!label.photo) {
     return (
       <Pressable
@@ -485,6 +523,8 @@ function readFailureActions(label: LabelReader): PanelStatus["actions"] {
   const typeItIn = { label: "Type it in", run: label.dismiss }
   switch (label.error?.code) {
     case "rate-limited":
+    case "ai-allowance-used":
+    case "ai-consent-required":
       return [typeItIn]
     case "bad-request":
       return [{ label: "Retake", run: "camera" }, typeItIn]
@@ -497,6 +537,10 @@ function readFailureDetail(error: ApiError): string {
   switch (error.code) {
     case "rate-limited":
       return "That's a lot of labels this hour. Type this one in."
+    case "ai-allowance-used":
+      return "This month's AI allowance is used up. Type this one in."
+    case "ai-consent-required":
+      return "AI features are off. Turn them on in Goals, or type this one in."
     case "network":
       return "Couldn't reach the server. Your photo is still here."
     case "bad-request":

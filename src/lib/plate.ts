@@ -34,8 +34,18 @@ import type { DraftItem } from "@/lib/meal-draft"
 let items: readonly DraftItem[] = []
 const listeners = new Set<() => void>()
 
+/**
+ * The meal-log id this plate is to be logged under, when it came from an
+ * assistant meal card's Edit (Phase 9, A2). The card's id was minted by the
+ * server when the card was made, and logging under it is what turns the card
+ * to Logged and makes a later Confirm log nothing twice. Null for an ordinary
+ * plate, which mints its own id when it is logged.
+ */
+let mealId: string | null = null
+
 function set(next: readonly DraftItem[]) {
   items = next
+  if (next.length === 0) mealId = null
   for (const listener of listeners) listener()
 }
 
@@ -64,4 +74,15 @@ export function removeFromPlate(key: string) {
 
 export function clearPlate() {
   set([])
+}
+
+/** A meal card's lines onto the plate, replacing what was there, under the card's id. */
+export function loadPlateFromCard(lines: readonly DraftItem[], cardMealId: string) {
+  set(lines)
+  mealId = lines.length > 0 ? cardMealId : null
+}
+
+/** The id `loadPlateFromCard` set, read once when the logger opens. */
+export function plateMealId(): string | null {
+  return mealId
 }

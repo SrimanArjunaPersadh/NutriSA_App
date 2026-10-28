@@ -15,6 +15,7 @@ import {
   amountForMeasure,
   gramsPerMeasure,
   measureCount,
+  isSayableCount,
   measureLabel,
   pluralNoun,
   perHundredFrom,
@@ -274,6 +275,19 @@ describe("measures", () => {
     expect(measureLabel(177, banana, "g")).toBe("1.5 bananas (177 g)")
     expect(measureLabel(70, { noun: "slice", grams: 35 }, "g")).toBe("2 slices (70 g)")
     expect(measureLabel(250, { noun: "glass", grams: 250 }, "ml")).toBe("1 glass (250 ml)")
+  })
+
+  it("labels an amount that is no whole or half count by its weight alone", () => {
+    const breast = { noun: "breast", grams: 170 }
+    expect(measureLabel(200, breast, "g")).toBe("200 g")
+    expect(measureLabel(150, breast, "g")).toBe("150 g")
+    expect(measureLabel(85, breast, "g")).toBe("0.5 breasts (85 g)")
+    expect(measureLabel(176, { noun: "slice", grams: 44 }, "g")).toBe("4 slices (176 g)")
+  })
+
+  it("says which counts a person would say", () => {
+    expect([0.5, 1, 1.5, 4].every(isSayableCount)).toBe(true)
+    expect([0, -1, 1.18, 0.25, Number.NaN].some(isSayableCount)).toBe(false)
   })
 })
 

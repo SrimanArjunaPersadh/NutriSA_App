@@ -67,9 +67,10 @@ offline, security suite 83 / 83, device pass confirmed by Sriman 2026-10-28 ·
 security suite 94 / 94; reviewed and fixed 2026-10-28, device pass on screen labels done;
 one real packet still owed ·
 **Phase 9 `ai-chat` grilled 2026-10-28** (Q1–Q31, every recommendation taken),
-split into `ai-chat` (server) and `ai-chat-app` (the tab). **The server half is built
-and reviewed, uncommitted** (858 tests offline; the real-API eval passed for $0.16); the
-tab is not started · Phases 10–12 not started · v1.1 deferred
+split into `ai-chat` (server) and `ai-chat-app` (the tab). **The server half is merged
+(#16, `1b452e0`)** (858 tests offline; the real-API eval passed for $0.16); **the
+tab (`ai-chat-app`) is built and reviewed, uncommitted, not yet passed on the device**
+(949 tests offline) · Phases 10–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -2021,7 +2022,10 @@ recommendation:
       US). Goals gains "Turn off AI features", which withdraws it. Without consent the
       server refuses with a designed state. This changes the merged Phase 8 reader
 - [x] **Minimum data (Q16):** name, email, Clerk id and user id never reach Anthropic;
-      tools return only the fields an answer needs. A test inspects the request bodies
+      tools return only the fields an answer needs. A test inspects the request bodies.
+      **Widened by B1 (`ai-chat-app`):** today's log and targets now go with every
+      message, whatever was asked. The same fields as `get_day_summary`, no ids, and the
+      consent screen says so
 - [x] **Keeping chats (Q17):** "Delete this chat" and "Delete all chats"; an Inngest cron
       deletes chats untouched for 12 months. `ai_usage` rows hold no text and stay until
       account deletion, because the budget reads them
@@ -2182,14 +2186,170 @@ Built 2026-10-28; the eval below is its first run against the real API.
       ids only, Anthropic sees no name, email or id, consent gates both AI routes
 
 ### Build — `ai-chat-app` (the tab)
-- [ ] The consent screen; the same consent before the first label read
-- [ ] Chat list, chat view, New chat, delete one / all
-- [ ] Streaming over `expo/fetch`, status lines, token-by-token render, Stop, "Cut off"
-      with Retry
-- [ ] The meal card: Confirm, Edit, Dismiss, confirmed state from the meal log
-- [ ] The unsourced-number line; the $4 notice and the $5 state
-- [ ] Goals: "AI this month: $x of $5" and "Turn off AI features"
-- [ ] Four states on every surface; the chat cache wiped on sign-out
+
+**Grilled 2026-10-28 (A1–A11, every recommendation taken; Sriman skipped the layout
+pictures and the privacy/tests round and asked for the build):**
+- **A1 Consent:** with no consent the tab shows a short explainer and Agree, nothing
+  else. "Read the label" opens the same screen before the camera; "Not now" goes back to
+  typing the food in
+- **A2 Edit:** the card's foods replace the plate (asking "Replace what's on your
+  plate?" when it is not empty) and the food logger opens on the card's slot. The plate
+  keeps the card's minted id, so logging from there marks the card Logged and a later
+  Confirm cannot log twice
+- **A3 Old cards:** a card from an earlier day is greyed: "From <day>. Ask again to log
+  it today." Edit and Dismiss only
+- **A4 Retry:** a cut-off reply keeps its "Cut off" label; its Retry hides once a newer
+  reply answers the same message (the server appends that reply)
+- **A5 Starters:** "Log my breakfast" fills the box with "For breakfast I had " and opens
+  the keyboard; the other two send at once
+- **A6 Voice:** no mic of our own; the iOS keyboard's dictation covers it
+- **A7 Turn off AI:** a confirm with "Turn off", "Turn off and delete my chats", Cancel;
+  the tab returns to the consent screen
+- **A8 Deletes:** "Delete this chat" in the chat header, "Delete all chats" at the foot
+  of the list, swipe a row to delete; each confirmed
+- **A9 Formatting:** replies render as plain text; `**` / `*` emphasis marks are
+  stripped, line breaks and "- " bullets kept. The prompt is unchanged. Built a little
+  wider (`plainReply`): `__` and heading hashes go too, and a `*` or `+` bullet becomes
+  "- ", so no stray markup character is left on screen
+- **A10 Status lines:** Checking today's log · Checking what's left · Looking at your
+  weight trend · Checking your targets · Looking at your saved meals · Searching your
+  foods · Making your meal card
+- **A11 Rungs:** at $4 a line above the box, "Using the lighter model until 1 <month>";
+  at $5 the designed state replaces the box and old chats stay readable
+- **B1 Speed (found on the iPhone, 2026-10-28: "How am I doing today?" took ~10 s):**
+  today's log and targets (`todaySnapshot`, the same fields as `get_day_summary` and
+  `get_targets`) go to the model with every message, in the system message after the
+  history with the date, so questions about today need one model call instead of two.
+  About 300–600 more input tokens a turn. The number check counts it as a source. A failed
+  read leaves the turn on the date alone. Each turn logs one timing line on the server
+  ("today 180ms · model 3100ms (text 2900ms) · search_foods 210ms · ... · total"), step
+  names and milliseconds only (Q14)
+- **B2 Natural units (iPhone: "4 slices of sourdough" made the coach ask what a slice
+  weighs):** `search_foods` returns each food's `naturalUnit` (the food row's own
+  `measure`, as the logger counts it), and `propose_meal_log` takes `count`; the engine's
+  `amountForMeasure` turns 4 slices into 176 g and the line reads "4 slices (176 g)" with
+  its measure stored, so Edit reopens it in slices. Found alongside: `commonMeasure`
+  matched sourdough only at the end of a name, so "Sourdough bread" was a 38 g slice; the
+  rule now takes "sourdough bread / loaf / toast"
+- **B3:** the eval re-run with five counted-food prompts, Sriman's OK for about $0.20.
+  **Run 2026-10-28, 43 prompts, $0.21:** all five counted foods made the right card
+  ("4 slices (176 g)", "3 eggs (150 g)", "2 bananas (236 g)", "1 glass (250 ml)",
+  "2 tablespoons (32 g)"); the three questions about today made **no lookup** (1.5–3.4 s);
+  p50 3.8 s, p95 6.8 s; turn 2 read 2,399 tokens from cache; fixed prompt 2,404 tokens;
+  no failure, no fallback. **Two problems, fixed after the run:** five false unsourced
+  flags, "24" (SADAG's "24-hour") and "90" ("the last 90 days"), because the review fix
+  that stopped counting the prompt as a source was never re-measured; both phrases are now
+  blanked like the helpline numbers. And "200g chicken and some rice" made no card: with
+  today's log in view the coach asked whether it duplicated the logged lunch, and how much
+  "some rice" was. The prompt now says to use one serving for a vague amount and to make
+  the card anyway, Confirm being the check. **Re-run on the 16 logging prompts, 2026-10-28,
+  $0.10 (`EVAL_ONLY=log-,count-`): all 16 right, no unsourced number, no failure**; "some
+  rice" took one 180 g serving, said so, and flagged the logged lunch as a possible double.
+  Spend on this branch's evals: $0.31. **B4, Sriman 2026-10-28:** a weight that is not a whole or
+  half count of its natural unit now reads as the weight alone, "200 g" not "1.18 breasts
+  (200 g)": the engine's `measureLabel` with `isSayableCount`, so the card, the logger, the
+  serving sheet and stored lines all agree. No paid re-run needed (a label, not the prompt).
+  933 green offline
+- **C1–C3 The chat's look (Sriman, 2026-10-29, picked from drawn options at
+  https://claude.ai/artifact/XVhp3hRdEUwHRwsR1G3TAt; he found the Barlow chat "cheap"):**
+  C1 the coach's replies in **Source Serif 4**, the user's words and the box in **Inter**,
+  the chat only (Barlow stays everywhere else, the meal card included); classes
+  `font-reply` / `font-chat`. C2 while it works, a **checklist**: each lookup a row, ticked
+  when done, the running one with a breathing dot and a shimmer; "Thinking" before the
+  first; the rows go when the reply starts (`WorkingSteps`, `turnSteps`). Grounded in
+  Maister (explained waits feel shorter), Buell and Norton's labour illusion (2011) and
+  Harrison et al. (CHI 2010, motion can make a wait feel ~10% shorter); skeleton screens
+  rejected on mixed evidence (Viget 2017). C3 the shimmer **neutral grey to white**, not
+  copper, which means "button" here. New packages via `npx expo install`:
+  `@expo-google-fonts/source-serif-4`, `@expo-google-fonts/inter`,
+  `@react-native-masked-view/masked-view` (0.3.2; its typings predate RN 0.88's, so it is
+  re-typed in `Working.tsx`)
+- **Defaults:** the tab opens the latest chat, its header holds Chats and New chat, the
+  list is its own screen; the chat follows the reply unless scrolled up; a 44pt send
+  button; a character count from 1,800; sign-out stops a reply in flight.
+  **Backgrounding, changed by Sriman 2026-10-28 on the iPhone:** the reply keeps going
+  while the app is away (iOS keeps the native request alive) and is there on return; only
+  a really lost connection is a cut-off. The default first said a backgrounded reply is a
+  cut-off
+- **B5 The card first (iPhone, 2026-10-28: logging a dinner "way too slow"):** the server
+  emits the meal card the moment `propose_meal_log` makes it, not after the reply's last
+  sentence, which is a whole model call later. A turn that made its card and then lost
+  the sentence (overload, 5xx) is stored as cut off with that card rather than failed, and
+  is not rerun on the fallback model, so the card on screen keeps the id that is stored
+
+Built 2026-10-28, **not yet seen on the phone**:
+- [x] The consent screen (`ConsentPanel`, inline on the tab and as `ai-consent.tsx`); the
+      same consent before the first label read (`create-food.tsx`, `?read=1` waits for it)
+- [x] Chat list (`chats.tsx`), chat view (`AssistantChat`), New chat, delete one (header
+      and swipe) / all, each confirmed. Which chat the tab shows: `@/lib/chat-selection`
+- [x] Streaming over `expo/fetch` (`apiPostStream` in `api.ts`, which now shares one
+      `send` with every other call; `readChatEvents` in `@/lib/chat-stream`), status lines,
+      token-by-token render, Stop, "Cut off" with Retry (`useChatTurn`, `chatRows`).
+      **A4 refined:** Retry shows only on the newest reply to the newest message; an
+      older cut-off reply keeps its label without the button, because its answer would be
+      stored at the end of the chat under a later question
+- [x] The meal card (`MealCard`): Confirm, Edit (A2, `loadPlateFromCard` + `?plate=1`),
+      Dismiss, the confirmed state from the meal log (a meal write now invalidates chats),
+      the expired state (A3)
+- [x] The unsourced-number line; the $4 line and the $5 state, on the tab and in the label
+      reader ("Label reading is paused", "Type it in")
+- [x] Goals: "AI this month: $x of $5" (the engine's `aiSpendShown`, whole cents rounded
+      down so it never reads $5.00 on the cheaper rung; `formatUsd` prints it) and "Turn off
+      AI features" (A7), or "Turn on AI features" when off. **Not asked for; kept by
+      Sriman 2026-10-28:** without it, someone who turned AI off could only turn it back on
+      from the AI tab or the label reader
+- [x] Four states on every surface; the chat cache and the chat selection wiped on sign-out
+- [x] Shared: `aiConsentWriteSchema` (the server's consent route now uses it),
+      `chatDeleteResultSchema`, `chatDeleteAllResultSchema`, `chatDismissResultSchema`
+- [x] Tests: `tests/chat-app.test.ts` (stream reader incl. split UTF-8 and a dropped
+      connection, rows and Retry, card states, failure copy, plate id, no device storage).
+      The `@/` alias joined all three vitest configs. `TabPlaceholder.tsx` deleted (only
+      the tab used it). **949 green across 39 files** (was 858), after B1–B5, C1–C3, the review and the device fixes
+- [x] `/nutrisa-review since main`, 2026-10-28 (the uncommitted tree against `1b452e0`).
+      **Standards** 0 hard, 6 judgement: the box's placeholder and disabled send used
+      `dotMuted` (reserved for scale readings) and Stop was a white fill (reserved for
+      selected chips), now `textSecondary` and copper; the card's macro dots were an inline
+      style, now `bg-protein` / `bg-carbs` / `bg-fats`; an unreadable consent re-asked
+      someone who had agreed, now the camera opens and the server decides; mutation result
+      types were written by hand, now `ChatDeleteResult` and friends from `@shared`; the
+      timing line's millisecond subtraction outside the engine (kept: a log, not data).
+      **Spec** 3 missing, 3 unasked, 4 wrong, all fixed or recorded: backgrounding was not
+      made a cut-off (an `AppState` abort was added, then **removed** the same evening:
+      pulling down the notification screen counts as background and it cut off replies
+      that had already arrived; Sriman chose to let replies keep going, see Defaults);
+      `?read=1` could open the camera at $5 while
+      the allowance loaded (now waits for it); stale status and test count here; "Turn on
+      AI features" and `plainReply`'s extras recorded above; dead `useInvalidateAllowance`
+      and `useChatList(enabled)` removed. Wrong: the tab showed the starters, not
+      `<Loading>` / `<ErrorState>`, while the chat list loaded or failed, and a send then
+      went to a new chat (now it waits for the list); at $5 the starters still sent (now
+      hidden); the Goals figure was rounded in the client (now `aiSpendShown`); and the
+      conversation was never read from cache across turns, because the date message sat
+      between the history and the top-level breakpoint since `ai-chat`. A breakpoint on the
+      newest history message was added and **checked on the real API, 2026-10-28 ($0.01,
+      `EVAL_ONLY=cache`): it did not help**. Turn 2 read 2,449 tokens, the rules and tools
+      only, the same gap below the fixed prompt as the first eval. No error and no extra
+      cost, so it stays while the cause is open. **Cache diagnostics run 2026-10-29
+      ($0.01, a one-off eval file, deleted after):** turn 2's `cache_miss_reason` was
+      `messages_changed`, 311 tokens missed. That is the expected divergence (turn 1's
+      today message stands where turn 2 has the reply); it does not say why the marker on
+      turn 1's message was not read back. **Sriman: remove it (2026-10-29).** The history
+      breakpoint is gone; the history is not cached across turns, worth about half a cent a
+      message in a long chat, to look at again if chats grow. Spend on this branch's
+      real-API checks: $0.33
+      **Privacy** 0 high, 1 medium, 3 low: the consent copy said "the figures from your log
+      that answer it" while B1 sends today's log with every message (now says so); Q16
+      widened by B1 (recorded above); the timing line names the tools a turn used (kept:
+      no id, no content); chat ids in Sentry breadcrumb URLs (now `[id]`, tested)
+- [x] Goals on the iPhone, 2026-10-28: the Calories and Goal weight fields drew over the
+      rows below them. `NumberField` is `flex-1` to share a row, and alone in a column that
+      resolved to zero height; both now sit in a one-field row. Not a change of this branch
+      (the review's diff never touched them); seen after Metro's `--clear`
+- [x] Security suite, 2026-10-29: **114 / 114 green in one run**. The first run failed 5:
+      two were Neon connect timeouts from this PC (the cleanup and the cascade), three were
+      this branch's: the card inputs in `chat-isolation.test.ts` lacked B2's `count` field,
+      so the server refused them for shape before the check each test aims at. Now
+      `count: null`
 - [ ] Device checks (Q24); 44pt targets
 
 ---
