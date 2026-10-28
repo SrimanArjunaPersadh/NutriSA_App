@@ -62,7 +62,7 @@ global rows. The food half of Phase 6 and most of Phase 7; saved meals
 open · **Phase 7b `targets-and-profile` merged 2026-10-25** (`14ef668`): the Goals
 screen (targets, goal weight, sign out), `GET`/`PUT /profile`, target bounds; 677 tests
 offline, security suite 83 / 83, device pass confirmed by Sriman 2026-10-28 ·
-**Phase 8 `label-ocr` built 2026-10-26**: the label reader inside `create-food`,
+**Phase 8 `label-ocr` merged 2026-10-28** (#14, `0ef4d9a`): the label reader inside `create-food`,
 `POST /api/label-reads` on Haiku 5.5, rate version `2026-10-26`; 726 tests offline,
 security suite 94 / 94; reviewed and fixed 2026-10-28, device pass on screen labels done;
 one real packet still owed ·
@@ -1908,10 +1908,18 @@ recommendation:
       a resized copy leaked when `saveAsync` returned no base64 (deleted); React Query
       kept the photo's base64 for five minutes (`gcTime: 0`); Anthropic needs a POPIA
       note (added to Phase 11's privacy-notice item)
-- [ ] **Follow-up branch, not this one:** `npm audit` flags `zod` before 4.6.6 (memory
+- [x] **Follow-up branch, not this one:** `npm audit` flags `zod` before 4.6.6 (memory
       exhaustion validating oversized constrained collections) across every route, plus
       pre-existing Expo CLI and dev-tool advisories. None comes from this branch's new
-      packages
+      packages. **Done on `zod-upgrade`, 2026-10-28:** the app's own `zod` 4.4.3 → ^4.6.7
+      (GHSA-mrhx-c7xc-m3w5 / CVE-2023-54404: an array schema keeps every failing
+      element's issue with no cap, so one huge list in a request body can run the server
+      out of memory). The one copy is shared by the server, `packages/shared`, the
+      Anthropic SDK and Clerk. Only `zod` moved in the lockfile. 728 tests, security
+      94 / 94, iOS bundle. **Two zod 3.25.76 copies remain, unfixable from here:**
+      `@expo/cli` (dev tooling on the PC, never sees a request) and `inngest` (asks for
+      `^3.25.0` even at its latest, 4.26.1; no zod 3 release carries the fix). `npm audit`
+      therefore still lists zod, for those two paths only
 - [~] Device: a real SA label OFF does not have, read, reviewed, saved; a non-label
       photo; airplane mode mid-read; the photo deleted afterwards; 44pt targets.
       **2026-10-28, on the iPhone, against three made-up labels on a monitor**
