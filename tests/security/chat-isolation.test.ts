@@ -310,7 +310,7 @@ describe("lookups and cards stay inside the user's own data", () => {
       { toolUses: [{ id: "t1", name: "search_foods", input: { query: `${TAG} secret granola` } }] },
       {
         toolUses: [
-          { id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", servings: 1, amount: null, unit: null }] } },
+          { id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", count: null, servings: 1, amount: null, unit: null }] } },
         ],
       },
       { text: "I couldn't find that food." },
@@ -339,7 +339,7 @@ describe("lookups and cards stay inside the user's own data", () => {
       { toolUses: [{ id: "t1", name: "search_foods", input: { query: `${TAG} secret granola` } }] },
       {
         toolUses: [
-          { id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", servings: null, amount: 60, unit: "g" }] } },
+          { id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", count: null, servings: null, amount: 60, unit: "g" }] } },
         ],
       },
       { text: "Here's your granola." },
@@ -369,7 +369,7 @@ describe("lookups and cards stay inside the user's own data", () => {
       { toolUses: [{ id: "t1", name: "search_foods", input: { query: `${TAG} secret granola` } }] },
       {
         toolUses: [
-          { id: "t2", name: "propose_meal_log", input: { slot: "Snack", items: [{ ref: "f1", servings: null, amount: 30, unit: "g" }] } },
+          { id: "t2", name: "propose_meal_log", input: { slot: "Snack", items: [{ ref: "f1", count: null, servings: null, amount: 30, unit: "g" }] } },
         ],
       },
       { text: "Card's up." },

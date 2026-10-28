@@ -2345,6 +2345,11 @@ Built 2026-10-28, **not yet seen on the phone**:
       rows below them. `NumberField` is `flex-1` to share a row, and alone in a column that
       resolved to zero height; both now sit in a one-field row. Not a change of this branch
       (the review's diff never touched them); seen after Metro's `--clear`
+- [x] Security suite, 2026-10-29: **114 / 114 green in one run**. The first run failed 5:
+      two were Neon connect timeouts from this PC (the cleanup and the cascade), three were
+      this branch's: the card inputs in `chat-isolation.test.ts` lacked B2's `count` field,
+      so the server refused them for shape before the check each test aims at. Now
+      `count: null`
 - [ ] Device checks (Q24); 44pt targets
 
 ---
