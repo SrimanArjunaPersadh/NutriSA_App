@@ -54,6 +54,7 @@ export default defineConfig({
     alias: {
       "@engine": resolvePath("./packages/engine/src/index.ts"),
       "@shared": resolvePath("./packages/shared/src/index.ts"),
+      "@": resolvePath("./src"),
     },
   },
   test: {

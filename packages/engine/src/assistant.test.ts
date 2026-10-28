@@ -5,6 +5,7 @@ import {
   AI_MONTHLY_BUDGET_USD,
   aiBudgetMonth,
   aiBudgetRung,
+  aiSpendShown,
   belowSafeFloor,
   COACH_KCAL_FLOOR,
   servingsQuantity,
@@ -33,6 +34,30 @@ describe("aiBudgetRung", () => {
 
   it("stays exhausted past $5, which the ledger's misses can cause", () => {
     expect(aiBudgetRung(7.5)).toBe("exhausted")
+  })
+})
+
+describe("aiSpendShown", () => {
+  it("cuts to whole cents, rounding down", () => {
+    expect(aiSpendShown(0.4213)).toBe(0.42)
+    expect(aiSpendShown(1.239)).toBe(1.23)
+  })
+
+  it("never shows the budget before it is reached", () => {
+    expect(aiSpendShown(4.996)).toBe(4.99)
+    expect(aiBudgetRung(4.996)).toBe("cheaper")
+    expect(aiSpendShown(5)).toBe(5)
+  })
+
+  it("keeps a cent a float would lose", () => {
+    expect(aiSpendShown(0.29)).toBe(0.29)
+    expect(aiSpendShown(0.57)).toBe(0.57)
+  })
+
+  it("is zero for nothing, or for nonsense", () => {
+    expect(aiSpendShown(0)).toBe(0)
+    expect(aiSpendShown(-1)).toBe(0)
+    expect(aiSpendShown(Number.NaN)).toBe(0)
   })
 })
 

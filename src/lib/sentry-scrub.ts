@@ -13,7 +13,13 @@
  */
 export function scrubUrl(url: string): string {
   const withoutQuery = url.split(/[?#]/)[0] ?? ""
-  return withoutQuery.replace(/\/barcode\/[^/]+/i, "/barcode/[code]")
+  return (
+    withoutQuery
+      .replace(/\/barcode\/[^/]+/i, "/barcode/[code]")
+      // A chat's or a message's id: no content, but it ties the error to one
+      // conversation (Privacy review, 2026-10-28).
+      .replace(/\/chat\/(conversations|messages)\/[^/]+/i, "/chat/$1/[id]")
+  )
 }
 
 /** Sentry's breadcrumb, as far as this scrub reads and writes it. */

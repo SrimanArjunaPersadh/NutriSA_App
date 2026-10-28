@@ -3,7 +3,14 @@ import { useAuth } from "@clerk/expo"
 
 import { currentLoggingDay, type LogDay, type MealSlot } from "@engine"
 import {
+  aiAllowanceSchema,
+  aiConsentSchema,
   barcodeLookupSchema,
+  chatConversationDetailSchema,
+  chatConversationListSchema,
+  chatDeleteAllResultSchema,
+  chatDeleteResultSchema,
+  chatDismissResultSchema,
   daySummarySchema,
   deleteResultSchema,
   foodSearchSchema,
@@ -20,7 +27,13 @@ import {
   targetsWriteResultSchema,
   weightSeriesSchema,
   weightWriteResultSchema,
+  type AiAllowance,
+  type AiConsent,
+  type AiConsentWrite,
   type BarcodeLookup,
+  type ChatDeleteAllResult,
+  type ChatDeleteResult,
+  type ChatDismissResult,
   type DaySummary,
   type DeleteResult,
   type FoodSearch,
@@ -109,6 +122,12 @@ export const queryKeys = {
   profile: (userId: string | null | undefined) => ["profile", userId ?? "anonymous"] as const,
   /** Everything food-shaped this user has cached. What creating a food invalidates. */
   allFoods: (userId: string | null | undefined) => ["foods", userId ?? "anonymous"] as const,
+  /** Every chat read: the list and each conversation sit under this prefix. */
+  allChats: (userId: string | null | undefined) => ["chat", userId ?? "anonymous"] as const,
+  chatList: (userId: string | null | undefined) => ["chat", userId ?? "anonymous", "list"] as const,
+  chat: (userId: string | null | undefined, id: string) => ["chat", userId ?? "anonymous", "conversation", id] as const,
+  aiConsent: (userId: string | null | undefined) => ["ai", userId ?? "anonymous", "consent"] as const,
+  aiAllowance: (userId: string | null | undefined) => ["ai", userId ?? "anonymous", "allowance"] as const,
 }
 
 /**
@@ -208,6 +227,9 @@ function useInvalidateDays() {
       // with "your foods" from the same meals.
       client.invalidateQueries({ queryKey: queryKeys.recentFoods(userId) }),
       client.invalidateQueries({ queryKey: ["foods", userId ?? "anonymous", "search"] }),
+      // A meal card reads as Logged while a meal with its id exists, and that
+      // is read off the server with the chat (Phase 9, Q10).
+      client.invalidateQueries({ queryKey: queryKeys.allChats(userId) }),
     ])
 }
 
@@ -451,11 +473,20 @@ export function useCreateFood() {
  * the photo leaves the cache with the form (Privacy axis, 2026-10-28).
  */
 export function useReadLabel() {
-  const { getToken } = useAuth()
+  const { userId, getToken } = useAuth()
+  const client = useQueryClient()
 
   return useMutation<LabelReading, ApiError, { image: string; signal: AbortSignal }>({
     mutationFn: ({ image, signal }) =>
       apiPost("/api/label-reads", { image }, labelReadingSchema, getToken, signal),
+    // A read spends from the month's AI allowance, which the chat shares (Q2);
+    // a refusal for consent means it was turned off elsewhere.
+    onSettled: (_data, error) => {
+      void client.invalidateQueries({ queryKey: queryKeys.aiAllowance(userId) })
+      if (error?.code === "ai-consent-required") {
+        void client.invalidateQueries({ queryKey: queryKeys.aiConsent(userId) })
+      }
+    },
     retry: false,
     // The mutation's variables are the photo's base64. Without this the cache
     // keeps that megabyte for five minutes after the form closes.
@@ -601,3 +632,115 @@ export function useSetProfile() {
       ]),
   })
 }
+
+/**
+ * The assistant's reads and writes (plan.md, Phase 9, `ai-chat-app`).
+ *
+ * Chat lives in this cache and nowhere else on the phone (Q19): no storage, no
+ * file, so `clearQueryCache()` on sign-out takes all of it. The turn itself is
+ * not a query: it streams, and `useChatTurn` reads it.
+ */
+
+/** Every chat, newest first. Titles only, no messages. */
+export function useChatList() {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery({
+    queryKey: queryKeys.chatList(userId),
+    queryFn: () => apiGet("/api/chat/conversations", chatConversationListSchema, getToken),
+    enabled: Boolean(isSignedIn),
+    staleTime: 60_000,
+    retry,
+  })
+}
+
+/** One chat, oldest message first. `null` for a new chat the server has not seen. */
+export function useChat(id: string | null) {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery({
+    queryKey: queryKeys.chat(userId, id ?? ""),
+    queryFn: () => apiGet(`/api/chat/conversations/${id}`, chatConversationDetailSchema, getToken),
+    enabled: Boolean(isSignedIn) && id !== null,
+    staleTime: 60_000,
+    retry,
+  })
+}
+
+/** Refetch every chat read: after a turn, a delete, or a card changing. */
+export function useInvalidateChats() {
+  const { userId } = useAuth()
+  const client = useQueryClient()
+
+  return () => client.invalidateQueries({ queryKey: queryKeys.allChats(userId) })
+}
+
+export function useDeleteChat() {
+  const { getToken } = useAuth()
+  const invalidate = useInvalidateChats()
+
+  return useMutation<ChatDeleteResult, ApiError, string>({
+    mutationFn: (id) => apiDelete(`/api/chat/conversations/${id}`, chatDeleteResultSchema, getToken),
+    onSuccess: () => void invalidate(),
+  })
+}
+
+export function useDeleteAllChats() {
+  const { getToken } = useAuth()
+  const invalidate = useInvalidateChats()
+
+  return useMutation<ChatDeleteAllResult, ApiError, void>({
+    mutationFn: () => apiDelete("/api/chat/conversations", chatDeleteAllResultSchema, getToken),
+    onSuccess: () => void invalidate(),
+  })
+}
+
+/** Dismiss a meal card. The only card state that is stored (Q10). */
+export function useDismissCard() {
+  const { getToken } = useAuth()
+  const invalidate = useInvalidateChats()
+
+  return useMutation<ChatDismissResult, ApiError, string>({
+    mutationFn: (messageId) =>
+      apiPost(`/api/chat/messages/${messageId}/dismiss`, {}, chatDismissResultSchema, getToken),
+    onSuccess: () => void invalidate(),
+  })
+}
+
+/** Whether this account has agreed to AI features (Q15). */
+export function useAiConsent() {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<AiConsent, ApiError>({
+    queryKey: queryKeys.aiConsent(userId),
+    queryFn: () => apiGet("/api/ai/consent", aiConsentSchema, getToken),
+    enabled: Boolean(isSignedIn),
+    staleTime: 5 * 60_000,
+    retry,
+  })
+}
+
+/** Agree to AI features, or turn them off. The answer replaces the cached read. */
+export function useSetAiConsent() {
+  const { userId, getToken } = useAuth()
+  const client = useQueryClient()
+
+  return useMutation<AiConsent, ApiError, AiConsentWrite>({
+    mutationFn: (input) => apiPut("/api/ai/consent", input, aiConsentSchema, getToken),
+    onSuccess: (consent) => client.setQueryData(queryKeys.aiConsent(userId), consent),
+  })
+}
+
+/** This SAST month's AI spend against the $5 allowance, and its rung (Q8, Q26). */
+export function useAiAllowance(enabled = true) {
+  const { userId, getToken, isSignedIn } = useAuth()
+
+  return useQuery<AiAllowance, ApiError>({
+    queryKey: queryKeys.aiAllowance(userId),
+    queryFn: () => apiGet("/api/ai/allowance", aiAllowanceSchema, getToken),
+    enabled: Boolean(isSignedIn) && enabled,
+    staleTime: 60_000,
+    retry,
+  })
+}
+

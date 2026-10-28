@@ -54,6 +54,8 @@ export default defineConfig({
     alias: {
       "@engine": fileURLToPath(new URL("./packages/engine/src/index.ts", import.meta.url)),
       "@shared": fileURLToPath(new URL("./packages/shared/src/index.ts", import.meta.url)),
+      // The app's own alias, for the pure modules under `src/lib/` (Phase 9's chat logic).
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   test: {

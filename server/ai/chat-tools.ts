@@ -3,17 +3,20 @@ import { z } from "zod"
 
 import {
   addDays,
+  amountForMeasure,
   belowSafeFloor,
   checkLogDate,
   currentClockTime,
   isPortionUnit,
   MEAL_SLOTS,
+  measureLabel,
   portionLabel,
   roundTo,
   scalePortion,
   servingsQuantity,
   sumMacros,
   type LogDay,
+  type Measure,
   type PortionUnit,
 } from "@engine"
 import {
@@ -64,6 +67,13 @@ import { uuidv7 } from "../db/uuidv7"
 
 /** How far back a tool may look: the same quarter the week strip scrolls. */
 const LOOKBACK_DAYS = 90
+
+/**
+ * How the reach back reads in a reply ("only the last 90 days"). The app's own
+ * rule, stated in the tool definitions, so the number check blanks it rather
+ * than flagging it (eval, 2026-10-28).
+ */
+export const LOOKBACK_PHRASE = `${LOOKBACK_DAYS} days`
 
 /** Results per search, enough to choose from without filling the context. */
 const SEARCH_RESULTS = 8
@@ -148,7 +158,7 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_foods",
     description:
-      "Search the user's foods, recent meal lines and the shared food list. Each result has a reference (f1, f2, ...) that propose_meal_log accepts, a unit, and one serving.",
+      "Search the user's foods, recent meal lines and the shared food list. Each result has a reference (f1, f2, ...) that propose_meal_log accepts, a unit, one serving, and its naturalUnit when it is counted in things (a slice of bread, an egg, a glass of milk) with the grams or ml of one.",
     input_schema: {
       type: "object",
       properties: { query: { type: "string", description: "A food name, e.g. 'eggs' or 'oats'." } },
@@ -160,7 +170,7 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
     name: "propose_meal_log",
     description:
-      "Show the user a card to log a meal today. It saves nothing: the user confirms or dismisses it. Every item must be a reference from search_foods or get_saved_meals in this turn. Give servings (a count of the result's serving) or amount with unit g or ml, never both.",
+      "Show the user a card to log a meal today. It saves nothing: the user confirms or dismisses it. Every item must be a reference from search_foods or get_saved_meals in this turn. Give at most one of: count (how many of the result's naturalUnit, e.g. 4 for four slices), servings (a count of the result's serving), or amount with unit g or ml. Give none of them for one serving.",
     input_schema: {
       type: "object",
       properties: {
@@ -171,6 +181,7 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
             type: "object",
             properties: {
               ref: { type: "string" },
+              count: { type: ["number", "null"] },
               servings: { type: ["number", "null"] },
               amount: { type: ["number", "null"] },
               // `anyOf`, not `type: ["string", "null"]` with an enum: the API
@@ -178,7 +189,7 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
               // (found by `countTokens` on the first real call, 2026-10-28).
               unit: { anyOf: [{ type: "string", enum: ["g", "ml"] }, { type: "null" }] },
             },
-            required: ["ref", "servings", "amount", "unit"],
+            required: ["ref", "count", "servings", "amount", "unit"],
             additionalProperties: false,
           },
         },
@@ -199,6 +210,7 @@ const proposeArgs = z.object({
     .array(
       z.object({
         ref: z.string(),
+        count: z.number().positive().max(1000).nullable(),
         servings: z.number().positive().nullable(),
         amount: z.number().positive().nullable(),
         unit: z.enum(["g", "ml"]).nullable(),
@@ -280,6 +292,19 @@ function checkDay(
 
 const name = (text: string) => text.slice(0, NAME_CHARS)
 
+/**
+ * Today's log and targets, handed to the model with every message (plan.md,
+ * Phase 9, `ai-chat-app`, B1). "How am I doing today?" is the commonest
+ * question, and answering it from a lookup costs a whole extra model call,
+ * about three seconds of the ten seen on the phone. The same fields
+ * `get_day_summary` and `get_targets` return, so every number in it is the
+ * engine's, and the turn's number check counts it as a source.
+ */
+export async function todaySnapshot(scope: UserScope, today: LogDay): Promise<string> {
+  const summary = await readDaySummary(scope, today)
+  return JSON.stringify({ ...daySummaryResult(summary), belowSafeFloor: targetsResult(summary).belowSafeFloor })
+}
+
 function targetsResult(summary: DaySummary) {
   return {
     date: summary.date,
@@ -357,12 +382,14 @@ async function searchResult(ctx: ToolContext, query: string) {
       const ref = `f${countRefs(ctx, "food") + 1}`
       ctx.refs.set(ref, { kind: "food", food })
       const unit = unitOf(food)
+      const measure = measureOf(food)
       return {
         ref,
         name: name(foodDisplayName(food.name, food.brand)),
         unit,
         serving: { quantity: food.serving.quantity, label: food.serving.label },
         servingMacros: scalePortion(food.per, food.serving.quantity, unit),
+        naturalUnit: measure ? { name: measure.noun, [unit]: measure.grams } : null,
       }
     }),
   }
@@ -377,6 +404,17 @@ function countRefs(ctx: ToolContext, kind: ToolRef["kind"]): number {
 /** A unit this build does not know is a piece, as the logger treats it. */
 function unitOf(food: Food): PortionUnit {
   return isPortionUnit(food.unit) ? food.unit : "piece"
+}
+
+/**
+ * The thing a weighed food is counted in, "slice, 44 g", as the food logger
+ * counts it (`draftItemFromFood`): the food row's own measure, from its packet
+ * serving or the common-foods list (`naturalMeasure`). Only for g and ml; a
+ * food already counted in slices or pieces has its unit.
+ */
+function measureOf(food: Food): Measure | null {
+  const unit = unitOf(food)
+  return unit === "g" || unit === "ml" ? (food.measure ?? null) : null
 }
 
 /**
@@ -398,17 +436,26 @@ function proposeMeal(ctx: ToolContext, args: z.infer<typeof proposeArgs>): ToolR
     }
 
     if (ref.kind === "saved") {
-      if (line.amount !== null || (line.servings !== null && line.servings !== 1)) {
-        return fail(`A saved meal (${line.ref}) is logged as saved: give servings 1 or null, and no amount.`)
+      if (line.amount !== null || line.count !== null || (line.servings !== null && line.servings !== 1)) {
+        return fail(`A saved meal (${line.ref}) is logged as saved: give servings 1 or null, and no count or amount.`)
       }
       items.push(...ref.meal.items.map(savedItem))
       continue
     }
 
     const unit = unitOf(ref.food)
+    const measure = measureOf(ref.food)
+    const given = [line.count, line.servings, line.amount].filter((value) => value !== null).length
+    if (given > 1) return fail(`${line.ref}: give one of count, servings or amount, not more.`)
+
+    // The model passes on the count the user said; the engine multiplies.
     let quantity: number
-    if (line.amount !== null) {
-      if (line.servings !== null) return fail(`${line.ref}: give servings or amount, not both.`)
+    if (line.count !== null) {
+      if (!measure) {
+        return fail(`${line.ref} has no naturalUnit to count. Give servings, or an amount in ${unit}.`)
+      }
+      quantity = amountForMeasure(line.count, measure)
+    } else if (line.amount !== null) {
       if (line.unit !== unit) {
         return fail(`${line.ref} is measured in ${unit}. Give servings, or an amount in ${unit}.`)
       }
@@ -418,11 +465,13 @@ function proposeMeal(ctx: ToolContext, args: z.infer<typeof proposeArgs>): ToolR
     }
     if (quantity <= 0) return fail(`${line.ref}: the amount must be more than zero.`)
 
+    // Labelled and stored with its natural unit, as the logger writes a line:
+    // "4 slices (176 g)", and Edit reopens it counted in slices.
     items.push({
       name: foodDisplayName(ref.food.name, ref.food.brand),
-      qty: portionLabel(quantity, unit),
+      qty: measure ? measureLabel(quantity, measure, unit) : portionLabel(quantity, unit),
       macros: scalePortion(ref.food.per, quantity, unit),
-      portion: { quantity, unit, per: ref.food.per },
+      portion: { quantity, unit, per: ref.food.per, ...(measure ? { measure } : {}) },
     })
   }
 

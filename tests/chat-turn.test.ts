@@ -197,6 +197,8 @@ beforeEach(() => {
   data.readDaySummary.mockResolvedValue(daySummary)
   data.searchLocalFoods.mockResolvedValue({ query: "egg", foods: [egg], off: "skipped" })
   data.listSavedMeals.mockResolvedValue({ meals: [] })
+  // Every turn logs one timing line; the test that reads it spies again.
+  vi.spyOn(console, "info").mockImplementation(() => undefined)
 })
 
 afterEach(() => {
@@ -233,6 +235,22 @@ describe("the request the model is sent", () => {
     const last = sent.messages.at(-1) as { role: string; content: string }
     expect(last.role).toBe("system")
     expect(last.content).toContain("Wednesday 2026-10-28")
+  })
+
+  it("sends the history as plain text, with two breakpoints: the rules and the top level", async () => {
+    script({ text: ["Hi"] })
+    const history = [
+      { role: "user" as const, content: "What's left?" },
+      { role: "assistant" as const, content: "430 kcal." },
+      { role: "user" as const, content: "And protein?" },
+    ]
+    await turn({ history }).run()
+
+    const sent = params().messages
+    expect(sent.slice(0, 3)).toEqual(history)
+    expect(sent[3]).toMatchObject({ role: "system" })
+    // A history breakpoint was tried and removed (2026-10-29): it never read back.
+    expect(JSON.stringify(params()).match(/"cache_control"/g)).toHaveLength(2)
   })
 
   it("defines every tool as strict, in a fixed order", async () => {
@@ -339,7 +357,8 @@ describe("a reply", () => {
     const { run, events } = turn()
     const result = await run()
 
-    expect(data.readDaySummary).toHaveBeenCalledTimes(4)
+    // Four lookups, and the one read of today before the first call.
+    expect(data.readDaySummary).toHaveBeenCalledTimes(5)
     expect(events.filter((event) => (event as { type: string }).type === "status")).toHaveLength(4)
     const fifth = params(5).messages.at(-1) as { content: { content: string; is_error: boolean }[] }
     expect(fifth.content[0]).toMatchObject({ is_error: true })
@@ -377,9 +396,75 @@ describe("the unsourced-number check (Q21, Q30)", () => {
   })
 
   it("does not count numbers from an earlier turn's lookups", async () => {
+    // Today's log is unreadable, so nothing this turn says 430.
+    data.readDaySummary.mockRejectedValueOnce(new Error("connect timeout"))
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
     script({ text: ["You have 430 kcal left."] })
     const result = await turn().run()
     expect(result.unsourced).toEqual([430])
+  })
+
+  it("counts today's log, sent with the message, as a source", async () => {
+    script({ text: ["You have 430 kcal left today."] })
+    const result = await turn().run()
+    expect(result).toMatchObject({ outcome: "ok", unsourced: [] })
+  })
+})
+
+describe("today's log, with every message (B1)", () => {
+  it("goes after the history with the date, so the cached prefix holds", async () => {
+    script({ text: ["Hi"] })
+    await turn().run()
+    const last = params().messages.at(-1) as { role: string; content: string }
+    expect(last.role).toBe("system")
+    expect(last.content).toContain("Wednesday 2026-10-28")
+    expect(last.content).toContain('"remaining":{"kcal":430')
+    expect(last.content).toContain('"belowSafeFloor":false')
+    expect(last.content).toContain("Jungle Oats")
+    expect(data.readDaySummary).toHaveBeenCalledWith(scope, TODAY)
+  })
+
+  it("answers about today in one model call", async () => {
+    script({ text: ["430 kcal left."] })
+    const { run, events } = turn()
+    await run()
+    expect(sdk.stream).toHaveBeenCalledTimes(1)
+    expect(events.some((event) => (event as { type: string }).type === "status")).toBe(false)
+  })
+
+  it("is read once, even when the turn falls back to the cheaper model", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    script({ throws: new Anthropic.InternalServerError(500, undefined, "boom", new Headers()) }, { text: ["Hi"] })
+    await turn().run()
+    expect(sdk.stream).toHaveBeenCalledTimes(2)
+    expect(data.readDaySummary).toHaveBeenCalledTimes(1)
+  })
+
+  it("leaves the turn running on the date alone when it cannot be read", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    data.readDaySummary.mockRejectedValueOnce(new Error("connect timeout to ep-secret.neon.tech"))
+    script({ text: ["Hi"] })
+    const result = await turn().run()
+    expect(result.status).toBe("complete")
+    const last = params().messages.at(-1) as { content: string }
+    expect(last.content).not.toContain("Today's log")
+    expect(warn.mock.calls.flat().join(" ")).not.toContain("neon.tech")
+  })
+
+  it("logs where the time went, as step names and milliseconds only (Q14)", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+    script(
+      { stop: "tool_use", toolUses: [{ id: "t1", name: "search_foods", input: { query: "egg" } }] },
+      { text: ["Found Large egg."] },
+    )
+    await turn({ history: [{ role: "user", content: "secret breakfast words" }] }).run()
+
+    expect(info).toHaveBeenCalledTimes(1)
+    const line = String(info.mock.calls[0]![0])
+    expect(line).toMatch(/^Chat turn ok: today \d+ms · model \d+ms · search_foods \d+ms · model \d+ms \(text \d+ms\) · total \d+ms$/)
+    expect(line).not.toContain("secret")
+    expect(line).not.toContain("egg")
+    expect(line).not.toContain(USER_ID)
   })
 })
 
@@ -543,7 +628,7 @@ describe("the tools", () => {
       const context = ctx()
       const result = await runTool(context, "propose_meal_log", {
         slot: "Breakfast",
-        items: [{ ref: "f1", servings: 2, amount: null, unit: null }],
+        items: [{ ref: "f1", count: null, servings: 2, amount: null, unit: null }],
       })
       expect(result.isError).toBe(true)
       expect(result.content).toContain("was not returned")
@@ -555,7 +640,7 @@ describe("the tools", () => {
       await runTool(context, "search_foods", { query: "egg" })
       const result = await runTool(context, "propose_meal_log", {
         slot: "Breakfast",
-        items: [{ ref: "food-row-secret-id", servings: 1, amount: null, unit: null }],
+        items: [{ ref: "food-row-secret-id", count: null, servings: 1, amount: null, unit: null }],
       })
       expect(result.isError).toBe(true)
       expect(context.proposal).toBeNull()
@@ -566,7 +651,7 @@ describe("the tools", () => {
       await runTool(context, "search_foods", { query: "egg" })
       const result = await runTool(context, "propose_meal_log", {
         slot: "Breakfast",
-        items: [{ ref: "f1", servings: 2, amount: null, unit: null }],
+        items: [{ ref: "f1", count: null, servings: 2, amount: null, unit: null }],
       })
       expect(result.isError).toBe(false)
 
@@ -586,7 +671,7 @@ describe("the tools", () => {
       await runTool(context, "search_foods", { query: "egg" })
       await runTool(context, "propose_meal_log", {
         slot: "Lunch",
-        items: [{ ref: "f1", servings: null, amount: 75, unit: "g" }],
+        items: [{ ref: "f1", count: null, servings: null, amount: 75, unit: "g" }],
       })
       expect(context.proposal?.meal.items[0]?.portion).toMatchObject({ quantity: 75, unit: "g" })
     })
@@ -596,11 +681,11 @@ describe("the tools", () => {
       await runTool(context, "search_foods", { query: "egg" })
       const wrongUnit = await runTool(context, "propose_meal_log", {
         slot: "Lunch",
-        items: [{ ref: "f1", servings: null, amount: 75, unit: "ml" }],
+        items: [{ ref: "f1", count: null, servings: null, amount: 75, unit: "ml" }],
       })
       const both = await runTool(context, "propose_meal_log", {
         slot: "Lunch",
-        items: [{ ref: "f1", servings: 1, amount: 75, unit: "g" }],
+        items: [{ ref: "f1", count: null, servings: 1, amount: 75, unit: "g" }],
       })
       expect(wrongUnit.isError).toBe(true)
       expect(both.isError).toBe(true)
@@ -617,7 +702,7 @@ describe("the tools", () => {
       expect(listed.content).not.toContain("saved-row-id")
       await runTool(context, "propose_meal_log", {
         slot: "Lunch",
-        items: [{ ref: "m1", servings: null, amount: null, unit: null }],
+        items: [{ ref: "m1", count: null, servings: null, amount: null, unit: null }],
       })
       expect(context.proposal?.meal.items).toEqual([{ ...item, portion: null }])
     })
@@ -627,12 +712,154 @@ describe("the tools", () => {
         { stop: "tool_use", toolUses: [{ id: "t1", name: "search_foods", input: { query: "egg" } }] },
         {
           stop: "tool_use",
-          toolUses: [{ id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", servings: 2, amount: null, unit: null }] } }],
+          toolUses: [{ id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", count: null, servings: 2, amount: null, unit: null }] } }],
         },
         { text: ["Here's your breakfast. Tap Confirm to log it."] },
       )
       const result = await turn({ history: [{ role: "user", content: "Log 2 eggs for breakfast" }] }).run()
       expect(result.proposal?.meal.items[0]?.qty).toBe("100 g")
     })
+  })
+
+  describe("natural units: four slices, two eggs (B2)", () => {
+    const sourdough = {
+      ...egg,
+      id: "sourdough-row-id",
+      name: "Sourdough bread",
+      per: macros(250, 9, 48, 2),
+      serving: { quantity: 76, label: "76 g" },
+      measure: { noun: "slice", grams: 44 },
+    }
+
+    beforeEach(() => {
+      data.searchLocalFoods.mockResolvedValue({ query: "sourdough", foods: [sourdough, egg], off: "skipped" })
+    })
+
+    it("tells the model what one slice weighs, and nothing for a food with no natural unit", async () => {
+      const result = await runTool(ctx(), "search_foods", { query: "sourdough" })
+      const { foods } = JSON.parse(result.content) as { foods: { naturalUnit: unknown }[] }
+      expect(foods[0]!.naturalUnit).toEqual({ name: "slice", g: 44 })
+      expect(foods[1]!.naturalUnit).toBeNull()
+    })
+
+    it("turns a count into grams with the engine, and labels it as the logger does", async () => {
+      const context = ctx()
+      await runTool(context, "search_foods", { query: "sourdough" })
+      const result = await runTool(context, "propose_meal_log", {
+        slot: "Dinner",
+        items: [{ ref: "f1", count: 4, servings: null, amount: null, unit: null }],
+      })
+      expect(result.isError).toBe(false)
+      const item = context.proposal!.meal.items[0]!
+      expect(item).toMatchObject({
+        name: "Sourdough bread",
+        qty: "4 slices (176 g)",
+        portion: { quantity: 176, unit: "g", measure: { noun: "slice", grams: 44 } },
+      })
+      expect(item.macros).toEqual(scalePortion(sourdough.per, 176, "g"))
+      // The card's reply can quote "176 g": the tool said it.
+      expect(result.content).toContain("4 slices (176 g)")
+    })
+
+    it("keeps the natural unit on a line given in grams, so Edit counts it in slices", async () => {
+      const context = ctx()
+      await runTool(context, "search_foods", { query: "sourdough" })
+      await runTool(context, "propose_meal_log", {
+        slot: "Dinner",
+        items: [{ ref: "f1", count: null, servings: null, amount: 88, unit: "g" }],
+      })
+      expect(context.proposal!.meal.items[0]!.qty).toBe("2 slices (88 g)")
+    })
+
+    it("refuses a count of a food with no natural unit, so the model asks instead", async () => {
+      const context = ctx()
+      await runTool(context, "search_foods", { query: "sourdough" })
+      const result = await runTool(context, "propose_meal_log", {
+        slot: "Dinner",
+        items: [{ ref: "f2", count: 2, servings: null, amount: null, unit: null }],
+      })
+      expect(result.isError).toBe(true)
+      expect(result.content).toContain("no naturalUnit")
+      expect(context.proposal).toBeNull()
+    })
+
+    it("refuses a count with servings or a weight beside it", async () => {
+      const context = ctx()
+      await runTool(context, "search_foods", { query: "sourdough" })
+      const result = await runTool(context, "propose_meal_log", {
+        slot: "Dinner",
+        items: [{ ref: "f1", count: 4, servings: 1, amount: null, unit: null }],
+      })
+      expect(result.isError).toBe(true)
+      expect(context.proposal).toBeNull()
+    })
+
+    it("refuses a count on a saved meal", async () => {
+      data.listSavedMeals.mockResolvedValue({
+        meals: [{ id: "saved-row-id", name: "Usual lunch", category: null, note: null, macros: macros(200), items: [] }],
+      })
+      const context = ctx()
+      await runTool(context, "get_saved_meals", {})
+      const result = await runTool(context, "propose_meal_log", {
+        slot: "Lunch",
+        items: [{ ref: "m1", count: 2, servings: null, amount: null, unit: null }],
+      })
+      expect(result.isError).toBe(true)
+    })
+  })
+})
+
+describe("fixed phrases the number check blanks (eval re-run, 2026-10-28)", () => {
+  it("does not flag the helpline's 24-hour or the 90-day reach", async () => {
+    script({ text: ["Call SADAG's 24-hour line on 0800 456 789. I can only see the last 90 days."] })
+    const result = await turn().run()
+    expect(result.unsourced).toEqual([])
+  })
+
+  it("still flags a 24 or a 90 used as a measurement", async () => {
+    script({ text: ["Eat 24 g more protein and 90 g of rice."] })
+    const result = await turn().run()
+    expect(result.unsourced).toEqual([24, 90])
+  })
+})
+
+describe("the card goes out as soon as it is made (Sriman, iPhone, 2026-10-28)", () => {
+  const searchThenCard = [
+    { stop: "tool_use" as const, toolUses: [{ id: "t1", name: "search_foods", input: { query: "egg" } }] },
+    {
+      stop: "tool_use" as const,
+      toolUses: [
+        {
+          id: "t2",
+          name: "propose_meal_log",
+          input: { slot: "Breakfast", items: [{ ref: "f1", count: null, servings: 2, amount: null, unit: null }] },
+        },
+      ],
+    },
+  ]
+
+  it("emits the card before the reply's last sentence", async () => {
+    script(...searchThenCard, { text: ["Tap Confirm to log it."] })
+    const { run, events } = turn({ history: [{ role: "user", content: "2 eggs for breakfast" }] })
+    const result = await run()
+
+    const types = events.map((event) => (event as { type: string }).type)
+    expect(types.indexOf("proposal")).toBeGreaterThan(-1)
+    expect(types.indexOf("proposal")).toBeLessThan(types.indexOf("text"))
+    // The card on the screen is the card that is stored: the same minted id.
+    const sent = events.find((event) => (event as { type: string }).type === "proposal") as { proposal: ChatProposal }
+    expect(sent.proposal.meal.id).toBe(result.proposal?.meal.id)
+  })
+
+  it("keeps a made card when the sentence after it fails, and does not rerun the turn", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    script(...searchThenCard, { throws: new Anthropic.InternalServerError(500, undefined, "boom", new Headers()) })
+    const { run, events } = turn({ history: [{ role: "user", content: "2 eggs for breakfast" }] })
+    const result = await run()
+
+    expect(sdk.stream).toHaveBeenCalledTimes(3)
+    expect(result).toMatchObject({ status: "cut_off", outcome: "error", error: null, fellBack: false })
+    const sent = events.find((event) => (event as { type: string }).type === "proposal") as { proposal: ChatProposal }
+    expect(result.proposal?.meal.id).toBe(sent.proposal.meal.id)
   })
 })

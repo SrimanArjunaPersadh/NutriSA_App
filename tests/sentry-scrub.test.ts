@@ -13,6 +13,16 @@ describe("scrubUrl", () => {
     expect(scrubUrl("https://x.dev/api/foods/barcode/6009522310363")).toBe("https://x.dev/api/foods/barcode/[code]")
   })
 
+  it("hides a chat's and a message's id, keeping the route", () => {
+    expect(scrubUrl("https://x.dev/api/chat/conversations/0192f6a4-0000-7000-8000-000000000001")).toBe(
+      "https://x.dev/api/chat/conversations/[id]",
+    )
+    expect(scrubUrl("https://x.dev/api/chat/messages/0192f6a4-0000-7000-8000-000000000002/dismiss")).toBe(
+      "https://x.dev/api/chat/messages/[id]/dismiss",
+    )
+    expect(scrubUrl("https://x.dev/api/chat/conversations")).toBe("https://x.dev/api/chat/conversations")
+  })
+
   it("leaves a plain path alone", () => {
     expect(scrubUrl("https://x.dev/api/day/2026-10-20")).toBe("https://x.dev/api/day/2026-10-20")
   })

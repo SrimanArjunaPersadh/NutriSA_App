@@ -263,10 +263,25 @@ export function gramsPerMeasure(total: number, count: number): number | null {
   return roundTo(total / count, 1)
 }
 
-/** "1 banana (118 g)", "1.5 bananas (177 g)", "2 slices (70 g)". */
+/**
+ * A count a person would say: a whole number or a half ("2 slices", "1.5
+ * bananas"). "1.18 breasts" is not one: it is a weight wearing a noun.
+ */
+export function isSayableCount(count: number): boolean {
+  return Number.isFinite(count) && count > 0 && Number.isInteger(count * 2)
+}
+
+/**
+ * "1 banana (118 g)", "1.5 bananas (177 g)", "2 slices (70 g)". An amount that
+ * is not a whole or half count of its measure reads as the amount alone:
+ * "200 g", not "1.18 breasts (200 g)" (Sriman, 2026-10-28, on the assistant's
+ * meal card). One label for the card, the logger and the stored line.
+ */
 export function measureLabel(amount: number, measure: Measure, unit: PortionUnit): string {
   const count = measureCount(amount, measure)
-  return `${count} ${pluralNoun(measure.noun, count)} (${portionLabel(roundTo(amount, 1), unit)})`
+  const weight = portionLabel(roundTo(amount, 1), unit)
+  if (!isSayableCount(count)) return weight
+  return `${count} ${pluralNoun(measure.noun, count)} (${weight})`
 }
 
 /**

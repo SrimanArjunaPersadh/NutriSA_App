@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native"
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native"
 import { useRouter } from "expo-router"
 import { useClerk } from "@clerk/expo"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { kcalFromMacros } from "@engine"
+import { aiSpendShown, kcalFromMacros } from "@engine"
 import {
   GOAL_WEIGHT_BOUNDS,
   goalWeightSchema,
@@ -18,8 +18,17 @@ import { ChevronLeft } from "@/components/icons/UiIcons"
 import { NumberField } from "@/components/logging/fields"
 import { ErrorState, Loading } from "@/components/state"
 import { colors } from "@/design/tokens"
-import { formatKcal, formatKg, parseDecimal, withThousands } from "@/lib/format"
-import { useProfile, useSetProfile, useSetTargets, useTargets } from "@/lib/queries"
+import { formatKcal, formatKg, formatUsd, parseDecimal, withThousands } from "@/lib/format"
+import {
+  useAiAllowance,
+  useAiConsent,
+  useDeleteAllChats,
+  useProfile,
+  useSetAiConsent,
+  useSetProfile,
+  useSetTargets,
+  useTargets,
+} from "@/lib/queries"
 import { clearQueryCache } from "@/lib/query-client"
 import { GOAL_WORDING, saveErrorMessage, TARGETS_WORDING } from "@/lib/save-message"
 import { useKeyboardVisible } from "@/lib/use-keyboard-visible"
@@ -299,7 +308,13 @@ export default function Goals() {
               </Text>
             ) : null}
 
-            <View className="mt-[14px]">
+            {/*
+              A row, though it holds one field: `NumberField` is `flex-1` so it
+              shares a row with its neighbours, and alone in a column that
+              resolves to zero height and the field draws over what follows
+              (iPhone, 2026-10-28).
+            */}
+            <View className="mt-[14px] flex-row">
               <NumberField
                 label="Calories"
                 value={fields.kcal}
@@ -353,7 +368,8 @@ export default function Goals() {
           <Card className="mt-[12px]">
             <CardLabel>GOAL WEIGHT</CardLabel>
 
-            <View className="mt-[14px]">
+            {/* A row for the reason given at the calorie field. */}
+            <View className="mt-[14px] flex-row">
               <NumberField
                 label="Goal"
                 value={goalText}
@@ -378,6 +394,8 @@ export default function Goals() {
                     : "Moves the goal line, the ring and kg to go everywhere."}
             </Text>
           </Card>
+
+          <AiFeaturesCard />
 
           {/*
             Well clear of Save, on purpose: Save is pinned to the bottom edge,
@@ -423,6 +441,104 @@ export default function Goals() {
         </View>
       </KeyboardAvoidingView>
     </Screen>
+  )
+}
+
+/**
+ * AI features (plan.md, Phase 9, Q15, Q26, A7): this month's spend against the
+ * allowance, and the way to turn AI off, which withdraws the consent. The
+ * spend is the server's sum of the ledger (`aiAllowanceSchema`); this only
+ * prints it. Off, it offers the consent again.
+ */
+function AiFeaturesCard() {
+  const router = useRouter()
+  const consent = useAiConsent()
+  const on = Boolean(consent.data?.consentedAt)
+  const allowance = useAiAllowance(on)
+  const setConsent = useSetAiConsent()
+  const deleteAll = useDeleteAllChats()
+  const [failed, setFailed] = useState(false)
+
+  async function turnOff(deleteChats: boolean) {
+    setFailed(false)
+    try {
+      if (deleteChats) await deleteAll.mutateAsync()
+      await setConsent.mutateAsync({ granted: false })
+    } catch {
+      setFailed(true)
+    }
+  }
+
+  function confirmTurnOff() {
+    Alert.alert(
+      "Turn off AI features?",
+      "The coach and the label reader stop. Your chats stay unless you delete them too.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Turn off", onPress: () => void turnOff(false) },
+        { text: "Turn off and delete my chats", style: "destructive", onPress: () => void turnOff(true) },
+      ],
+    )
+  }
+
+  const busy = setConsent.isPending || deleteAll.isPending
+
+  return (
+    <Card className="mt-[12px]">
+      <CardLabel>AI FEATURES</CardLabel>
+
+      {consent.isPending ? (
+        <View className="h-[60px]">
+          <Loading />
+        </View>
+      ) : consent.isError ? (
+        <View className="h-[120px]">
+          <ErrorState error={consent.error} onRetry={() => void consent.refetch()} />
+        </View>
+      ) : on ? (
+        <>
+          <Text className="mt-[10px] font-barlow text-[15px] text-white">
+            {allowance.data
+              ? `AI this month: ${formatUsd(aiSpendShown(allowance.data.spentUsd))} of ${formatUsd(allowance.data.budgetUsd)}`
+              : allowance.isError
+                ? "Couldn't load this month's AI spend."
+                : "Loading this month's AI spend…"}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Turn off AI features"
+            accessibilityState={{ busy, disabled: busy }}
+            disabled={busy}
+            onPress={confirmTurnOff}
+            className="mt-[14px] h-[44px] items-center justify-center rounded-[10px] border border-buttonBorder bg-secondary active:opacity-80"
+          >
+            <Text className="font-barlow-semibold text-[15px] text-white">
+              {busy ? "Turning off…" : "Turn off AI features"}
+            </Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <Text className="mt-[10px] font-barlow text-[15px] text-textSecondary">
+            AI features are off. The coach and the label reader need them.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Turn on AI features"
+            onPress={() => router.push("/ai-consent")}
+            className="mt-[14px] h-[44px] items-center justify-center rounded-[10px] border border-buttonBorder bg-secondary active:opacity-80"
+          >
+            <Text className="font-barlow-semibold text-[15px] text-white">Turn on AI features</Text>
+          </Pressable>
+        </>
+      )}
+
+      {failed ? (
+        <Text className="mt-[8px] font-barlow text-[13px] text-danger">
+          {deleteAll.isError ? "Couldn't delete your chats, so AI is still on. Try again." : "Couldn't turn AI off. Try again."}
+        </Text>
+      ) : null}
+    </Card>
   )
 }
 

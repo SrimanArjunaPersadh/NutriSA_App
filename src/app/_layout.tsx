@@ -20,6 +20,10 @@ import {
   Barlow_700Bold,
 } from "@expo-google-fonts/barlow";
 import { BarlowCondensed_800ExtraBold_Italic } from "@expo-google-fonts/barlow-condensed";
+// The AI chat's two faces (plan.md, Phase 9, C1): the coach's replies in a
+// serif, the user's words and the box in Inter. Barlow stays everywhere else.
+import { Inter_400Regular } from "@expo-google-fonts/inter";
+import { SourceSerif4_400Regular } from "@expo-google-fonts/source-serif-4";
 
 import { colors } from "@/design/tokens";
 import { sweepLabelPhotos } from "@/lib/label-photo";
@@ -51,6 +55,8 @@ function RootLayout() {
     Barlow_600SemiBold,
     Barlow_700Bold,
     BarlowCondensed_800ExtraBold_Italic,
+    Inter_400Regular,
+    SourceSerif4_400Regular,
   });
 
   useEffect(() => {

@@ -108,6 +108,46 @@ async function request<T extends z.ZodType>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<z.infer<T>> {
+  const response = await send(method, path, getToken, body, signal)
+
+  let parsedBody: unknown
+  try {
+    parsedBody = await response.json()
+  } catch {
+    throw new ApiError("malformed-response", "The server sent something that is not JSON.")
+  }
+
+  const parsed = schema.safeParse(parsedBody)
+  if (!parsed.success) {
+    // Logged in full because this one is always a bug in this repo — the two
+    // sides import the same schema, so a mismatch means one of them shipped
+    // without the other. The user still only sees the error state.
+    //
+    // ⚠️ `issues` and not `error`, and that is a privacy boundary rather than
+    // brevity. A zod issue carries `code`, `expected`, `path` and `message` —
+    // the *shape* that was expected — and never the value that arrived.
+    // Verified against zod 4.4.3. This path now carries every response in the
+    // app, `GET /weight-logs` included, so anything that starts printing the
+    // received value here is printing somebody's bodyweight to a log.
+    console.error(`Response from ${path} did not match its schema:`, parsed.error.issues)
+    throw new ApiError("malformed-response", "The server sent an unexpected response.")
+  }
+
+  return parsed.data
+}
+
+/**
+ * The request itself, up to an OK response: the address check, the token, the
+ * headers, and every failure turned into an `ApiError`. Shared by `request`
+ * and `apiPostStream`, so the chat's stream cannot drift from the other calls.
+ */
+async function send(
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  getToken: () => Promise<string | null>,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<Response> {
   if (!BASE_URL) {
     throw new ApiError(
       "no-api-url",
@@ -157,30 +197,31 @@ async function request<T extends z.ZodType>(
     throw new ApiError(await errorCode(response), await errorMessage(response), response.status)
   }
 
-  let parsedBody: unknown
-  try {
-    parsedBody = await response.json()
-  } catch {
-    throw new ApiError("malformed-response", "The server sent something that is not JSON.")
-  }
+  return response
+}
 
-  const parsed = schema.safeParse(parsedBody)
-  if (!parsed.success) {
-    // Logged in full because this one is always a bug in this repo — the two
-    // sides import the same schema, so a mismatch means one of them shipped
-    // without the other. The user still only sees the error state.
-    //
-    // ⚠️ `issues` and not `error`, and that is a privacy boundary rather than
-    // brevity. A zod issue carries `code`, `expected`, `path` and `message` —
-    // the *shape* that was expected — and never the value that arrived.
-    // Verified against zod 4.4.3. This path now carries every response in the
-    // app, `GET /weight-logs` included, so anything that starts printing the
-    // received value here is printing somebody's bodyweight to a log.
-    console.error(`Response from ${path} did not match its schema:`, parsed.error.issues)
-    throw new ApiError("malformed-response", "The server sent an unexpected response.")
+/**
+ * A POST whose answer is a stream of server-sent events: the assistant's turn
+ * (plan.md, Phase 9). Resolves with the open body once the server has accepted
+ * the turn; anything it refused first (no consent, the allowance, the hourly
+ * cap) is an ordinary JSON error and rejects as an `ApiError` here, before any
+ * event.
+ *
+ * `fetch` is `expo/fetch` on SDK 58, which streams `body` and honours
+ * `signal`: aborting it rejects the body's pending read, which is how Stop
+ * works. Reading the events is `readChatEvents` in `@/lib/chat-stream`.
+ */
+export async function apiPostStream(
+  path: string,
+  body: unknown,
+  getToken: () => Promise<string | null>,
+  signal: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const response = await send("POST", path, getToken, body, signal)
+  if (!response.body) {
+    throw new ApiError("malformed-response", "The server sent no stream.")
   }
-
-  return parsed.data
+  return response.body
 }
 
 /** A GET against the API, authenticated and parsed. */

@@ -213,3 +213,22 @@ export function formatDayLong(day: LogDay): string {
   const month = MONTH_NAMES[Number(day.slice(5, 7)) - 1] ?? ""
   return `${month} ${Number(day.slice(8, 10))}`
 }
+
+/**
+ * `2026-11-01` → `"1 November"`. When the AI allowance resets (Phase 9, Q8),
+ * in the South African order.
+ */
+export function formatDayMonth(day: LogDay): string {
+  const month = MONTH_NAMES[Number(day.slice(5, 7)) - 1] ?? ""
+  return `${Number(day.slice(8, 10))} ${month}`
+}
+
+/**
+ * Dollars for the AI allowance line in Goals (Phase 9, Q26): `5` → `"$5"`,
+ * `0.42` → `"$0.42"`. The figure arrives already cut to whole cents by the
+ * engine's `aiSpendShown`; this only pads them, the way `formatKg` prints one
+ * decimal.
+ */
+export function formatUsd(value: number): string {
+  return Number.isInteger(value) ? `$${value}` : `$${value.toFixed(2)}`
+}

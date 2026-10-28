@@ -38,6 +38,10 @@ describe("commonMeasure", () => {
 
   it("cuts sourdough thicker than sandwich bread", () => {
     expect(commonMeasure("Sunbake Sourdough", "g")).toEqual({ noun: "slice", grams: 44 })
+    // With the bread word after it, as the coach found on the iPhone (2026-10-28).
+    expect(commonMeasure("Sourdough bread", "g")).toEqual({ noun: "slice", grams: 44 })
+    expect(commonMeasure("Big sourdough bread", "g")).toEqual({ noun: "slice", grams: 44 })
+    expect(commonMeasure("Sourdough loaf", "g")).toEqual({ noun: "slice", grams: 44 })
     expect(commonMeasure("Albany Brown Bread", "g")).toEqual({ noun: "slice", grams: 38 })
   })
 

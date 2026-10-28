@@ -3,7 +3,7 @@ import { streamSSE } from "hono/streaming"
 import { z } from "zod"
 
 import { currentLoggingDay } from "@engine"
-import { chatTurnRequestSchema, type ChatEvent } from "@shared"
+import { aiConsentWriteSchema, chatTurnRequestSchema, type ChatEvent } from "@shared"
 
 import { runChatTurn, type ChatTurnResult } from "../ai/chat-turn"
 import { checkAiGate } from "../ai/gate"
@@ -99,8 +99,6 @@ chatRoutes.post("/chat/messages/:id/dismiss", writeRateLimit, async (c) => {
 
 chatRoutes.get("/ai/consent", async (c) => c.json(await readAiConsent(getScope(c))))
 
-const consentBody = z.object({ granted: z.boolean() })
-
 chatRoutes.put("/ai/consent", writeRateLimit, async (c) => {
   let raw: unknown
   try {
@@ -108,7 +106,7 @@ chatRoutes.put("/ai/consent", writeRateLimit, async (c) => {
   } catch {
     return badRequest(c, "Expected a JSON body.")
   }
-  const body = consentBody.safeParse(raw)
+  const body = aiConsentWriteSchema.safeParse(raw)
   if (!body.success) return badRequest(c, "granted: expected true or false")
   return c.json(await writeAiConsent(getScope(c), body.data.granted))
 })
@@ -178,7 +176,13 @@ chatRoutes.post("/chat/turns", writeRateLimit, chatTurnRateLimit, async (c) => {
           history,
           rung,
           signal: stopped.signal,
-          emit: (event) => void send(event),
+          // A card is new when it is made, so it goes out unconfirmed.
+          emit: (event) =>
+            void send(
+              event.type === "proposal"
+                ? { type: "proposal", proposal: { ...event.proposal, confirmed: false } }
+                : event,
+            ),
           recordUsage: async (model, usage) => {
             // A failed ledger write does not fail the turn: the call is paid
             // for, and the miss is reported (`label.ts` says why).
@@ -229,9 +233,7 @@ chatRoutes.post("/chat/turns", writeRateLimit, chatTurnRateLimit, async (c) => {
       await send({ type: "error", code: result.error })
       return
     }
-    if (result.proposal) {
-      await send({ type: "proposal", proposal: { ...result.proposal, confirmed: false } })
-    }
+    // The card, if any, already went out as it was made (`ChatTurnEvent`).
     await send({
       type: "done",
       messageId: stored.id,

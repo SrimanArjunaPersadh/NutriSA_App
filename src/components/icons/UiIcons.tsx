@@ -314,3 +314,41 @@ export function SparkleIcon({ size = 22, color = colors.primary }: IconProps) {
     </Svg>
   )
 }
+
+/** New chat: a square with a pencil across its corner. */
+export function ComposeIcon({ size = 20, color = colors.textSecondary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M17.6 3.6a1.9 1.9 0 0 1 2.8 2.8L12 14.8l-3.6.8.8-3.6 8.4-8.4Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
+/** Send: an arrow pointing up, drawn on the copper button. */
+export function SendIcon({ size = 18, color = colors.ground }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 19V5M6 11l6-6 6 6" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  )
+}
+
+/** Stop a reply that is still arriving: a rounded square. */
+export function StopIcon({ size = 14, color = colors.ground }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill={color} />
+    </Svg>
+  )
+}
