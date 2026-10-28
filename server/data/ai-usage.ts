@@ -1,11 +1,23 @@
 import { randomUUID } from "node:crypto"
 
-import { computeUsageCost, type ModelId, type TokenUsage } from "@engine"
+import { and, gte, lt } from "drizzle-orm"
+
+import {
+  aiBudgetMonth,
+  aiBudgetRung,
+  AI_MONTHLY_BUDGET_USD,
+  computeUsageCost,
+  currentLoggingDay,
+  sumUsageCosts,
+  type ModelId,
+  type TokenUsage,
+} from "@engine"
+import type { AiAllowance } from "@shared"
 
 import type { UserScope } from "../auth/user-scope"
 import { withRetry } from "../db/retry"
 import { aiUsage } from "../db/schema"
-import { insertOwned } from "./scoped"
+import { insertOwned, selectOwned } from "./scoped"
 
 /** Which surface spent it. Matches the comment on `ai_usage.feature`. */
 export type AiFeature = "ocr" | "chat" | "weekly_report"
@@ -52,4 +64,32 @@ export async function recordAiUsage(
       rateVersion,
     }),
   )
+}
+
+/**
+ * This SAST month's AI spend and the rung it puts the user on (plan.md,
+ * Phase 9, Q2 and Q8): the budget gate's one question, asked before every
+ * chat turn and label read.
+ *
+ * Every row counts, chat and label reads alike. The rows are summed by the
+ * engine, each at the price it was written at. A month is a few hundred rows
+ * at most, so they are read and added here rather than summed in SQL, which
+ * keeps the addition in the engine.
+ *
+ * **Throws on a ledger failure, and callers must refuse the turn when it
+ * does.** The gate fails closed: an unreadable ledger is not an empty one.
+ * The read itself is retried through `selectOwned` like every select.
+ */
+export async function readAiAllowance(scope: UserScope): Promise<AiAllowance> {
+  const month = aiBudgetMonth(currentLoggingDay())
+  const rows = await selectOwned(scope, aiUsage, {
+    where: and(gte(aiUsage.ts, month.fromUtc), lt(aiUsage.ts, month.toUtc)),
+  })
+  const spentUsd = sumUsageCosts(rows.map((row) => row.costUsd))
+  return {
+    spentUsd,
+    budgetUsd: AI_MONTHLY_BUDGET_USD,
+    rung: aiBudgetRung(spentUsd),
+    resetsOn: month.resetsOn,
+  }
 }

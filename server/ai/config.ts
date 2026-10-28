@@ -7,7 +7,8 @@ import { env } from "../env"
 /**
  * Every model call this server makes is configured here (plan.md, Phase 9:
  * "single server-side config module — model IDs as constants, never inline
- * strings"). Created on `label-ocr`, Phase 8; the chat adds its own entry.
+ * strings"). Created on `label-ocr`, Phase 8; the chat's entries follow the
+ * reader's, and both share the one client below.
  *
  * Model ids are typed as the engine's `ModelId`, so a model with no row in the
  * rate table does not compile: `computeUsageCost` would otherwise throw after
@@ -33,6 +34,30 @@ export const LABEL_TIMEOUT_MS = 15_000
  * spent before any answer was written.
  */
 export const LABEL_MAX_TOKENS = 2048
+
+/**
+ * The assistant (Phase 9, Q1): Sonnet 5.5 with adaptive thinking at low
+ * effort. `thinking` is left unset, which is adaptive on this model; the
+ * Sonnet 5 form, `{type: "disabled"}`, is a 400 on it.
+ */
+export const CHAT_MODEL = "claude-sonnet-5-5" satisfies ModelId
+
+/**
+ * The cheaper rung (Q8): the rest of the month once spend reaches $4, and a
+ * second try for one turn when the chat model is overloaded or down.
+ */
+export const CHAT_FALLBACK_MODEL = "claude-haiku-5-5" satisfies ModelId
+
+export const CHAT_EFFORT = "low" as const
+
+/** One turn, every model call and lookup in it (Q11). Vercel's ceiling is 60 s. */
+export const CHAT_TURN_TIMEOUT_MS = 45_000
+
+/** Lookups per turn (Q11). Past this, the model answers with what it has. */
+export const CHAT_MAX_LOOKUPS = 4
+
+/** Per model call, thinking included (Q11). A chat answer is a few sentences. */
+export const CHAT_MAX_TOKENS = 4096
 
 let client: Anthropic | null = null
 

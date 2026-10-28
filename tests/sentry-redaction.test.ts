@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { redactParams } from "../server/observability/redact"
+import { redactParams, scrubErrorEvent } from "../server/observability/redact"
 
 /**
  * The Sentry parameter cut, tested against the real shape it exists for.
@@ -80,3 +80,67 @@ describe("redactParams", () => {
     expect(redactParams("")).toBe("")
   })
 })
+
+/**
+ * Phase 9, Q20: "a test proves a failed turn's event holds no chat text".
+ *
+ * The event below is what Sentry would build if storing a chat message failed
+ * inside `POST /chat/turns`: the driver's error quoting the insert with the
+ * message as a bound parameter (the shape of `REAL_FAILURE` above, on
+ * `chat_messages`), the request with the turn as its body, and an `extra` bag.
+ * Every route in `routes/chat.ts` reports through `captureRouteError`, so this
+ * gate is the one every chat failure passes.
+ */
+describe("scrubErrorEvent on a failed chat turn", () => {
+  const SECRET = "I binged on a whole cake and weigh 91.4 kg"
+
+  const chatFailure = () => ({
+    type: undefined,
+    exception: {
+      values: [
+        {
+          type: "DrizzleQueryError",
+          value: `Failed query: insert into "chat_messages" ("id", "user_id", "conversation_id", "role", "content", "status", "proposal", "unsourced_numbers", "created_at") values ($1, $2, $3, $4, $5, default, default, default, default)
+params: 0192f0c1-7d2e-7a10-8b3c-1a2b3c4d5e6f,user_2abc,0192f0c1-7d2e-7a10-8b3c-aaaaaaaaaaaa,user,${SECRET}`,
+        },
+      ],
+    },
+    message: `chat failed: params: ${SECRET}`,
+    request: {
+      method: "POST",
+      url: "https://api.example/api/chat/turns?debug=1",
+      data: JSON.stringify({ conversationId: "c", messageId: "m", text: SECRET }),
+      headers: { Authorization: "Bearer live-token", "Content-Type": "application/json" },
+      cookies: { session: "x" },
+      query_string: "debug=1",
+    },
+    extra: { turn: { text: SECRET } },
+    user: { id: "user_2abc", email: "someone@example.com" },
+  })
+
+  it("leaves no chat text anywhere in the event", () => {
+    const scrubbed = scrubErrorEvent(chatFailure() as never)
+    const sent = JSON.stringify(scrubbed)
+    expect(sent).not.toContain("binged")
+    expect(sent).not.toContain("91.4")
+    expect(sent).not.toContain("live-token")
+    expect(sent).not.toContain("someone@example.com")
+  })
+
+  it("keeps what broke: the statement and the request's path", () => {
+    const scrubbed = scrubErrorEvent(chatFailure() as never) as ReturnType<typeof chatFailure>
+    expect(scrubbed.exception.values[0]!.value).toContain('insert into "chat_messages"')
+    expect(scrubbed.exception.values[0]!.value).toContain("params: [redacted]")
+    expect(scrubbed.request).toEqual({
+      method: "POST",
+      url: "https://api.example/api/chat/turns",
+      data: undefined,
+      headers: undefined,
+      cookies: undefined,
+      query_string: undefined,
+    })
+    expect(scrubbed).not.toHaveProperty("extra")
+    expect(scrubbed).not.toHaveProperty("user")
+  })
+})
+

@@ -1,3 +1,5 @@
+import type { ErrorEvent } from "@sentry/node"
+
 /**
  * Cuts bound query parameters out of an error message.
  *
@@ -37,3 +39,55 @@ export function redactParams(text: string): string {
   // before the parameter list.
   return text.replace(/\bparams:[\s\S]*/i, "params: [redacted]")
 }
+
+/** Strips everything user-supplied off a request before it can be sent. */
+export function scrubRequest(request: NonNullable<ErrorEvent["request"]>) {
+  const url = typeof request.url === "string" ? request.url.split("?")[0] : request.url
+
+  return {
+    method: request.method,
+    url,
+    // Explicitly undefined rather than merely absent: this is the list of
+    // things that must never be here, and it should read as a decision.
+    data: undefined,
+    headers: undefined,
+    cookies: undefined,
+    query_string: undefined,
+  }
+}
+
+/**
+ * The last gate before an error event leaves this server (`beforeSend` in
+ * `./sentry.ts`).
+ *
+ * - **The request** loses its body, headers, cookies and query string. A chat
+ *   message, a meal or a weigh-in would otherwise ride along as the body.
+ * - **The exception message** is the Sentry issue **title**, the most visible
+ *   field on the event; its bound parameters are cut (`redactParams`). A failed
+ *   insert into `chat_messages` lists the message text there.
+ * - **A captured message** gets the same cut.
+ * - **`extra`** is dropped whole: an allowlist would be a promise about code
+ *   that has not been written yet.
+ * - **`user`** is cleared even though `sendDefaultPii` is off, so this gate does
+ *   not depend on a setting somewhere else still being right.
+ *
+ * Moved here from `initSentry` on `ai-chat` (2026-10-28) so a test can prove a
+ * failed chat turn's event carries no chat text.
+ */
+export function scrubErrorEvent<T extends ErrorEvent>(event: T): T {
+  if (event.request) event.request = scrubRequest(event.request)
+
+  for (const exception of event.exception?.values ?? []) {
+    if (exception.value) exception.value = redactParams(exception.value)
+  }
+
+  if (event.message) event.message = redactParams(event.message)
+  if (event.logentry?.message) {
+    event.logentry.message = redactParams(event.logentry.message)
+  }
+
+  delete event.extra
+  delete event.user
+  return event
+}
+

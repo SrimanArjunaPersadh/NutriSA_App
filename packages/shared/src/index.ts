@@ -175,3 +175,31 @@ export {
   type WeightRange,
   type WeightSeries,
 } from "./weight"
+
+export {
+  aiAllowanceSchema,
+  aiConsentSchema,
+  chatConversationDetailSchema,
+  chatConversationListSchema,
+  chatConversationSchema,
+  chatEventSchema,
+  chatMessageSchema,
+  chatProposalSchema,
+  chatTurnRequestSchema,
+  CHAT_MESSAGE_MAX_CHARS,
+  CHAT_REFUSAL_TEXT,
+  CHAT_MESSAGE_STATUSES,
+  CHAT_TOOL_NAMES,
+  isChatToolName,
+  type AiAllowance,
+  type AiConsent,
+  type ChatConversation,
+  type ChatEvent,
+  type ChatMessage,
+  type ChatMessageStatus,
+  type ChatProposal,
+  type ChatToolName,
+  type ChatTurnRequest,
+} from "./chat"
+
+export { parseSseChunk } from "./sse"

@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/node"
 
 import { env } from "../env"
-import { redactParams } from "./redact"
+import { redactParams, scrubErrorEvent, scrubRequest } from "./redact"
 
 /**
  * Server-side error reporting, configured to be structurally incapable of
@@ -49,24 +49,10 @@ import { redactParams } from "./redact"
  * stack traces to a project dashboard.
  */
 
-/** Strips everything user-supplied off a request before it can be sent. */
-function scrubRequest(request: NonNullable<Sentry.ErrorEvent["request"]>) {
-  const url = typeof request.url === "string" ? request.url.split("?")[0] : request.url
-
-  return {
-    method: request.method,
-    url,
-    // Explicitly undefined rather than merely absent: this is the list of
-    // things that must never be here, and it should read as a decision.
-    data: undefined,
-    headers: undefined,
-    cookies: undefined,
-    query_string: undefined,
-  }
-}
-
-/** The only span name `tracesSampler` keeps. See `traceLabelRead`. */
+/** The only span names `tracesSampler` keeps. See `traceLabelRead` and `traceChatTurn`. */
 const LABEL_READ_SPAN = "label.read"
+const CHAT_TURN_SPAN = "chat.turn"
+const KEPT_SPANS = new Set([LABEL_READ_SPAN, CHAT_TURN_SPAN])
 
 export function initSentry(): void {
   if (!env.SENTRY_DSN) {
@@ -82,16 +68,17 @@ export function initSentry(): void {
     sendDefaultPii: false,
 
     /**
-     * One span is traced and nothing else: the label reader's model call
-     * (Phase 8, "log OCR p50/p95 latency and failure rate"). Every other span —
+     * Two spans are traced and nothing else: the label reader's model call
+     * (Phase 8, "log OCR p50/p95 latency and failure rate") and an assistant
+     * turn (Phase 9, Q14). Every other span —
      * an HTTP request, a query — is dropped here, because route spans carry
      * parameters and timings that describe logging behaviour and nothing asks
      * that question.
      *
-     * The label span is a new root (see `traceLabelRead`), so this sampler sees
-     * it by name rather than inheriting an unsampled request's decision.
+     * Both are new roots (see `traceLabelRead`), so this sampler sees them
+     * by name rather than inheriting an unsampled request's decision.
      */
-    tracesSampler: ({ name }) => (name === LABEL_READ_SPAN ? 1 : 0),
+    tracesSampler: ({ name }) => (KEPT_SPANS.has(name) ? 1 : 0),
 
     /**
      * A transaction is scrubbed exactly as an error is. It carries the
@@ -113,39 +100,25 @@ export function initSentry(): void {
      * the path a debugging `console.log` of a day summary would take to
      * Sentry, months after whoever wrote it stopped thinking about it.
      */
+    /**
+     * No outgoing request carries Sentry's trace headers. With `chat.turn` a
+     * sampled root, the calls to Anthropic and Neon would otherwise send a
+     * `sentry-trace` and `baggage` header (a trace id, the environment, the
+     * public key) to both. Nothing personal, and nothing either needs
+     * (Privacy axis, 2026-10-28).
+     */
+    tracePropagationTargets: [],
+
     integrations: (defaults) =>
       defaults.filter((integration) => integration.name !== "Console"),
 
-    beforeSend(event) {
-      if (event.request) event.request = scrubRequest(event.request)
-
-      /**
-       * The exception message is the Sentry issue **title**, so this is the
-       * most visible field on the whole event and was the least protected.
-       */
-      for (const exception of event.exception?.values ?? []) {
-        if (exception.value) exception.value = redactParams(exception.value)
-      }
-
-      // A `captureMessage` rather than an exception. Same treatment.
-      if (event.message) event.message = redactParams(event.message)
-      if (event.logentry?.message) {
-        event.logentry.message = redactParams(event.logentry.message)
-      }
-
-      /**
-       * `extra` is dropped whole rather than filtered. It is the free-for-all
-       * bag anything can attach to, so an allowlist here would be a promise
-       * about code that has not been written yet.
-       */
-      delete event.extra
-
-      // The SDK attaches these only with sendDefaultPii on. Cleared anyway:
-      // this function is the last gate, and it should not depend on a setting
-      // somewhere else still being right.
-      delete event.user
-      return event
-    },
+    /**
+     * The request, the exception text, the message, `extra` and `user`: see
+     * `scrubErrorEvent` in `./redact.ts`, which says why each one goes. It
+     * lives there so `tests/sentry-redaction.test.ts` can prove it without a
+     * `.env`.
+     */
+    beforeSend: (event) => scrubErrorEvent(event),
 
     beforeBreadcrumb(breadcrumb) {
       if (breadcrumb.category === "console") return null
@@ -198,6 +171,38 @@ export async function traceLabelRead<T extends { outcome: string }>(
       return result
     }),
   )
+}
+
+/**
+ * Times one assistant turn and records how it ended (plan.md, Phase 9, Q14).
+ *
+ * The same contract as `traceLabelRead`: the outcome is the only attribute
+ * (`ChatTurnOutcome`: ok, unsourced_number, cut_off, timeout, refused, error).
+ * No message text, no tool result, no token count, no model name. The
+ * transaction is scrubbed by `beforeSendTransaction` like the label one.
+ */
+export async function traceChatTurn<T extends { outcome: string }>(
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!Sentry.isInitialized()) return run()
+
+  return Sentry.startNewTrace(() =>
+    Sentry.startSpan({ name: CHAT_TURN_SPAN, op: "ai.chat", parentSpan: null }, async (span) => {
+      const result = await run()
+      span.setAttribute("outcome", result.outcome)
+      return result
+    }),
+  )
+}
+
+/**
+ * Counts a chat model failure that fell back to the cheaper model (Q8). A
+ * message with the fixed text below and no other data: the error's own
+ * message can echo the request, so it is never passed on (Q20).
+ */
+export function captureChatFallback(): void {
+  if (!Sentry.isInitialized()) return
+  Sentry.captureMessage("Chat model unavailable; the turn fell back to the cheaper model", "warning")
 }
 
 export { Sentry }

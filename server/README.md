@@ -64,7 +64,26 @@ then 30 reads per user per hour, because a read costs money rather than a row.
 
 | Route | Does | Answers |
 |---|---|---|
-| `POST /api/label-reads` | Sends a label photo (`{ image: <base64 JPEG> }`, about 1.9 MB of base64 at most) to `claude-haiku-5-5` and returns what it read. **Synchronous**, 15 s, no retries. Writes one `ai_usage` row (`feature='ocr'`) for every answered call; the photo is never stored | `200` a `LabelReading` · `502` / `504` `upstream-failed` · `429` the hourly cap · `499` the user cancelled |
+| `POST /api/label-reads` | Sends a label photo (`{ image: <base64 JPEG> }`, about 1.9 MB of base64 at most) to `claude-haiku-5-5` and returns what it read. **Synchronous**, 15 s, no retries. Writes one `ai_usage` row (`feature='ocr'`) for every answered call; the photo is never stored. Since Phase 9 it passes the AI gate first (consent, the month's allowance) | `200` a `LabelReading` · `502` / `504` `upstream-failed` · `403` `ai-consent-required` · `429` the hourly cap or `ai-allowance-used` · `503` the ledger could not be read · `499` the user cancelled |
+
+**The assistant** (branch `ai-chat`, Phase 9) — `routes/chat.ts`, mounted before
+the writes router. Reading a chat is not metered as a write; the routes that change
+something carry the write limit, and a turn also carries 60 per user per hour.
+
+| Route | Does | Answers |
+|---|---|---|
+| `POST /api/chat/turns` | Sends one message (`{ conversationId, messageId, text }`, both ids client-minted v7, text ≤ 2,000 chars). Passes the AI gate, stores the message, then streams the reply as server-sent events (`ChatEvent`): `status` per lookup, `text` as it is written, a `proposal` card, then `done` or `error`. Sonnet 5.5 at low effort, Haiku 5.5 past $4 or when Sonnet is down. 45 s, at most 4 lookups. One `ai_usage` row (`feature='chat'`) per model call, cut-off calls included | `200` the stream · `400` · `403` `ai-consent-required` · `409` an id that is someone else's · `429` the hourly cap or `ai-allowance-used` · `503` the ledger could not be read |
+| `GET /api/chat/conversations` | The chat list, newest first | `200` |
+| `GET /api/chat/conversations/:id` | One chat, oldest message first; each card says whether it was confirmed (a meal log with its id exists) | `200` · `404` not this user's |
+| `DELETE /api/chat/conversations/:id` | "Delete this chat" | `200` with `deleted` |
+| `DELETE /api/chat/conversations` | "Delete all chats". The ledger stays | `200` with the count |
+| `POST /api/chat/messages/:id/dismiss` | Dismisses a card. Confirming one is the ordinary `POST /api/meal-logs` with the card's body | `200` · `404` |
+| `GET /api/ai/consent` · `PUT /api/ai/consent` | Reads, grants (`{ granted: true }`) or withdraws AI consent | `200` |
+| `GET /api/ai/allowance` | This SAST month's spend, the $5 budget, the rung, and when it resets | `200` |
+
+The assistant cannot write: its tools only read, and a card is a `POST /meal-logs` body
+the user confirms. Anthropic receives the messages, the tool results and this server's IP:
+no user id, no email, no database id. Food references are per-turn (`f1`, `m1`).
 
 Anthropic sees the photo, a fixed prompt and this server's IP: no user id, no token, no
 phone IP. The SDK's own tracing is off and its log level pinned (`ai/config.ts`), so neither
@@ -122,6 +141,7 @@ out, and so Svix/Inngest retries land on an idempotent write.
 | `user.created` | `sync-clerk-user-created` | upsert the row |
 | `user.updated` | `sync-clerk-user-updated` | upsert the row (Clerk sends the whole user, not a diff) |
 | `user.deleted` | `sync-clerk-user-deleted` | delete the row — the POPIA cascade |
+| daily, 03:00 SAST | `delete-stale-chats` | delete chats untouched for 12 months (Phase 9, Q17) |
 
 Any other subscribed event is verified and acknowledged with 200, never acted
 on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
@@ -140,15 +160,23 @@ on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
 | `data/profile.ts` | Reads and sets the goal weight (one `profiles` row per user) |
 | `data/foods.ts` | Food search (local half and full), recents by meal, barcode lookup, creating a food |
 | `data/saved-meals.ts` | Lists, creates, patches and deletes saved meals |
-| `data/ai-usage.ts` | Writes one priced `ai_usage` ledger row per model call |
-| `ai/config.ts` | Model ids as constants, the reader's timeout and token cap, the Anthropic client |
+| `data/ai-usage.ts` | Writes one priced `ai_usage` ledger row per model call; reads the month's allowance |
+| `data/chat.ts` | Conversations and messages: list, read with confirmed cards, history, store, delete, dismiss |
+| `ai/config.ts` | Model ids as constants, the reader's and the chat's limits, the Anthropic client |
 | `ai/label-reader.ts` | The label reader's model call: prompt, JSON schema, outcomes, bounds check |
+| `ai/gate.ts` | Consent and the month's allowance before any model call; fails closed |
+| `ai/chat-turn.ts` | One assistant turn: streaming, the lookup loop, deadline, Stop, fallback, spend |
+| `ai/chat-tools.ts` | The six reads and the meal card, with per-turn food references |
+| `ai/chat-prompt.ts` | The coach's instructions, SADAG's numbers, the date line |
+| `ai/number-check.ts` | Finds numbers in a reply that no lookup or user message supplied |
+| `db/uuidv7.ts` | Mints a card's meal-log id ahead of the client's write |
 | `food/rows.ts` | Pure mappings: `foods` rows and Open Food Facts products to `Food`, logged lines to recents |
 | `food/off.ts` | The Open Food Facts client: timeouts, a per-minute budget, a 10-minute search cache |
 | `routes/foods.ts` | The food and saved-meal routes |
 | `routes/label.ts` | `POST /label-reads` |
+| `routes/chat.ts` | The assistant, AI consent and the allowance |
 | `db/errors.ts` | Tells a unique violation (409) from a real failure (500) |
-| `http/limits.ts` | Per-user write cap and hourly label-read cap; counts unauthenticated volume without storing an IP |
+| `http/limits.ts` | Per-user write cap, hourly label-read and chat-turn caps; counts unauthenticated volume without storing an IP |
 | `routes/reads.ts` | The three read routes, behind `requireUser` |
 | `routes/writes.ts` | The meal, weight and target writes, behind `requireUser` + the rate limit |
 | `observability/sentry.ts` | Sentry init, `sendDefaultPii: false`, scrubbing; traces the label read and nothing else |
