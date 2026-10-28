@@ -22,6 +22,7 @@ import {
 import { BarlowCondensed_800ExtraBold_Italic } from "@expo-google-fonts/barlow-condensed";
 
 import { colors } from "@/design/tokens";
+import { sweepLabelPhotos } from "@/lib/label-photo";
 import { scrubBreadcrumb } from "@/lib/sentry-scrub";
 import { queryClient } from "@/lib/query-client";
 
@@ -55,6 +56,12 @@ function RootLayout() {
   useEffect(() => {
     if (fontsLoaded || fontError) void SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
+
+  // A label photo left behind by an app kill or crash goes at the next start,
+  // before any form can be holding one. See `@/lib/label-photo`.
+  useEffect(() => {
+    sweepLabelPhotos();
+  }, []);
 
   // Hold on the ground colour until the fonts land, so the wordmark never
   // flashes in the system face first.

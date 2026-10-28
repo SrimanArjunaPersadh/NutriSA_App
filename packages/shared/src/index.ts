@@ -126,6 +126,16 @@ export {
 } from "./foods"
 
 export {
+  LABEL_BASES,
+  labelReadingSchema,
+  labelReadRequestSchema,
+  MAX_LABEL_IMAGE_CHARS,
+  type LabelBasis,
+  type LabelReading,
+  type LabelReadRequest,
+} from "./label"
+
+export {
   MAX_CATEGORY_CHARS,
   MAX_NOTE_CHARS,
   patchSavedMealSchema,

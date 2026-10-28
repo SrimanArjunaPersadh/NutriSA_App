@@ -52,11 +52,24 @@ writes in it carry the same rate limit and the same client-minted id contract.
 | `GET /api/foods/search/local?q=` | The same without Open Food Facts: the fast half the logger draws first |
 | `GET /api/foods/recent?slot=` | Recently logged foods with last time's amount; with `slot`, the foods usual at that meal first |
 | `GET /api/foods/barcode/:code` | Local `foods` row first, else Open Food Facts, cached as a global row |
-| `POST /api/foods` | A food of the user's own (`source='manual'`) |
+| `POST /api/foods` | A food of the user's own: `source='manual'`, or `'label_scan'` when the body says so (only those two) |
 | `GET /api/saved-meals` | The saved meal library (`custom_meals`) |
 | `POST /api/saved-meals` | Saves a meal |
 | `PATCH /api/saved-meals/:id` | Renames or re-categorises it, or rewrites its lines and header together |
 | `DELETE /api/saved-meals/:id` | Removes it; meals logged from it stay logged |
+
+**The label reader** (branch `label-ocr`, Phase 8) — `routes/label.ts`, mounted
+before the writes router like the food routes. Metered twice: the write limit,
+then 30 reads per user per hour, because a read costs money rather than a row.
+
+| Route | Does | Answers |
+|---|---|---|
+| `POST /api/label-reads` | Sends a label photo (`{ image: <base64 JPEG> }`, about 1.9 MB of base64 at most) to `claude-haiku-5-5` and returns what it read. **Synchronous**, 15 s, no retries. Writes one `ai_usage` row (`feature='ocr'`) for every answered call; the photo is never stored | `200` a `LabelReading` · `502` / `504` `upstream-failed` · `429` the hourly cap · `499` the user cancelled |
+
+Anthropic sees the photo, a fixed prompt and this server's IP: no user id, no token, no
+phone IP. The SDK's own tracing is off and its log level pinned (`ai/config.ts`), so neither
+can carry the photo anywhere else. `ANTHROPIC_API_KEY`
+is optional at boot; without it the route answers `502` and the form falls back to typing.
 
 Open Food Facts sees the search text and barcodes, the server's IP and
 `OFF_USER_AGENT`; never a user id, token or the phone's IP (the phone does load
@@ -127,14 +140,18 @@ on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
 | `data/profile.ts` | Reads and sets the goal weight (one `profiles` row per user) |
 | `data/foods.ts` | Food search (local half and full), recents by meal, barcode lookup, creating a food |
 | `data/saved-meals.ts` | Lists, creates, patches and deletes saved meals |
+| `data/ai-usage.ts` | Writes one priced `ai_usage` ledger row per model call |
+| `ai/config.ts` | Model ids as constants, the reader's timeout and token cap, the Anthropic client |
+| `ai/label-reader.ts` | The label reader's model call: prompt, JSON schema, outcomes, bounds check |
 | `food/rows.ts` | Pure mappings: `foods` rows and Open Food Facts products to `Food`, logged lines to recents |
 | `food/off.ts` | The Open Food Facts client: timeouts, a per-minute budget, a 10-minute search cache |
 | `routes/foods.ts` | The food and saved-meal routes |
+| `routes/label.ts` | `POST /label-reads` |
 | `db/errors.ts` | Tells a unique violation (409) from a real failure (500) |
-| `http/limits.ts` | Per-user write cap; counts unauthenticated volume without storing an IP |
+| `http/limits.ts` | Per-user write cap and hourly label-read cap; counts unauthenticated volume without storing an IP |
 | `routes/reads.ts` | The three read routes, behind `requireUser` |
 | `routes/writes.ts` | The meal, weight and target writes, behind `requireUser` + the rate limit |
-| `observability/sentry.ts` | Sentry init, `sendDefaultPii: false`, scrubbing |
+| `observability/sentry.ts` | Sentry init, `sendDefaultPii: false`, scrubbing; traces the label read and nothing else |
 | `db/schema.ts` | All 11 tables, keyed by Clerk id |
 | `db/index.ts` | Drizzle client over the Neon HTTP driver |
 | `db/retry.ts` | Retries transient `fetch failed` transport errors |

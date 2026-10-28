@@ -469,7 +469,9 @@ export default function AddFood() {
             <BarcodeScanner
               paused={sheet !== null || plateOpen || slotOpen}
               onFound={openFood}
-              onCreate={(barcode) => router.push(`/create-food?barcode=${barcode}`)}
+              // `read=1`: the user tapped "Add it from the label", so the
+              // label camera opens straight away (decided 2026-10-26).
+              onCreate={(barcode) => router.push(`/create-food?barcode=${barcode}&read=1`)}
             />
           ) : mode === "quick-add" ? (
             <QuickAddPanel onAdd={(item) => add([item], item.name, draftItemMacros(item).kcal)} />

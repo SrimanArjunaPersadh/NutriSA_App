@@ -1,5 +1,6 @@
-import { roundTo } from "./round"
+import { kcalFromKj } from "./foods"
 import { type Macros } from "./macros"
+import { roundTo } from "./round"
 
 /**
  * Where a day's calories came from.
@@ -100,6 +101,22 @@ export function kcalFromMacros(grams: Pick<Macros, "protein" | "carbs" | "fat">)
       usable(grams.fat) * ATWATER.fat,
     0,
   )
+}
+
+/**
+ * The kcal figure for a label, from whatever energy figures it printed.
+ *
+ * **A printed kcal wins** over a converted kJ (decided with Sriman,
+ * 2026-10-26): it is the number the user can read off the packet, and a
+ * converted kJ can disagree with it by a calorie because the manufacturer
+ * rounded each one separately. The conversion is `kcalFromKj`, the one the
+ * Open Food Facts mapping uses. Null when the label gave neither (or an
+ * unusable figure), which the form shows as a blank to fill rather than a zero.
+ */
+export function labelKcal(printed: { kcal: number | null; kj: number | null }): number | null {
+  if (printed.kcal !== null && Number.isFinite(printed.kcal)) return Math.max(0, printed.kcal)
+  if (printed.kj !== null) return kcalFromKj(printed.kj)
+  return null
 }
 
 /**

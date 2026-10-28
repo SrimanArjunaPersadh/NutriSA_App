@@ -53,6 +53,7 @@ export {
 export {
   macroEnergyShares,
   kcalFromMacros,
+  labelKcal,
   dominantMacro,
   ATWATER,
   NO_SHARES,
@@ -121,6 +122,13 @@ export {
   type ProjectionOptions,
   type ProjectionPoint,
 } from "./goal"
+
+export {
+  labelFoodDraft,
+  type LabelFoodDraft,
+  type LabelNumbers,
+  type LabelPer,
+} from "./label"
 
 export {
   computeUsageCost,

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { ATWATER, dominantMacro, kcalFromMacros, macroEnergyShares, NO_SHARES } from "./energy"
+import {
+  ATWATER,
+  dominantMacro,
+  kcalFromMacros,
+  labelKcal,
+  macroEnergyShares,
+  NO_SHARES,
+} from "./energy"
 import { ZERO_MACROS, type Macros } from "./macros"
 
 const macros = (protein: number, carbs: number, fat: number, kcal = 0): Macros => ({
@@ -119,5 +126,23 @@ describe("kcalFromMacros", () => {
   it("counts a negative or non-finite gram figure as zero", () => {
     expect(kcalFromMacros({ protein: -10, carbs: 25, fat: Number.NaN })).toBe(100)
     expect(kcalFromMacros({ protein: Number.POSITIVE_INFINITY, carbs: 0, fat: 0 })).toBe(0)
+  })
+})
+
+describe("labelKcal", () => {
+  /**
+   * Decided 2026-10-26: when the label prints kcal, use it. 1590 kJ converts
+   * to 380, and a label rounding each figure on its own may print 379.
+   */
+  it("prefers the printed kcal over the converted kJ", () => {
+    expect(labelKcal({ kcal: 379, kj: 1590 })).toBe(379)
+  })
+
+  it("converts the kJ when no kcal is printed", () => {
+    expect(labelKcal({ kcal: null, kj: 1590 })).toBe(380)
+  })
+
+  it("is null when the label gave no energy at all, not zero", () => {
+    expect(labelKcal({ kcal: null, kj: null })).toBeNull()
   })
 })

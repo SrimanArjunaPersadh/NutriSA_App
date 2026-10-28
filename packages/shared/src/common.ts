@@ -61,6 +61,13 @@ export const apiErrorSchema = z.object({
     "conflict",
     /** Too many requests from one caller. Back off and try later. */
     "rate-limited",
+    /**
+     * A model call that did not produce an answer: a timeout, an overloaded
+     * upstream, or a refusal. The label reader's failure path — the photo and
+     * the form stay, and the user retries or types. Not `server-error`, because
+     * nothing here is broken and the copy should not say so.
+     */
+    "upstream-failed",
     /** Anything unhandled. The details went to Sentry, not to the client. */
     "server-error",
   ]),

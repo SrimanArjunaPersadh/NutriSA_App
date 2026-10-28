@@ -8,6 +8,7 @@ import { env } from "./env";
 import { redactParams } from "./observability/redact";
 import { captureRouteError, initSentry } from "./observability/sentry";
 import { foodRoutes } from "./routes/foods";
+import { labelRoutes } from "./routes/label";
 import { reads } from "./routes/reads";
 import { writes } from "./routes/writes";
 import {
@@ -26,7 +27,8 @@ import { functions } from "./inngest/functions";
  * moving this line up between the imports would look earlier and change
  * nothing. Sentry's guidance about initialising first is about OpenTelemetry
  * auto-instrumentation patching modules as they load, which this server does
- * not use: `tracesSampleRate` is 0 and only `captureException` is wanted. If
+ * not use: the one traced span is the label reader's, started by hand
+ * (`traceLabelRead`), and everything else is `captureException`. If
  * tracing is ever turned on, this has to move to a separate entry module
  * preloaded with `node --import`, not merely higher up this file.
  */
@@ -56,6 +58,7 @@ app.get("/", (c) =>
       "DELETE /api/meal-logs/:id",
       "POST /api/weight-logs",
       "POST /api/targets",
+      "POST /api/label-reads",
       "POST /api/webhooks/clerk",
       "GET|POST|PUT /api/inngest",
     ],
@@ -128,6 +131,13 @@ app.route("/api", reads);
 app.route("/api", foodRoutes);
 
 /**
+ * The label reader. Before `writes` for the same reason as the food routes:
+ * it carries its own limits, and the wildcard write limit must not count it
+ * twice. See `routes/label.ts`.
+ */
+app.route("/api", labelRoutes);
+
+/**
  * The write routes — same path prefix, same session verification, plus a
  * per-user rate limit that the reads do not carry. Two routers rather than one
  * because that limit is the difference between them: a read costs a query, a
@@ -174,6 +184,7 @@ honoServe({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`  Goal weight     GET /api/profile   PUT /api/profile`);
   console.log(`  Log a meal     POST /api/meal-logs  DELETE /api/meal-logs/:id`);
   console.log(`  Log a weigh-in POST /api/weight-logs`);
+  console.log(`  Read a label   POST /api/label-reads`);
   console.log(`  Clerk webhook  POST /api/webhooks/clerk`);
   console.log(`  Inngest         ALL /api/inngest`);
 });

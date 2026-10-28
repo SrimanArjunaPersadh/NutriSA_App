@@ -59,10 +59,14 @@ editor, Quick Add, create-a-food, and barcode scanning with OFF lookup cached as
 global rows. The food half of Phase 6 and most of Phase 7; saved meals
 (`custom_meals`) followed the same day. **604 tests green across 27 files; search confirmed on device, the redesign not yet** ·
 **`food-logger` finished 2026-10-25**: review fixed, 658 tests, security suite 72 / 72, PR
-open · **Phase 7b `targets-and-profile` built 2026-10-25**: the Goals screen (targets,
-goal weight, sign out), `GET`/`PUT /profile`, target bounds; 677 tests offline, device
-pass not yet done ·
-Phases 8–12 not started · v1.1 deferred
+open · **Phase 7b `targets-and-profile` merged 2026-10-25** (`14ef668`): the Goals
+screen (targets, goal weight, sign out), `GET`/`PUT /profile`, target bounds; 677 tests
+offline, security suite 83 / 83, device pass confirmed by Sriman 2026-10-28 ·
+**Phase 8 `label-ocr` built 2026-10-26**: the label reader inside `create-food`,
+`POST /api/label-reads` on Haiku 5.5, rate version `2026-10-26`; 726 tests offline,
+security suite 94 / 94; reviewed and fixed 2026-10-28, device pass on screen labels done;
+one real packet still owed ·
+Phases 9–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -244,7 +248,10 @@ No code. Blocks Phase 1.
       clean, 658 tests green, `expo-doctor` 20/20, and `expo export --platform ios`
       bundles. **Verified on the iPhone the same day:** the project opens in Expo Go 58, and
       the native tab bar, week strip scroll, Weight chart range dropdown, meal-row swipe
-      actions (RNGH 3) and sign-in (Clerk 4.14.1) all work
+      actions (RNGH 3) and sign-in (Clerk 4.14.1) all work. ⚠️ **That pass missed the
+      Dashboard's top edge:** react-native-screens 4.30 had added a second top inset there,
+      a ~60pt gap under the clock, found by Sriman and fixed on `label-ocr` 2026-10-28
+      (`disableAutomaticContentInsets` on the Dashboard trigger; see Phase 8)
 - [x] Create Clerk account (Google sign-in), copy the user id — development instance
       `glowing-joey-19`, with **both** Google and Apple social connections enabled
       (confirmed by reading the instance's `/v1/environment`, 2026-08-10)
@@ -255,7 +262,8 @@ No code. Blocks Phase 1.
 - [x] Confirm current macro targets — **2300 kcal / 167P / 195C / 60F, confirmed by
       Sriman 2026-08-12.** No longer an assumption; this is what the migration seeds the
       first `targets` row with
-- [ ] Set **$10/month hard spend cap** in the Anthropic Console
+- [x] Set **$10/month hard spend cap** in the Anthropic Console — **set by Sriman,
+      confirmed 2026-10-28**, before the label reader's device pass
 - [x] Verify `.env` is gitignored — `.gitignore:12`, re-confirmed 2026-08-11
 - [x] Export the Supabase data and keep a local backup — **4 tables exported 2026-08-12**
       to `data/supabase_export/` (gitignored). The 5th, `water_logs`, was not exported
@@ -367,7 +375,10 @@ than a list somebody has to remember to update.
       is flat, or lands more than a year out — verified against the real series, where a
       95 kg goal correctly gets no date at the current +0.49 kg/week
 - [x] `cost.ts` — `computeUsageCost()` + versioned rate table. Sonnet 5 entered at the
-      **standard** $3/$15, not the $2/$10 intro rate that lapses 2026-08-31
+      **standard** $3/$15, not the $2/$10 intro rate that lapses 2026-08-31.
+      ⚠️ **Superseded 2026-10-26:** the intro rate became the standard and the rise was
+      cancelled. Rate version `2026-10-26` prices Sonnet 5 at $2 / $10 (Phase 8, Q12); the
+      `2026-08-12` version is left as published
 - [x] Confirm rounding is half-up and float-safe (scale → round → unscale) — `round.ts`.
       **If the oracle fails, this is the first knob to turn**: `Math.round(x*100)/100`
       and `Number(x.toFixed(2))` disagree on an exact half, and the trend feeds each
@@ -1704,8 +1715,8 @@ Follow-ups settled in the same session:
       value (tested)
 - [x] No new table
 - [x] `npm run seed:profile` retired: the script, both npm scripts, `SEED_GOAL_WEIGHT_KG`
-      in `.env.example` and the README rows deleted. **Sriman removes the line from
-      `.env`**
+      in `.env.example` and the README rows deleted. **Sriman removed the line from
+      `.env`** (confirmed 2026-10-28)
 - [x] `server/README.md` route and file tables updated
 - [x] Entry points: `GoalsButton` in the Dashboard header (drawn at 30pt, 44pt target via
       `hitSlop`, which **Sriman confirmed over a visible 44pt circle after review,
@@ -1723,8 +1734,9 @@ Follow-ups settled in the same session:
       Sentry breadcrumbs skip `scrubUrl` (pre-existing; `/api/profile` carries no query),
       and Expo's `.expo/dev/logs/start.log` held plaintext `.env` secrets (gitignored,
       deleted)
-- [ ] Device: change targets, see the Calories-left card and the Dashboard follow;
-      change and clear the goal weight, see the ring and chart line follow; 44pt targets
+- [x] Device: change targets, see the Calories-left card and the Dashboard follow;
+      change and clear the goal weight, see the ring and chart line follow; 44pt targets.
+      **Done on the iPhone, confirmed by Sriman 2026-10-28**
 
 ---
 
@@ -1732,20 +1744,182 @@ Follow-ups settled in the same session:
 
 **Goal:** the middle tier, fast, with a failure path as polished as the happy path.
 
-- [ ] Capture a label photo via `expo-camera`
-- [ ] Server route → `claude-haiku-4-5-20251001` with strict JSON schema
-      (`output_config.format`), no thinking config (Haiku 4.5 has no adaptive thinking)
-- [ ] **Synchronous — documented exception to enqueue-only.** Note the reason in code.
-- [ ] Hard 15s server-side timeout (Vercel Hobby ceiling is 60s)
-- [ ] **Photo is ephemeral** — sent, extracted, discarded. Never uploaded to ImageKit,
-      never retained. ImageKit is stack, but it is not in this path — see standing rules.
-- [ ] Write to `ai_usage` with `feature='ocr'`
-- [ ] Log OCR p50/p95 latency and failure rate to Sentry
-- [ ] **On any failure → manual entry with the photo still on screen and partial
-      fields pre-filled.** Never lose the photo, never force a restart.
-- [ ] Confirmation step before saving — transcription is reviewed, not trusted
-- [ ] Result saveable to `foods` with `source='label_scan'`
-- [ ] Test against a real SA label that OFF does not have
+**What already exists, so this branch does not rebuild it:**
+- `ai_usage` (Phase 1): a `feature` text column, token columns, `cost_usd`,
+  `rate_version`. It cascades from `users`, so no new table and no cascade change
+- `foods.source` already allows `label_scan`; `POST /foods` currently stamps `'manual'`
+- `expo-camera` ~58.0.12, installed for the barcode scanner. `takePictureAsync` saves
+  to the cache directory (a temporary URI the docs do not say is cleaned up) and can
+  return base64. The docs do not say one `CameraView` can scan and capture at once
+- The entry points: `BarcodeScanner`'s no-match and lookup-error states ("Add it from
+  the label") and the search's "Not here? Create …" row all open `create-food`
+- `computeUsageCost()` and the versioned `RATE_TABLE` in `packages/engine/src/cost.ts`
+- **Not** there: `@anthropic-ai/sdk`, and `ANTHROPIC_API_KEY` in `.env.example`
+
+**Settle with Sriman before code**: grilled and answered 2026-10-26; Sriman took every
+recommendation:
+- [x] **Model (Q1):** `claude-haiku-5-5`, not the `claude-haiku-4-5-20251001` this
+      phase used to name. A tenth of 4.5's price ($0.10 / $0.50 per MTok). `thinking`
+      left unset, `output_config: {effort: "low"}`, `max_tokens` about 2048, no
+      `temperature` (a 400 on this model). A safety refusal is a failure, routed to the
+      manual path: Haiku 5.5 has no server-side fallback
+- [x] **Where it lives (Q2):** inside `create-food`, as "Read the label". Every way into
+      that screen gets it, and the form is both the confirmation step and the failure
+      fallback. The photo stays on screen as a thumbnail above the fields
+- [x] **What the model reads (Q3):** each value **as printed**, with its unit. Energy is
+      `{value, unit: "kJ" | "kcal"}`; protein, carbohydrate, fat; the per-100 g / per-100
+      ml column, else the per-serving column with its serving size; the serving size;
+      the product name. Per-100 preferred, since that is how `create-food` stores a food.
+      **The engine converts kJ → kcal (`kcalFromKj`), never the model**, and only when
+      the label prints no kcal figure; a printed kcal is used as is
+- [x] **Unreadable fields (Q4):** every field nullable, never guessed; a top-level
+      `status` of `ok` / `partial` / `not_a_label`. The form marks the blanks quietly
+- [x] **Photo (Q5):** resized on the device to a 1568 px long edge, JPEG ~0.7, via
+      `expo-image-manipulator` (`npx expo install`). The cache file is deleted when the
+      screen closes, saved or not. The server never writes the image anywhere and never
+      logs the body. ImageKit is not in this path (standing rule)
+- [x] **Spend guard (Q6):** Sriman sets the $10 Console cap (Phase 0) **before the first
+      real call**. A per-user cap of about 30 reads an hour in `server/http/limits.ts`.
+      No monthly gate yet (about $0.0003 a read); every read writes `ai_usage` with
+      `feature='ocr'`, so Phase 9's gate counts OCR from its first day
+- [x] **Timeout (Q7):** one 15 s budget on the server, SDK `maxRetries: 0`. Timeout,
+      overload or refusal → "Couldn't read this label", photo and form kept, "Try again"
+      (same photo) or "Type it in"
+- [x] **Provenance (Q8):** `writeFoodSchema` gains an optional `source` limited to
+      `"manual" | "label_scan"`, so a client can never claim `off` or `seed`.
+      `label_scan` means "came in through the reader and was reviewed", even if every
+      field was corrected
+- [x] **Metrics (Q9):** a Sentry span around the model call tagged with the outcome
+      (`ok` / `partial` / `not_a_label` / `timeout` / `refused` / `error`). p50 / p95
+      come from Sentry performance. No label value, token count or image reaches Sentry
+- [x] **Testing (Q10):** Vitest with a mocked SDK (schema, timeout branch, `ai_usage`
+      write); the new route joins the security suite's isolation and forged-token
+      sweeps. The real-SA-label test is a device check. No label photos are committed
+- [x] **Rice Krispies (Q11):** deferred, see the backlog. A scan already reaches the
+      reader through the no-match state
+- [x] **Rate version (Q12):** a new `2026-10-26` version; published versions stay as
+      they are. `claude-haiku-5-5` at **both** cards, $0.10 / $0.50 up to 100,000
+      prompt tokens and $0.50 / $2.50 over, where prompt length is input + cache read +
+      cache write (per the pricing page); `claude-sonnet-5` at **$2 / $10**, because the
+      intro rate became the standard and the $3 / $15 rise was cancelled; `claude-haiku-4-5`
+      carried at $1 / $5. The threshold lives in the engine, tested at 100,000 and
+      100,001
+- [x] **Camera (Q13):** its own screen, `label-camera.tsx`, reusing the scanner's
+      permission states. The shutter returns straight to the form (retake is from the
+      thumbnail). From the scanner's "Add it from the label" the camera opens at once
+      (`create-food?barcode=…&read=1`); from search, "Read the label" is a button
+- [x] **While reading (Q14):** the fields lock under "Reading the label…" with a Cancel.
+      A Name already typed (from search) is never overwritten
+- [x] **Checking (Q15):** tapping the thumbnail opens the photo full screen, to read the
+      label against the fields
+- [x] **Contract (Q16):** `POST /api/label-reads`, metered like a write (built as its own
+      router, `routes/label.ts`, mounted before `writes` like `routes/foods.ts`). Body
+      `{ image: <base64 JPEG> }`, JPEG only, capped at `MAX_LABEL_IMAGE_CHARS` (1.9M characters
+      of base64) with a `bodyLimit` 1 KB above it, "2 MB" in round numbers. Request and response zod
+      schemas in `packages/shared/src/label.ts`; the response schema is also the model's
+      `output_config.format`, so the label's shape is defined once
+- [x] **Config (Q17):** `server/ai/config.ts` is created here, with the model id as a
+      constant and the client. Phase 9 adds to it rather than creating it
+- [x] **This rewrite (Q18)**, first edit of the branch
+
+**Build:** (built 2026-10-26 on `label-ocr`)
+- [x] `ANTHROPIC_API_KEY` in `.env.example`, **optional at boot** in `server/env.ts`:
+      without it the route answers `upstream-failed` and every other route still runs
+- [x] **Sriman adds the real key to `.env`, restarts the API server, and sets the
+      $10 Console cap** (Phase 0) before the first real read. Key in 2026-10-26 (checked
+      by shape, never read); cap confirmed 2026-10-28. Two real reads reached the model
+      on 2026-10-26, 3,445 tokens in each and about $0.0005 apiece; no food saved yet
+- [x] `@anthropic-ai/sdk` **1.3.0** on the server, which sends API version
+      `2026-10-21` by default (new code, nothing to migrate). `server/ai/config.ts`:
+      `LABEL_MODEL` typed as the engine's `ModelId`, so an unpriced model does not
+      compile; 15 s; `max_tokens` 2048; `maxRetries: 0`
+- [x] Engine: rate version `2026-10-26` with Haiku 5.5's long-prompt card (tested at
+      100,000 and 100,001, cache tokens counted); `labelKcal()` (`energy.ts`) and
+      `labelFoodDraft()` (`label.ts`). **`kcalFromKj` already existed** in `foods.ts` for Open Food Facts
+      and is reused, not duplicated. A per-serving-only label is rescaled to per 100
+      g/ml by the engine; with no gram or ml serving size it becomes one piece
+- [x] Shared: `packages/shared/src/label.ts` (request with a JPEG check, `LabelReading`),
+      optional `source` on `writeFoodSchema`, and a new `upstream-failed` error code.
+      **Deviation from Q3:** energy is two nullable fields, `energyKj` and `energyKcal`,
+      not one `{value, unit}`, so a label printing both gives both and `labelKcal`
+      applies the "printed kcal wins" rule
+- [x] `POST /api/label-reads` (`server/routes/label.ts`, `server/ai/label-reader.ts`):
+      synchronous with the reason in code, 15 s, no retries, `bodyLimit`, the write cap
+      plus 30 reads per user per hour, the request's abort signal passed to the model
+      call. An `ai_usage` row for every answered call, refusals included
+- [x] **Found while building:** the SDK's `zodOutputFormat` helper (1.3.0) moves every
+      `enum` into the description text, so `status` and `basis` would have been free
+      strings. The schema goes through `z.toJSONSchema` and `messages.create` instead,
+      and the answer is parsed with the same zod schema. A test asserts the enums reach
+      the request
+- [x] **Found while building:** the security suite's first `ai_usage` write of a run
+      failed on a dropped Neon connection, twice. The ledger write is now retried with
+      the id minted once before the first attempt, so `ON CONFLICT (id)` makes a replay
+      a no-op (`server/data/ai-usage.ts` says why this is not the case
+      `write-safety.test.ts` guards). If it still fails, the reading is returned anyway
+      and the miss goes to Sentry: the call was paid for, and a 500 would make the user
+      pay again. **Phase 9's gate must read the ledger knowing a row can be missing**
+- [x] Sentry: `tracesSampler` keeps the `label.read` span and drops every other span; a
+      `beforeSendTransaction` scrubs the transaction like an error. The span's only
+      attribute is the outcome
+- [x] `POST /foods` stores `source` when given (`label_scan`), else `manual`
+- [x] `label-camera.tsx` (permission states shared with the scanner as `CameraPanel`);
+      "Read the label" in `create-food.tsx` with reading / failed / not-a-label / filled
+      states, a locked form while reading, Cancel, the thumbnail and full-screen view,
+      a "Not on the photo: …" line for blanks. Photos pass through `@/lib/label-photo`;
+      the capture is deleted once resized, the copy when the form closes, and
+      `expo-image` is told `cachePolicy="none"` so it keeps no copy.
+      `expo-image-manipulator` and `expo-file-system` added with `npx expo install`
+- [x] The scanner's "Add it from the label" opens with `read=1`
+- [x] Security suite: `tests/security/label-isolation.test.ts`, 11 tests. **94 / 94
+      green, 2026-10-26** (was 83). Offline: `tests/label-reader.test.ts` and the engine
+      tests, **726 green across 32 files** (was 677)
+- [x] `server/README.md` route and file tables
+- [x] `npx tsc --noEmit` clean once `.expo/types/router.d.ts` knows `/label-camera`
+      (it regenerates when Metro restarts); `expo export --platform ios` bundles, and
+      the bundle carries no SDK or prompt text
+- [x] **Fixed on this branch, not Phase 8 work:** a ~60pt gap under the clock on the
+      Dashboard, reported by Sriman 2026-10-28. react-native-screens 4.30 (SDK 58) now
+      switches a native tab's first ScrollView to automatic inset adjustment, which
+      stacked on the Dashboard's manual `insets.top`. The Dashboard trigger sets
+      `disableAutomaticContentInsets`; the other tabs wrap their ScrollView in a padded
+      View and were unaffected. **Verified on the iPhone the same day:** top, bottom
+      clearance and tap-the-tab-to-scroll-to-top all right. This also corrects the
+      SDK 58 device note in Phase 0, which did not look at the Dashboard's top edge
+- [x] `/nutrisa-review since main`, 2026-10-28 (the uncommitted tree against `14ef668`),
+      plus `npm run test:security` 94 / 94 and `npm audit`. **Standards** 0 hard,
+      6 judgement: the failure actions sit at the top of the form, out of thumb reach
+      (**Sriman: fine one-handed, kept**); `499 as 400` (now a plain `Response`); a
+      duplicated outcome union (now one `LabelReadOutcome` in the reader); import
+      order; the resize comparison and bounds check accepted as non-arithmetic.
+      **Spec** 14: a broken answer fills nothing, where the spec says partial fields
+      pre-filled (**Sriman: keep the form empty**, one bad field makes the rest
+      suspect; a `partial` answer still fills what it read); the client mapped every
+      502 / 504 app-wide to `upstream-failed` (fallback removed; the route names the code
+      in its body); "Try again" after the hourly cap or a refused photo (now "Type it
+      in", and "Retake" for a refused photo); a `cancelled` outcome and status 499 nobody
+      asked for (kept: they come with Q14's Cancel); seven plan and README inaccuracies,
+      corrected here. **Privacy** 0 high, 2 medium: SDK 1.3.0's OpenTelemetry tracing is
+      on by default and would reach Sentry, with prompt content one env var away, and
+      `ANTHROPIC_LOG=debug` would print the photo (both off in `server/ai/config.ts`,
+      guarded by a test; the transaction now drops its child spans too); a photo
+      survived an app kill (photos now live in their own cache folder, emptied at
+      launch). Low: a capture finishing after Close was still sent (now discarded);
+      a resized copy leaked when `saveAsync` returned no base64 (deleted); React Query
+      kept the photo's base64 for five minutes (`gcTime: 0`); Anthropic needs a POPIA
+      note (added to Phase 11's privacy-notice item)
+- [ ] **Follow-up branch, not this one:** `npm audit` flags `zod` before 4.6.6 (memory
+      exhaustion validating oversized constrained collections) across every route, plus
+      pre-existing Expo CLI and dev-tool advisories. None comes from this branch's new
+      packages
+- [~] Device: a real SA label OFF does not have, read, reviewed, saved; a non-label
+      photo; airplane mode mid-read; the photo deleted afterwards; 44pt targets.
+      **2026-10-28, on the iPhone, against three made-up labels on a monitor**
+      (per 100 g with kJ and kcal; kJ only; per serving only): every field matched,
+      all three saved as `label_scan` with the expected per-100 values, including
+      the engine's 2510 kJ → 600 kcal and the per-bar → per-100 rescale. Not-a-label
+      works. Five reads cost $0.0023 in all. **Still owed: one real packet** (a
+      screen photo is not a label photo), and the photo-deleted check
 
 ---
 
@@ -1755,6 +1929,15 @@ Follow-ups settled in the same session:
 Largest cost risk in the app.
 
 ### Model config
+> ⚠️ **Re-check before the Phase 9 grill (noted 2026-10-26).** The current Sonnet is
+> `claude-sonnet-5-5`, not `claude-sonnet-5`, and on 5.5 `thinking: {type: "disabled"}`
+> is a 400. Sonnet 5 also stayed at $2 / $10; Phase 8's rate version already says so.
+> `server/ai/config.ts` will exist by then (Phase 8).
+> **The ledger can miss spend, and the gate must know it** (Phase 8 review, 2026-10-28):
+> a timed-out or cancelled call has no `usage` and writes no row although the model may
+> have been billed, and a ledger write that fails after its retries is reported to Sentry
+> rather than failing the read. The Console's monthly limit is the backstop.
+
 - [ ] Single server-side config module — model IDs as constants, never inline strings
 - [ ] `claude-sonnet-5`, `thinking: {type: "disabled"}`, `output_config: {effort: "low"}`
       *(both required — Sonnet 5 thinks by default and effort defaults to `high`)*
@@ -1818,7 +2001,10 @@ Largest cost risk in the app.
 
 - [ ] Explicit opt-in consent gate for health data on first sign-up
 - [ ] Consent recorded with a timestamp
-- [ ] Privacy notice covering: what's collected, why, retention, the two rights
+- [ ] Privacy notice covering: what's collected, why, retention, the two rights.
+      **Must name Anthropic** (Phase 8, label reader): it receives the label photo, a fixed
+      prompt and the server's IP; no user id, no phone IP. Confirm its current API
+      retention terms and cover the POPIA s72 cross-border transfer before this ships
 - [ ] **Export** — all data, machine-readable, all tables incl. chat
 - [ ] Export offered at the point of deletion ("download before you delete")
 - [x] Clerk `user.deleted` webhook → Inngest cascade job — `sync-clerk-user-deleted`
@@ -1902,6 +2088,7 @@ Only after v1.0 is in daily use.
 | Progress photos (the *feature*) | A separate feature, still cut. **ImageKit itself is no longer deferred** — it is the decided image-optimisation and delivery layer for any stored, displayed image. What's deferred is the progress-photo feature, not the tool. **Never** used by label OCR. |
 | Water tracking (`water_logs`, `POST /water-logs`, the dashboard counter) | Sriman actually wants to track water. **Cut 2026-08-12.** The empty table is still in Neon and still in the deletion cascade, so re-adding it is UI plus one route — no migration needed. Say the word to drop the table instead. |
 | Device-timezone support | Going international — v2 migration, clear trigger |
+| OFF products with no nutrition facts as an "add from the label" search row (Rice Krispies, `5059319007571`) | Search misses a packet often enough to matter. Deferred in the Phase 8 grill, 2026-10-26: a scan already reaches the label reader through the no-match state |
 | ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
 
 ---
@@ -2017,7 +2204,9 @@ Only after v1.0 is in daily use.
   reading it as one and "fixing" the app. If the screen is to look different, the input has
   to be different.
 - **OFF resolved 2 of 6 pantry items.** Manual entry speed is a product requirement.
-- **Sonnet 5 intro pricing ($2/$10) ends 2026-08-31.** Budget against $3/$15.
+- ~~**Sonnet 5 intro pricing ($2/$10) ends 2026-08-31.** Budget against $3/$15.~~
+  **Resolved 2026-10-26:** $2 / $10 became the standard price and the rise was cancelled
+  (Anthropic's pricing page). Rate version `2026-10-26` carries it.
 - **Sonnet 5's tokenizer runs ~30% heavier** than the previous generation — measure, never
   estimate, and never with `tiktoken` (OpenAI's tokenizer, undercounts Claude badly).
 - **The deletion cascade rots silently** unless every new user-scoped table is added to it.

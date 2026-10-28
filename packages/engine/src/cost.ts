@@ -24,6 +24,19 @@ import { roundTo } from "./round"
 type ModelRate = {
   input: number
   output: number
+  /**
+   * A second rate card for long prompts, where the model has one. Haiku 5.5
+   * charges more once a prompt passes 100,000 tokens, and **prompt length
+   * counts every input token, cache reads and cache writes included**, per
+   * Anthropic's pricing page. Each request is priced on its own: one over the
+   * line pays the long card for everything, cache hits too.
+   */
+  longPrompt?: {
+    /** The largest prompt still on the standard card. */
+    maxStandardTokens: number
+    input: number
+    output: number
+  }
 }
 
 export type RateVersion = keyof typeof RATE_TABLE
@@ -32,7 +45,7 @@ export type RateVersion = keyof typeof RATE_TABLE
  * Model ids are written out in full rather than built from strings, so a typo
  * is a compile error instead of a 404 at runtime.
  */
-export type ModelId = "claude-sonnet-5" | "claude-haiku-4-5"
+export type ModelId = "claude-sonnet-5" | "claude-haiku-4-5" | "claude-haiku-5-5"
 
 /**
  * Cache reads bill at 0.1x the input rate; a cache write at the default
@@ -62,9 +75,29 @@ const RATE_TABLE = {
     "claude-sonnet-5": { input: 3.0, output: 15.0 },
     "claude-haiku-4-5": { input: 1.0, output: 5.0 },
   },
-} satisfies Record<string, Record<ModelId, ModelRate>>
+  /**
+   * Added 2026-10-26 for label OCR (Phase 8), read off the pricing page that day.
+   *
+   * - **Haiku 5.5**, the label reader, on both of its cards.
+   * - **Sonnet 5 drops to $2 / $10.** The intro rate became the standard price
+   *   and the $3 / $15 rise announced for 2026-09-01 was cancelled. The version
+   *   above is left as published: nothing was ever billed against it, but a
+   *   published version is not edited, whatever it says.
+   * - Haiku 4.5 carried over unchanged, so a row priced today for it still
+   *   resolves.
+   */
+  "2026-10-26": {
+    "claude-sonnet-5": { input: 2.0, output: 10.0 },
+    "claude-haiku-4-5": { input: 1.0, output: 5.0 },
+    "claude-haiku-5-5": {
+      input: 0.1,
+      output: 0.5,
+      longPrompt: { maxStandardTokens: 100_000, input: 0.5, output: 2.5 },
+    },
+  },
+} satisfies Record<string, Partial<Record<ModelId, ModelRate>>>
 
-export const CURRENT_RATE_VERSION: RateVersion = "2026-08-12"
+export const CURRENT_RATE_VERSION: RateVersion = "2026-10-26"
 
 /**
  * Token counts as the Anthropic API reports them, named to match the response's
@@ -108,19 +141,25 @@ export function computeUsageCost(
   usage: TokenUsage,
   rateVersion: RateVersion = CURRENT_RATE_VERSION,
 ): UsageCost {
-  const table = RATE_TABLE[rateVersion]
+  const table: Partial<Record<ModelId, ModelRate>> | undefined = RATE_TABLE[rateVersion]
   if (!table) throw new RangeError(`Unknown rate version: ${rateVersion}`)
 
-  const rate = table[model]
-  if (!rate) {
+  const card = table[model]
+  if (!card) {
     throw new RangeError(`No rate for ${model} at version ${rateVersion}`)
   }
+
+  const cacheRead = usage.cacheReadTokens ?? 0
+  const cacheCreation = usage.cacheCreationTokens ?? 0
+  const promptTokens = usage.inputTokens + cacheRead + cacheCreation
+  const rate =
+    card.longPrompt && promptTokens > card.longPrompt.maxStandardTokens ? card.longPrompt : card
 
   const usd =
     (usage.inputTokens * rate.input +
       usage.outputTokens * rate.output +
-      (usage.cacheReadTokens ?? 0) * rate.input * CACHE_READ_MULTIPLIER +
-      (usage.cacheCreationTokens ?? 0) * rate.input * CACHE_WRITE_5M_MULTIPLIER) /
+      cacheRead * rate.input * CACHE_READ_MULTIPLIER +
+      cacheCreation * rate.input * CACHE_WRITE_5M_MULTIPLIER) /
     PER_MILLION
 
   return { costUsd: roundTo(usd, USD_DECIMALS), rateVersion }

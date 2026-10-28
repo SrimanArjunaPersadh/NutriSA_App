@@ -192,6 +192,13 @@ export const writeFoodSchema = z.object({
    * the next scan of the same packet finds it locally.
    */
   barcode: barcodeSchema.nullish(),
+  /**
+   * How the food came in. Absent means `manual`. `label_scan` is a food
+   * entered through the label reader and reviewed on the form, however many
+   * fields were corrected (decided 2026-10-26). Only these two: a client may
+   * never claim a row came from Open Food Facts or the seed.
+   */
+  source: z.enum(["manual", "label_scan"]).optional(),
 })
 
 export type WriteFood = z.infer<typeof writeFoodSchema>

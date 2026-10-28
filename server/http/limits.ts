@@ -142,6 +142,47 @@ export const writeRateLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
 }
 
 /**
+ * The label reader's own cap: per verified user, per hour.
+ *
+ * On top of `writeRateLimit`, not instead of it. A write costs a row; a label
+ * read costs money, so it gets a ceiling sized to a person standing in a shop
+ * reading packets (decided 2026-10-26), and the Anthropic Console's monthly
+ * limit is the backstop behind both. An hour, because the thing being stopped
+ * is a loop or a stuck retry, and a minute window would reset under it.
+ */
+const LABEL_READ_WINDOW_MS = 60 * 60_000
+const LABEL_READS_PER_WINDOW = 30
+
+const labelReadWindows = new Map<string, Window>()
+
+export const labelReadRateLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const now = Date.now()
+  const { userId } = getScope(c)
+  const count = hit(labelReadWindows, userId, LABEL_READ_WINDOW_MS, now)
+
+  if (count > LABEL_READS_PER_WINDOW) {
+    // Transport bookkeeping, as in `writeRateLimit`: seconds for a header.
+    const window = labelReadWindows.get(userId)
+    const elapsed = window ? now - window.startedAt : 0
+    const retryAfter = Math.max(1, Math.ceil((LABEL_READ_WINDOW_MS - elapsed) / 1000))
+
+    console.warn(`Label read limit hit by ${userId}`)
+
+    return c.json(
+      {
+        code: "rate-limited" as const,
+        message: "Too many label reads this hour. Type this one in.",
+      },
+      429,
+      { "Retry-After": String(retryAfter) },
+    )
+  }
+
+  await next()
+  return undefined
+}
+
+/**
  * 256 bits of real entropy, per process, never logged and never persisted.
  *
  * ## Why not `pid` and a timestamp
