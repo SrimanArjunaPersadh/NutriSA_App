@@ -183,6 +183,45 @@ export const labelReadRateLimit: MiddlewareHandler<AppEnv> = async (c, next) => 
 }
 
 /**
+ * The assistant's cap: 60 turns per verified user per hour (plan.md, Phase 9,
+ * Q11). A turn costs money, like a label read, and the hour is long enough
+ * that a stuck retry loop cannot reset under it. The $5 monthly budget and the
+ * Console's limit stand behind it.
+ */
+const CHAT_TURN_WINDOW_MS = 60 * 60_000
+const CHAT_TURNS_PER_WINDOW = 60
+
+const chatTurnWindows = new Map<string, Window>()
+
+export const chatTurnRateLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const now = Date.now()
+  const { userId } = getScope(c)
+  const count = hit(chatTurnWindows, userId, CHAT_TURN_WINDOW_MS, now)
+
+  if (count > CHAT_TURNS_PER_WINDOW) {
+    // Transport bookkeeping, as in `writeRateLimit`: seconds for a header.
+    const window = chatTurnWindows.get(userId)
+    const elapsed = window ? now - window.startedAt : 0
+    const retryAfter = Math.max(1, Math.ceil((CHAT_TURN_WINDOW_MS - elapsed) / 1000))
+
+    // The user id only: the refused request is a chat message.
+    console.warn(`Chat turn limit hit by ${userId}`)
+
+    return c.json(
+      {
+        code: "rate-limited" as const,
+        message: "Too many messages this hour. Try again later.",
+      },
+      429,
+      { "Retry-After": String(retryAfter) },
+    )
+  }
+
+  await next()
+  return undefined
+}
+
+/**
  * 256 bits of real entropy, per process, never logged and never persisted.
  *
  * ## Why not `pid` and a timestamp

@@ -106,10 +106,11 @@ describe("computeUsageCost", () => {
   })
 
   it("prices Sonnet 5 at $2 / $10 from 2026-10-26, the rise having been cancelled", () => {
-    const { costUsd } = computeUsageCost("claude-sonnet-5", {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-    })
+    const { costUsd } = computeUsageCost(
+      "claude-sonnet-5",
+      { inputTokens: 1_000_000, outputTokens: 1_000_000 },
+      "2026-10-26",
+    )
     expect(costUsd).toBe(12)
   })
 
@@ -199,6 +200,73 @@ describe("computeUsageCost — Haiku 5.5's two cards", () => {
       outputTokens: 300,
     })
     expect(costUsd).toBe(0.00033)
+  })
+})
+
+describe("computeUsageCost — Sonnet 5.5, the chat model", () => {
+  it("prices input and output at $2 / $10", () => {
+    const { costUsd } = computeUsageCost("claude-sonnet-5-5", {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+    })
+    expect(costUsd).toBe(12)
+  })
+
+  /**
+   * $0.10 per million, 0.05x the input rate (pricing page, 2026-10-28). The
+   * shared tenth would bill $0.20 and close the budget gate early.
+   */
+  it("bills cache reads at 0.05x its input rate, not the usual tenth", () => {
+    const { costUsd } = computeUsageCost("claude-sonnet-5-5", {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 1_000_000,
+    })
+    expect(costUsd).toBe(0.1)
+  })
+
+  it("still bills cache writes at 1.25x", () => {
+    const { costUsd } = computeUsageCost("claude-sonnet-5-5", {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 1_000_000,
+    })
+    expect(costUsd).toBe(2.5)
+  })
+
+  it("leaves every other model's cache reads at a tenth", () => {
+    const { costUsd } = computeUsageCost("claude-sonnet-5", {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 1_000_000,
+    })
+    expect(costUsd).toBe(0.2)
+  })
+
+  it("prices a typical chat turn at about a cent and a half", () => {
+    // About 2,500 cached tokens of rules and tools, 3,000 fresh, 400 out.
+    const { costUsd } = computeUsageCost("claude-sonnet-5-5", {
+      inputTokens: 3_000,
+      outputTokens: 400,
+      cacheReadTokens: 2_500,
+    })
+    // 3000 × 2 + 400 × 10 + 2500 × 0.1, per million.
+    expect(costUsd).toBe(0.01025)
+  })
+
+  it("has no rate before the version that added it", () => {
+    expect(() =>
+      computeUsageCost("claude-sonnet-5-5", { inputTokens: 1, outputTokens: 1 }, "2026-10-26"),
+    ).toThrow(/No rate for claude-sonnet-5-5/)
+  })
+
+  it("carries every earlier model into 2026-10-28 at its 2026-10-26 price", () => {
+    const usage = { inputTokens: 12_345, outputTokens: 678, cacheReadTokens: 90, cacheCreationTokens: 12 }
+    for (const model of ["claude-sonnet-5", "claude-haiku-4-5", "claude-haiku-5-5"] as const) {
+      expect(computeUsageCost(model, usage, "2026-10-28").costUsd).toBe(
+        computeUsageCost(model, usage, "2026-10-26").costUsd,
+      )
+    }
   })
 })
 

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import type { Profile, WriteProfile } from "@shared"
+import type { AiConsent, Profile, WriteProfile } from "@shared"
 
 import type { UserScope } from "../auth/user-scope"
 import { profiles } from "../db/schema"
@@ -55,4 +55,34 @@ export async function writeProfile(scope: UserScope, input: WriteProfile): Promi
   if (!row) throw new Error("PUT /profile: the upsert returned no row")
 
   return { goalWeightKg: row.goalWeightKg ?? null }
+}
+
+/**
+ * Whether this user agreed to AI features (plan.md, Phase 9, Q15). No profile
+ * row is the ordinary state for a new user, and it reads as no consent.
+ */
+export async function readAiConsent(scope: UserScope): Promise<AiConsent> {
+  const rows = await selectOwned(scope, profiles, { limit: 1 })
+  return { consentedAt: rows[0]?.aiConsentAt?.toISOString() ?? null }
+}
+
+/**
+ * Grant or withdraw AI consent. Granting stamps the moment, an instant rather
+ * than a logging day; withdrawing writes null. The same upsert on `user_id` as `writeProfile`, and
+ * `set` names only this column, so the goal weight is untouched.
+ */
+export async function writeAiConsent(scope: UserScope, granted: boolean): Promise<AiConsent> {
+  const value = granted ? new Date() : null
+  const rows = await upsertOwned(
+    scope,
+    profiles,
+    { id: randomUUID(), aiConsentAt: value },
+    { target: [profiles.userId], set: { aiConsentAt: value } },
+  )
+
+  // Unreachable through a correct conflict target, as in `writeProfile`.
+  const row = rows[0]
+  if (!row) throw new Error("AI consent: the upsert returned no row")
+
+  return { consentedAt: row.aiConsentAt?.toISOString() ?? null }
 }

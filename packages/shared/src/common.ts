@@ -68,10 +68,25 @@ export const apiErrorSchema = z.object({
      * nothing here is broken and the copy should not say so.
      */
     "upstream-failed",
+    /**
+     * An AI route called before the user agreed to AI features, or after they
+     * withdrew (Phase 9, Q15). The client shows the consent screen.
+     */
+    "ai-consent-required",
+    /**
+     * This SAST month's AI allowance is spent (Phase 9, Q8). Not an error in
+     * anything: the designed state says when it resets and that logging works.
+     */
+    "ai-allowance-used",
     /** Anything unhandled. The details went to Sentry, not to the client. */
     "server-error",
   ]),
   message: z.string(),
+  /**
+   * With `ai-allowance-used` only: the SAST day the allowance resets, so the
+   * designed state can say so without a second request (Phase 9, Q8).
+   */
+  resetsOn: logDaySchema.optional(),
 })
 
 export type ApiError = z.infer<typeof apiErrorSchema>

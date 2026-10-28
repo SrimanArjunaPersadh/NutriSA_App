@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 
 import { db, schema } from "../db";
 import {
@@ -136,8 +136,49 @@ export const syncClerkUserDeleted = inngest.createFunction(
   },
 );
 
+/**
+ * Deletes chats nobody has touched for 12 months (plan.md, Phase 9, Q17).
+ *
+ * Chat is health data, and POPIA asks that it is kept no longer than it is
+ * useful. "Untouched" is `updated_at`, which every turn moves forward, so a
+ * conversation still in use is never removed. Messages go with their
+ * conversation through the foreign key. The `ai_usage` ledger is not touched:
+ * it holds no text, and the budget reads it.
+ *
+ * Across every user, so it lives here beside the deletion cascade rather than
+ * in the scoped layer, which only ever acts for one verified user. The cut-off
+ * is the database's own clock: a retention window, not a logging day. Daily at
+ * 03:00 SAST; a missed run catches up on the next.
+ */
+export const deleteStaleChats = inngest.createFunction(
+  {
+    id: "delete-stale-chats",
+    retries: 3,
+    triggers: [{ cron: "TZ=Africa/Johannesburg 0 3 * * *" }],
+  },
+  async ({ step }) => {
+    const deleted = await step.run("delete-stale-chats", deleteStaleChatRows);
+    // A count only: never an id or a title.
+    return { deleted };
+  },
+);
+
+/**
+ * The cleanup's one statement, exported so the security suite can run it
+ * against real Postgres without an Inngest runtime. Returns how many
+ * conversations went.
+ */
+export async function deleteStaleChatRows(): Promise<number> {
+  const rows = await db
+    .delete(schema.chatConversations)
+    .where(lt(schema.chatConversations.updatedAt, sql`now() - interval '12 months'`))
+    .returning({ id: schema.chatConversations.id });
+  return rows.length;
+}
+
 export const functions = [
   syncClerkUserCreated,
   syncClerkUserUpdated,
   syncClerkUserDeleted,
+  deleteStaleChats,
 ];

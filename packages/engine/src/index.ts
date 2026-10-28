@@ -131,6 +131,20 @@ export {
 } from "./label"
 
 export {
+  aiBudgetMonth,
+  aiBudgetRung,
+  belowSafeFloor,
+  servingsQuantity,
+  AI_BUDGET_RUNGS,
+  AI_CHEAPER_RUNG_USD,
+  AI_MONTHLY_BUDGET_USD,
+  COACH_KCAL_FLOOR,
+  type AiAnsweringRung,
+  type AiBudgetMonth,
+  type AiBudgetRung,
+} from "./assistant"
+
+export {
   computeUsageCost,
   sumUsageCosts,
   CURRENT_RATE_VERSION,

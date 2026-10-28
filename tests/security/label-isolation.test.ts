@@ -14,6 +14,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
  * - a call that never answered (timeout) writes no row
  * - a body that is not a JPEG is refused before the model is called
  * - `POST /foods` stores `label_scan` when asked, and refuses `off`
+ * - no AI consent, or a spent month, is refused before the model is called
+ *   (Phase 9, Q8 and Q15)
  *
  * The model is mocked: the suite tests this server's boundaries, and neither a
  * third party's availability nor a real spend should decide whether it passes.
@@ -153,6 +155,14 @@ beforeAll(async () => {
       { clerkId: ids.userB, email: "lb@sectest.invalid" },
     ]),
   )
+  // Phase 9 (Q15): a label read needs AI consent. Both users have given it;
+  // the gate's own tests below take it away.
+  await setup("consent", () =>
+    db.insert(schema.profiles).values([
+      { id: randomUUID(), userId: ids.userA, aiConsentAt: new Date() },
+      { id: randomUUID(), userId: ids.userB, aiConsentAt: new Date() },
+    ]),
+  )
 })
 
 afterAll(async () => {
@@ -189,7 +199,7 @@ describe("a read is billed to whoever is signed in", () => {
       outputTokens: 300,
       // The engine's price: 1800 × $0.10/M + 300 × $0.50/M.
       costUsd: 0.00033,
-      rateVersion: "2026-10-26",
+      rateVersion: "2026-10-28",
     })
 
     expect(await usageRows(ids.userB)).toEqual([])
@@ -211,6 +221,44 @@ describe("a read is billed to whoever is signed in", () => {
     expect(res.status).toBe(504)
     expect(res.body.code).toBe("upstream-failed")
     expect(await usageRows(ids.userB)).toHaveLength(before)
+  })
+})
+
+describe("the AI gate runs before the model (Phase 9)", () => {
+  it("refuses a user without AI consent, and calls nothing", async () => {
+    await setup("withdraw", () =>
+      db.update(schema.profiles).set({ aiConsentAt: null }).where(eq(schema.profiles.userId, ids.userB)),
+    )
+    const before = model.calls
+    const res = await read("token-b")
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe("ai-consent-required")
+    expect(model.calls).toBe(before)
+    await setup("re-consent", () =>
+      db.update(schema.profiles).set({ aiConsentAt: new Date() }).where(eq(schema.profiles.userId, ids.userB)),
+    )
+  })
+
+  it("refuses once this month's $5 is spent, chat and label reads together", async () => {
+    const spent = await setup("spend", () =>
+      db
+        .insert(schema.aiUsage)
+        .values({
+          id: randomUUID(),
+          userId: ids.userB,
+          feature: "chat",
+          model: "claude-sonnet-5-5",
+          costUsd: 5,
+          rateVersion: "2026-10-28",
+        })
+        .returning({ id: schema.aiUsage.id }),
+    )
+    const before = model.calls
+    const res = await read("token-b")
+    expect(res.status).toBe(429)
+    expect(res.body.code).toBe("ai-allowance-used")
+    expect(model.calls).toBe(before)
+    await setup("unspend", () => db.delete(schema.aiUsage).where(eq(schema.aiUsage.id, spent[0]!.id)))
   })
 })
 

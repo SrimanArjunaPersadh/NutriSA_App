@@ -8,6 +8,7 @@ import { env } from "./env";
 import { redactParams } from "./observability/redact";
 import { captureRouteError, initSentry } from "./observability/sentry";
 import { foodRoutes } from "./routes/foods";
+import { chatRoutes } from "./routes/chat";
 import { labelRoutes } from "./routes/label";
 import { reads } from "./routes/reads";
 import { writes } from "./routes/writes";
@@ -138,6 +139,13 @@ app.route("/api", foodRoutes);
 app.route("/api", labelRoutes);
 
 /**
+ * The assistant and its consent and allowance. Before `writes` for the same
+ * reason: reading a chat is not a write, and the routes that change something
+ * carry their own limits. See `routes/chat.ts`.
+ */
+app.route("/api", chatRoutes);
+
+/**
  * The write routes — same path prefix, same session verification, plus a
  * per-user rate limit that the reads do not carry. Two routers rather than one
  * because that limit is the difference between them: a read costs a query, a
@@ -185,6 +193,8 @@ honoServe({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`  Log a meal     POST /api/meal-logs  DELETE /api/meal-logs/:id`);
   console.log(`  Log a weigh-in POST /api/weight-logs`);
   console.log(`  Read a label   POST /api/label-reads`);
+  console.log(`  Chat           POST /api/chat/turns  GET /api/chat/conversations`);
+  console.log(`  AI consent     GET  /api/ai/consent  PUT /api/ai/consent`);
   console.log(`  Clerk webhook  POST /api/webhooks/clerk`);
   console.log(`  Inngest         ALL /api/inngest`);
 });

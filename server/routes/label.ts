@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit"
 import { labelReadRequestSchema, MAX_LABEL_IMAGE_CHARS } from "@shared"
 
 import { LABEL_MODEL } from "../ai/config"
+import { checkAiGate } from "../ai/gate"
 import { readLabel } from "../ai/label-reader"
 import { getScope, requireUser, type AppEnv } from "../auth/user-scope"
 import { recordAiUsage } from "../data/ai-usage"
@@ -19,6 +20,10 @@ import { captureRouteError, traceLabelRead } from "../observability/sentry"
  *
  * Nothing is stored except the `ai_usage` ledger row. The answer is a draft the
  * form fills in for review; it becomes a food only through `POST /foods`.
+ *
+ * Before the model is called, the AI gate (Phase 9, Q8 and Q15): no consent
+ * is a 403 `ai-consent-required`, a spent month a 429 `ai-allowance-used`, and
+ * an unreadable ledger a 503, failing closed. See `ai/gate.ts`.
  *
  * | Outcome                     | Status | Body                             |
  * |-----------------------------|--------|----------------------------------|
@@ -65,6 +70,9 @@ labelRoutes.post(
     }
 
     const scope = getScope(c)
+    const gate = await checkAiGate(scope)
+    if (!gate.ok) return c.json(gate.body, gate.status)
+
     const result = await traceLabelRead(() => readLabel(body.data.image, c.req.raw.signal))
 
     // Every answered call is billed, so every answered call is recorded —

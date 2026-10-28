@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
@@ -13,6 +14,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+// Type-only, so it is erased before drizzle-kit loads this file.
+import type { ChatProposal } from "@shared";
 
 /**
  * Mirror of the Clerk user, kept in sync by the `clerk/user.created` Inngest
@@ -335,6 +339,15 @@ export const profiles = pgTable("profiles", {
    * engine already derives from `weight_logs`.
    */
   goalWeightKg: numeric("goal_weight_kg", { precision: 5, scale: 2, mode: "number" }),
+  /**
+   * When the user agreed to AI features, or null if they have not or withdrew
+   * (plan.md, Phase 9, Q15). Chat and label reads send health data to
+   * Anthropic in the US, which POPIA treats as special personal information
+   * crossing a border: both routes refuse without it. Withdrawing sets it back
+   * to null rather than keeping a history, because only the current answer
+   * gates anything.
+   */
+  aiConsentAt: timestamp("ai_consent_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -354,6 +367,13 @@ export const chatConversations = pgTable("chat_conversations", {
 
 export const chatRole = pgEnum("chat_role", ["user", "assistant"]);
 
+/** See `CHAT_MESSAGE_STATUSES` in `@shared`, which says what each one means. */
+export const chatMessageStatus = pgEnum("chat_message_status", [
+  "complete",
+  "cut_off",
+  "failed",
+]);
+
 export const chatMessages = pgTable(
   "chat_messages",
   {
@@ -370,6 +390,16 @@ export const chatMessages = pgTable(
       .references(() => chatConversations.id, { onDelete: "cascade" }),
     role: chatRole("role").notNull(),
     content: text("content").notNull(),
+    status: chatMessageStatus("status").notNull().default("complete"),
+    /**
+     * The meal card on an assistant message, if it proposed one: the complete
+     * `POST /meal-logs` body plus `dismissed`. Whether it was confirmed is
+     * read from `meal_logs` by the card's minted id, never stored here, so the
+     * two cannot disagree (Q10).
+     */
+    proposal: jsonb("proposal").$type<ChatProposal>(),
+    /** The reply holds a number no lookup returned that turn (Q30). */
+    unsourcedNumbers: boolean("unsourced_numbers").notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [
