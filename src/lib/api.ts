@@ -106,6 +106,7 @@ async function request<T extends z.ZodType>(
   schema: T,
   getToken: () => Promise<string | null>,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<z.infer<T>> {
   if (!BASE_URL) {
     throw new ApiError(
@@ -140,6 +141,7 @@ async function request<T extends z.ZodType>(
         "ngrok-skip-browser-warning": "true",
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(signal ? { signal } : {}),
     })
   } catch (cause) {
     // No response at all: the tunnel is down, the phone is offline, or the dev
@@ -211,8 +213,14 @@ export async function apiPost<T extends z.ZodType>(
   body: unknown,
   schema: T,
   getToken: () => Promise<string | null>,
+  /**
+   * Only the label reader passes one: its Cancel aborts the request, and the
+   * server stops the model call with it. An aborted request rejects as
+   * `network`; the caller that aborted it already knows why and ignores it.
+   */
+  signal?: AbortSignal,
 ): Promise<z.infer<T>> {
-  return request("POST", path, schema, getToken, body)
+  return request("POST", path, schema, getToken, body, signal)
 }
 
 /**
@@ -292,6 +300,9 @@ async function errorCode(response: Response): Promise<ApiErrorCode | "network"> 
   // "something went wrong" without this.
   if (response.status === 409) return "conflict"
   if (response.status === 429) return "rate-limited"
+  // No fallback for 502 / 504. The label reader always names `upstream-failed`
+  // in its body, so a bare 502 is a gateway (ngrok, later Vercel) failing on
+  // some other route, and that is a `server-error` (Spec axis, 2026-10-28).
   return "server-error"
 }
 

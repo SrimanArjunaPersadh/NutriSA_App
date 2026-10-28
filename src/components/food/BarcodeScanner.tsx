@@ -87,7 +87,7 @@ export function BarcodeScanner({
 
   if (!permission.granted) {
     return (
-      <Panel
+      <CameraPanel
         title="Camera access is off"
         detail="NutriSA needs the camera to read the barcode on a packet. Nothing is recorded or kept."
         action={
@@ -137,20 +137,20 @@ export function BarcodeScanner({
         ) : lookup.isError ? (
           <ErrorState error={lookup.error} onRetry={() => void lookup.refetch()} />
         ) : lookup.data.food ? (
-          <Panel
+          <CameraPanel
             title={lookup.data.food.name}
             detail="Found. Choose how much you had."
             action={{ label: "Scan another", onPress: scanAgain }}
           />
         ) : lookup.data.off === "ok" ? (
-          <Panel
+          <CameraPanel
             title="Not in the food database yet"
             detail="Open Food Facts doesn't have this one with full nutrition. Add it from the label once and every scan after this finds it."
             action={{ label: "Add it from the label", onPress: () => create(code) }}
             secondary={{ label: "Scan again", onPress: scanAgain }}
           />
         ) : (
-          <Panel
+          <CameraPanel
             title="Couldn't check this barcode"
             detail={
               lookup.data.off === "rate-limited"
@@ -166,7 +166,12 @@ export function BarcodeScanner({
   )
 }
 
-function Panel({
+/**
+ * A camera state's message and its next step. Exported as `CameraPanel` for
+ * `label-camera.tsx`, so the two cameras ask for permission in the same words
+ * and the same shape.
+ */
+export function CameraPanel({
   title,
   detail,
   action,

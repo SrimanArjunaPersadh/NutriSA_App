@@ -205,7 +205,11 @@ export async function createFood(
     serving: { quantity: input.servingQuantity ?? (perHundred ? 100 : 1), label: null },
   })
 
-  const inserted = await insertOwned(scope, foods, { id: input.id, ...values, source: "manual" })
+  const inserted = await insertOwned(scope, foods, {
+    id: input.id,
+    ...values,
+    source: input.source ?? "manual",
+  })
   if (inserted[0]) {
     const food = foodFromRow(inserted[0])
     if (food) return { ok: true, value: { food, created: true } }

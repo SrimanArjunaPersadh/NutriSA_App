@@ -8,6 +8,7 @@ import {
   deleteResultSchema,
   foodSearchSchema,
   foodWriteResultSchema,
+  labelReadingSchema,
   recentFoodsSchema,
   savedMealSchema,
   savedMealsSchema,
@@ -24,6 +25,7 @@ import {
   type DeleteResult,
   type FoodSearch,
   type FoodWriteResult,
+  type LabelReading,
   type MealPatchResult,
   type MealWriteResult,
   type PatchMeal,
@@ -436,6 +438,28 @@ export function useCreateFood() {
   return useMutation<FoodWriteResult, ApiError, WriteFood>({
     mutationFn: (input) => apiPost("/api/foods", input, foodWriteResultSchema, getToken),
     onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.allFoods(userId) }),
+  })
+}
+
+/**
+ * Read a nutrition label photo (Phase 8). Nothing is written but the server's
+ * cost ledger, so nothing is invalidated; the reading fills the form, and the
+ * food is created by `useCreateFood` once the user has checked it.
+ *
+ * No retry: the server's 15 s is one attempt, and the screen offers "Try
+ * again" with the same photo. `signal` is the screen's Cancel. `gcTime: 0` so
+ * the photo leaves the cache with the form (Privacy axis, 2026-10-28).
+ */
+export function useReadLabel() {
+  const { getToken } = useAuth()
+
+  return useMutation<LabelReading, ApiError, { image: string; signal: AbortSignal }>({
+    mutationFn: ({ image, signal }) =>
+      apiPost("/api/label-reads", { image }, labelReadingSchema, getToken, signal),
+    retry: false,
+    // The mutation's variables are the photo's base64. Without this the cache
+    // keeps that megabyte for five minutes after the form closes.
+    gcTime: 0,
   })
 }
 

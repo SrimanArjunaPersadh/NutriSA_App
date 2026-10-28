@@ -65,6 +65,9 @@ function scrubRequest(request: NonNullable<Sentry.ErrorEvent["request"]>) {
   }
 }
 
+/** The only span name `tracesSampler` keeps. See `traceLabelRead`. */
+const LABEL_READ_SPAN = "label.read"
+
 export function initSentry(): void {
   if (!env.SENTRY_DSN) {
     console.log("Sentry disabled (no SENTRY_DSN).")
@@ -79,11 +82,31 @@ export function initSentry(): void {
     sendDefaultPii: false,
 
     /**
-     * No performance tracing. Spans would carry route parameters and timings
-     * that describe logging behaviour, and nothing in this project is asking
-     * the question tracing answers yet.
+     * One span is traced and nothing else: the label reader's model call
+     * (Phase 8, "log OCR p50/p95 latency and failure rate"). Every other span —
+     * an HTTP request, a query — is dropped here, because route spans carry
+     * parameters and timings that describe logging behaviour and nothing asks
+     * that question.
+     *
+     * The label span is a new root (see `traceLabelRead`), so this sampler sees
+     * it by name rather than inheriting an unsampled request's decision.
      */
-    tracesSampleRate: 0,
+    tracesSampler: ({ name }) => (name === LABEL_READ_SPAN ? 1 : 0),
+
+    /**
+     * A transaction is scrubbed exactly as an error is. It carries the
+     * request the span ran inside, and that request was a photo of a label.
+     */
+    beforeSendTransaction(event) {
+      if (event.request) event.request = scrubRequest(event.request)
+      // Child spans too: the outgoing fetch to the model, anything an
+      // integration hangs under the root. p50 / p95 need the root's duration
+      // and its outcome, and nothing else is promised (Privacy axis, 2026-10-28).
+      event.spans = []
+      delete event.extra
+      delete event.user
+      return event
+    },
 
     /**
      * Console output never becomes a breadcrumb. See the note above — this is
@@ -149,6 +172,32 @@ export function initSentry(): void {
 export function captureRouteError(err: unknown, userId?: string): void {
   if (!Sentry.isInitialized()) return
   Sentry.captureException(err, userId ? { tags: { userId } } : undefined)
+}
+
+/**
+ * Times one label read and records how it ended.
+ *
+ * p50 / p95 come from the span's duration in Sentry's performance view; the
+ * failure rate from `outcome` (the reader's `LabelReadOutcome`, kept there so
+ * the list of outcomes is written once). **Nothing else is attached** — no label value,
+ * no token count (those are in `ai_usage`), no image. Without a DSN this is a
+ * plain call of `run`.
+ *
+ * A new trace and a parentless span, so the sampler decides on this span's own
+ * name instead of inheriting the surrounding request's "drop".
+ */
+export async function traceLabelRead<T extends { outcome: string }>(
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!Sentry.isInitialized()) return run()
+
+  return Sentry.startNewTrace(() =>
+    Sentry.startSpan({ name: LABEL_READ_SPAN, op: "ai.label", parentSpan: null }, async (span) => {
+      const result = await run()
+      span.setAttribute("outcome", result.outcome)
+      return result
+    }),
+  )
 }
 
 export { Sentry }

@@ -49,11 +49,16 @@ import { useDaySummary } from "@/lib/queries"
  * arrangement the comment above warns is easy to break without noticing.
  *
  * The top inset is applied by hand and is exactly `insets.top`, with nothing
- * added. Verified on device: react-native-screens' automatic content inset
- * adjustment does *not* reach this ScrollView, so without the manual inset the
- * header renders at y=0 and the logo sits on top of the status bar clock. Any
- * padding beyond `insets.top` reads as a visible gap under the clock, which is
- * why there is no design gap on top of it.
+ * added. Any padding beyond `insets.top` reads as a visible gap under the
+ * clock, which is why there is no design gap on top of it.
+ *
+ * That only holds while nothing else insets this ScrollView. On SDK 54 and 57
+ * react-native-screens' automatic content inset adjustment did not reach it;
+ * from 4.30 (SDK 58) it does, and on the iPhone the two insets stacked into a
+ * ~60pt gap (2026-10-28). The Dashboard trigger in `(tabs)/_layout.tsx` now sets
+ * `disableAutomaticContentInsets`, so the manual inset is again the only one —
+ * at the top and at the bottom, where `SCROLL_BOTTOM_PADDING` already clears
+ * the tab bar.
  *
  * The bottom padding clears the floating bar so the last card can be scrolled
  * out from under it. Derived from the bar's own exported dimensions rather than

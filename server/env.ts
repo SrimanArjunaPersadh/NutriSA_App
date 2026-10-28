@@ -34,4 +34,12 @@ export const env = {
   // "AppName/Version (contact)". Optional, so a missing value never stops the
   // server — but set it, with a real contact, before this sees real traffic.
   OFF_USER_AGENT: process.env.OFF_USER_AGENT ?? "NutriSA/0.1 (personal project)",
+  /**
+   * Optional at boot, deliberately. Only the label reader (Phase 8) needs it,
+   * and a server that refused to start without it would take every other
+   * route down with it. With no key, `POST /api/label-reads` answers
+   * `upstream-failed` and the form falls back to typing, which is exactly the
+   * failure path the reader already has.
+   */
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
 };

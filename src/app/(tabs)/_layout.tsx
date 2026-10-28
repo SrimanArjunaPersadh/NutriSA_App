@@ -59,7 +59,16 @@ export default function TabsLayout() {
       // and earlier read as "scrolled to the end" and fades the bar out.
       disableTransparentOnScrollEdge
     >
-      <NativeTabs.Trigger name="index">
+      {/*
+        `disableAutomaticContentInsets`: the Dashboard pads its own top by
+        exactly `insets.top` (see `(tabs)/index.tsx`). From react-native-screens
+        4.30 (SDK 58) the tab also switches the screen's first ScrollView to
+        automatic inset adjustment, and the two stacked into a ~60pt gap under
+        the clock on the iPhone, 2026-10-28. The other tabs wrap their
+        ScrollView in a padded View, which the automatic adjustment never
+        reaches, so they need no flag.
+      */}
+      <NativeTabs.Trigger name="index" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Icon
           sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }}
         />
