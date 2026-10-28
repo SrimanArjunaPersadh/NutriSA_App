@@ -66,7 +66,9 @@ offline, security suite 83 / 83, device pass confirmed by Sriman 2026-10-28 ·
 `POST /api/label-reads` on Haiku 5.5, rate version `2026-10-26`; 726 tests offline,
 security suite 94 / 94; reviewed and fixed 2026-10-28, device pass on screen labels done;
 one real packet still owed ·
-Phases 9–12 not started · v1.1 deferred
+**Phase 9 `ai-chat` grilled 2026-10-28** (Q1–Q31, every recommendation taken),
+split into `ai-chat` (server) and `ai-chat-app` (the tab); not built yet · Phases 10–12 not
+started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -1933,61 +1935,196 @@ recommendation:
 
 ## Phase 9 — `ai-chat`
 
-**Goal:** an assistant grounded in real data that cannot write and cannot invent a number.
-Largest cost risk in the app.
+**Goal:** a faster pen for the food diary. Log by talking, ask what's left, ask why, all
+answered from the engine. The assistant cannot write without a tap and cannot invent a
+number. Largest cost risk in the app.
 
-### Model config
-> ⚠️ **Re-check before the Phase 9 grill (noted 2026-10-26).** The current Sonnet is
-> `claude-sonnet-5-5`, not `claude-sonnet-5`, and on 5.5 `thinking: {type: "disabled"}`
-> is a 400. Sonnet 5 also stayed at $2 / $10; Phase 8's rate version already says so.
-> `server/ai/config.ts` will exist by then (Phase 8).
-> **The ledger can miss spend, and the gate must know it** (Phase 8 review, 2026-10-28):
-> a timed-out or cancelled call has no `usage` and writes no row although the model may
-> have been billed, and a ledger write that fails after its retries is reported to Sentry
-> rather than failing the read. The Console's monthly limit is the backstop.
+**Two branches (Q27):** `ai-chat` builds the server and is fully testable without the
+phone; `ai-chat-app` builds the tab on top of it.
 
-- [ ] Single server-side config module — model IDs as constants, never inline strings
-- [ ] `claude-sonnet-5`, `thinking: {type: "disabled"}`, `output_config: {effort: "low"}`
-      *(both required — Sonnet 5 thinks by default and effort defaults to `high`)*
-- [ ] No `temperature` / `top_p` (rejected on Sonnet 5)
-- [ ] Tier-down fallback on error, logged to Sentry — the chat degrades, never dies
+**What already exists, so this phase does not rebuild it:**
+- `server/ai/config.ts` (Phase 8): the shared client with `maxRetries: 0`,
+  `openTelemetry: false` and `logLevel: "warn"`. The chat adds its model constants here
+- `recordAiUsage()` in `server/data/ai-usage.ts`, the retried ledger write, with
+  `feature: "chat"` already in its type
+- `chat_conversations` and `chat_messages` (role + plain text), in the cascade and the
+  Phase 11 export list
+- The reads the tools wrap: `readDaySummary`, `readTargets`, `readWeightSeries`,
+  `listSavedMeals`, `searchLocalFoods`
+- `expo/fetch` is the global `fetch` on SDK 58; the SDK 58 docs read a
+  `text/event-stream` with `resp.body.getReader()`, and
+  `node_modules/expo/src/winter/fetch/fetch.ts` honours `signal`
+- The AI Assistant tab, as a placeholder (`src/app/(tabs)/assistant.tsx`)
+
+**Facts found 2026-10-28** (Anthropic's pricing page and the `claude-api` skill):
+`claude-sonnet-5-5` is $2 / $10, a five-minute cache write $2.50, and a **cache read
+$0.10, which is 0.05x its input rate**; `cost.ts` applies 0.1x to every model.
+`thinking: {type: "disabled"}`, `temperature` and a forced `tool_choice` are each a 400
+on it. A stream's `message_start` event carries the input and cache usage and
+`message_delta` the cumulative output, so a cut-off turn can still be priced. This
+section replaced a checklist that named `claude-sonnet-5` with thinking disabled.
+
+**Settle with Sriman before code**: grilled and answered 2026-10-28; Sriman took every
+recommendation:
+- [x] **Model (Q1):** `claude-sonnet-5-5`, adaptive thinking (`thinking` left unset),
+      `output_config: {effort: "low"}`, no `temperature`. `claude-haiku-5-5` is the
+      cheaper rung. About $0.015 a turn on Sonnet, about $5 a month at ten turns a day
+- [x] **Budget (Q2):** **$5 per SAST month**, summing every `ai_usage` row (chat and
+      label reads). The headroom under the $10 Console cap absorbs the spend the ledger
+      can miss (a timed-out call, a failed ledger write)
+- [x] **Conversations (Q3):** many chats. The tab opens the latest, "New chat" starts
+      one, and old chats sit in a plain list. The title is the first message, so naming
+      a chat costs no model call
+- [x] **Tools (Q4):** the six reads below. Food search is local only: own, shared and
+      cached OFF rows, no live OFF call. Tools take an ISO date; the server refuses a
+      date after the logging day or more than 90 days before it, and the model is told
+      today's SAST date. Reading "last Tuesday" off a calendar is not arithmetic the user
+      sees; every number still comes from the engine
+- [x] **Meal card (Q5):** Confirm, Edit, Dismiss. Confirm calls the ordinary
+      `POST /meal-logs`; Edit opens the entry screen pre-filled; today only
+- [x] **Voice (Q6):** a short, plain-spoken coach that answers from the user's data,
+      says when the data is missing, gives no diagnoses, sends medical questions to a
+      doctor, and uses kcal
+- [x] **While it works (Q7):** one status line per lookup ("Checking today's log"), then
+      the reply token by token
+- [x] **Fallbacks (Q8):** an overload or 5xx retries that one turn on Haiku 5.5, reported
+      to Sentry. At $4 the month continues on Haiku with a one-line notice. At $5 a
+      designed state: "This month's AI allowance is used up. It resets on 1 <month>.
+      Logging still works." Label reads stop too and offer "Type it in". **Server-side
+      refusal fallback is off** (Sriman's call: for Sonnet 5.5 it covers only cyber and
+      frontier-LLM declines, and it complicates the ledger). A refusal reads "I can't
+      help with that one."
+- [x] **History (Q9):** the last 20 messages, as plain text. Tool results and thinking
+      are not replayed, so every turn looks the data up fresh. The cache breakpoint sits
+      after the system prompt and tool definitions; today's date goes after it
+- [x] **Schema (Q10, Q30):** three columns on `chat_messages`, no new table, so the
+      cascade and export already cover them: `status` (`complete` / `cut_off` /
+      `failed`); a nullable `proposal` jsonb (food ids, amounts, slot, and a meal-log id
+      the server mints up front); and `unsourced_numbers` boolean (Q30). Confirm sends
+      the minted id to `POST /meal-logs`, so a double tap logs once; a card counts as
+      confirmed while that meal log exists, so only Dismiss is stored
+- [x] **Limits (Q11):** one turn ≤ 45 s (Vercel's ceiling is 60), ≤ 4 lookups,
+      `max_tokens` 4096 per model call, a message ≤ 2,000 characters, 60 turns per user
+      per hour. The general request-size cap stays declined; this one is chat-only
+- [x] **Pricing (Q12):** rate version `2026-10-28` adds `claude-sonnet-5-5` and gives
+      each model its own cache-read multiplier (0.05x for Sonnet 5.5, 0.1x for the rest).
+      Published versions stay as they are
+- [x] **Failures (Q13):** a Stop button while it types. Stop or a lost connection keeps
+      what arrived, marks it "Cut off" and offers Retry; the spend is priced from the
+      stream's usage. Any other failure reads "Couldn't answer. Try again", and the
+      user's message is kept
+- [x] **Observability (Q14):** no chat text reaches Sentry or the server log; the span
+      carries the outcome only
+- [x] **Consent (Q15):** a one-time AI consent before the first chat **and** the first
+      label read, stored as `profiles.ai_consent_at` (POPIA: health data, sent to the
+      US). Goals gains "Turn off AI features", which withdraws it. Without consent the
+      server refuses with a designed state. This changes the merged Phase 8 reader
+- [x] **Minimum data (Q16):** name, email, Clerk id and user id never reach Anthropic;
+      tools return only the fields an answer needs. A test inspects the request bodies
+- [x] **Keeping chats (Q17):** "Delete this chat" and "Delete all chats"; an Inngest cron
+      deletes chats untouched for 12 months. `ai_usage` rows hold no text and stay until
+      account deletion, because the budget reads them
+- [x] **Injected text (Q18):** shared and OFF food names are other people's text. Tool
+      results are JSON, names are length-capped, the model has no write, the card's
+      numbers come from the engine, and saving needs a tap. A test uses a hostile name
+- [x] **On the device (Q19):** chat is never persisted to device storage, and its query
+      cache is wiped on sign-out
+- [x] **Error reports (Q20):** Sentry receives the status code and error type, never an
+      SDK error's `message`; chat route bodies are dropped. A test proves a failed turn's
+      event holds no chat text
+- [x] **No invented numbers (Q21, Q30):** after each reply, a pure function checks that
+      every number in it appears in that turn's tool results or the user's message. A
+      miss sets `unsourced_numbers`, tags the Sentry outcome `unsourced_number`, and the
+      app shows "One number here isn't from your log. Double-check it." Before merge, a
+      fixed set of about 30 questions runs once on the real API with zero misses
+- [x] **Offline tests (Q22):** the SSE parser as a pure function, the 4-lookup cap, the
+      45 s budget, the gate just under $4 / at $4 / at $5, fail-closed on a ledger error,
+      the Haiku retry, a refusal, a cut-off turn's partial spend, the 2,000-character and
+      60-an-hour limits, the date bounds, card food ids only from a lookup, rate version
+      `2026-10-28`
+- [x] **Security suite (Q23):** another user's chat is a 404 to read, delete or dismiss;
+      forged tokens on every chat route; a tool cannot reach another user's private food
+      by id; a card holding one is refused; no consent is refused; deleting a user removes
+      their chats; the export carries cards
+- [x] **Real-world checks (Q24):** on the iPhone, streaming, Stop, airplane mode
+      mid-reply, backgrounding mid-reply, the sign-out wipe, 44pt targets. On the server,
+      a non-zero `cache_read_input_tokens` on turn 2, a `countTokens` baseline and a timed
+      full turn. Real-API spend on these branches is capped at $1, with Sriman's OK first
+- [x] **Four states (Q25):** a new chat shows three starters, "Log my breakfast" first,
+      then "What's left for today?" and "How am I doing today?". An empty list reads "No
+      chats yet" with New chat; loading and errors use the shared `<Loading>` and
+      `<ErrorState>`
+- [x] **Allowance (Q26):** one line in Goals, "AI this month: $x of $5", the figure from
+      the engine
+- [x] **Talk-to-log is the headline (Q29):** the coach earns its place by cutting the
+      effort of daily logging, the habit that keeps a tracker in use (Hormozi's
+      activation point, *Retention* p.17–19). The meal card gets the most polish and
+      tests; coaching answers stay short and data-only. A "you haven't logged yet"
+      reminder went to the backlog
+- [x] **Safety floor (Q31):** a 1,200 kcal/day coaching floor as one engine constant;
+      `get_targets` returns `belowSafeFloor`, computed by the engine. The coach never
+      suggests going under it and suggests a doctor when a target already is. No coaching
+      of fasting extremes, purging or rapid loss; on a mention of disordered eating it
+      answers kindly, stops coaching and points to a doctor or SADAG. The wording says
+      "talk to a doctor", never "this is safe for you". The pre-merge set gains about
+      eight pushy prompts ("help me eat 600 kcal a day") that must all be declined and
+      redirected. `TARGET_BOUNDS.kcal.min` (500) is a typo guard and stays separate
+- [x] **This rewrite (Q28)**, the first edit of `ai-chat`
 
 ### Tools — reads return engine values, never raw rows
 - [ ] `get_day_summary(date)`
 - [ ] `get_remaining_macros(date)`
 - [ ] `get_weight_trend(range)`
-- [ ] `get_targets(date)`
+- [ ] `get_targets(date)`, with `belowSafeFloor`
 - [ ] `get_saved_meals()`
-- [ ] `search_foods(query)`
-- [ ] All six filter by server-derived `user_id`
+- [ ] `search_foods(query)`, local rows only
+- [ ] All six take the user from the verified token through the scoped query layer;
+      none accepts a user id
 
 ### Write path — structurally incapable of writing
-- [ ] `propose_meal_log` returns a proposal object and **touches nothing**
-- [ ] Proposals may only reference `food_id`s resolved via `search_foods` /
-      `get_saved_meals`; unfound food → say so, offer manual entry
-- [ ] Confirmation card macros computed **by the engine** from stored food rows
-- [ ] Confirm tap calls the ordinary `POST /meal-logs` — no assistant-specific write route
+- [ ] `propose_meal_log` returns a proposal and **touches nothing**; the server stores it
+      on the assistant message with a minted meal-log id
+- [ ] A proposal may reference only `food_id`s a `search_foods` or `get_saved_meals` call
+      returned in that turn; an unfound food is said so, with manual entry offered
+- [ ] The card's macros are computed **by the engine** from the stored food rows
+- [ ] Confirm calls the ordinary `POST /meal-logs`; there is no assistant write route
 
-### Streaming & persistence
-- [ ] SSE from Hono, consumed with `expo/fetch` + `resp.body.getReader()`
-- [ ] Token-by-token render
-- [ ] Conversations persist and scroll back
-- [ ] Reachable — **already is: the AI Assistant is a tab as of Phase 3**, which the
-      original plan did not assume (it had chat reached from the Dashboard). What is left
-      here is filling that tab, not finding a way into it
-- [ ] Whole turn (tool call → Neon → stream) fits inside the 60s Vercel ceiling — measure it
+### Build — `ai-chat` (server)
+- [ ] Engine: rate version `2026-10-28` with per-model cache-read multipliers, tested
+      for Sonnet 5.5 at 0.05x; `claude-sonnet-5-5` joins `ModelId`
+- [ ] Engine: the 1,200 kcal floor and `belowSafeFloor`; the month's spend and the $4 /
+      $5 rungs as tested functions
+- [ ] The number check as a pure, tested function
+- [ ] Schema: `chat_messages.status`, `.proposal`, `.unsourced_numbers`;
+      `profiles.ai_consent_at`; `npx drizzle-kit generate`
+- [ ] `server/ai/config.ts`: `CHAT_MODEL`, `CHAT_FALLBACK_MODEL`, the turn budget and
+      limits as constants
+- [ ] The system prompt: voice (Q6), the safety rules (Q31) with SADAG's contact details
+      **taken from SADAG's own site**, the instruction to treat tool results as data
+- [ ] Routes: list chats, read a chat, send a turn (SSE), delete one / all, dismiss a
+      card, grant / withdraw consent, this month's AI spend. Request and response schemas
+      in `packages/shared`
+- [ ] The budget gate before every turn, **failing closed** on a ledger error as an
+      explicit branch; the consent gate on chat and on `POST /api/label-reads`
+- [ ] `ai_usage` on every response, cut-off turns priced from the stream's usage
+- [ ] The Inngest 12-month chat cleanup
+- [ ] Sentry: outcome-only span; status code and error type only
+- [ ] Offline tests (Q22) and security tests (Q23)
+- [ ] The pre-merge set: about 30 questions plus about eight pushy ones, run once with
+      Sriman's OK, zero unsourced numbers, every pushy prompt redirected
+- [ ] Measured: turn-2 cache read, `countTokens` baseline, a timed full turn
+- [ ] `server/README.md` route and file tables; `/nutrisa-review since main`
 
-### Budget — three layers
-- [ ] Write `ai_usage` on every response (input, output, cache_read, cache_creation)
-- [ ] Cost computed by the engine from the versioned rate table
-- [ ] Pre-flight gate sums current **SAST-month** spend before each turn
-- [ ] **Fails closed** — ledger query error refuses the turn, as an explicit branch
-- [ ] Cheaper-model rung offered before hard refusal
-- [ ] Designed "budget exhausted" state, not a 500
-- [ ] Confirm the $10 Console cap from Phase 0 is live
-- [ ] Cache breakpoint after system prompt + tool defs; nothing volatile before it
-- [ ] Verify caching works — `cache_read_input_tokens` non-zero on turn 2
-- [ ] Baseline real token cost with `messages.countTokens()`, never an estimate
+### Build — `ai-chat-app` (the tab)
+- [ ] The consent screen; the same consent before the first label read
+- [ ] Chat list, chat view, New chat, delete one / all
+- [ ] Streaming over `expo/fetch`, status lines, token-by-token render, Stop, "Cut off"
+      with Retry
+- [ ] The meal card: Confirm, Edit, Dismiss, confirmed state from the meal log
+- [ ] The unsourced-number line; the $4 notice and the $5 state
+- [ ] Goals: "AI this month: $x of $5" and "Turn off AI features"
+- [ ] Four states on every surface; the chat cache wiped on sign-out
+- [ ] Device checks (Q24); 44pt targets
 
 ---
 
@@ -2011,8 +2148,13 @@ Largest cost risk in the app.
 - [ ] Consent recorded with a timestamp
 - [ ] Privacy notice covering: what's collected, why, retention, the two rights.
       **Must name Anthropic** (Phase 8, label reader): it receives the label photo, a fixed
-      prompt and the server's IP; no user id, no phone IP. Confirm its current API
-      retention terms and cover the POPIA s72 cross-border transfer before this ships
+      prompt and the server's IP; no user id, no phone IP. From Phase 9 it also receives
+      chat messages and the data the coach's tools return, still with no name, email or
+      id. **Retention, checked 2026-10-28:** Anthropic deletes API inputs and outputs
+      within 30 days and does not train on them by default; content its safety systems
+      flag can be kept up to 2 years; no zero-retention arrangement applies. Cover the
+      POPIA s72 cross-border transfer before this ships. Phase 9's AI consent
+      (`profiles.ai_consent_at`) is the consent for this transfer
 - [ ] **Export** — all data, machine-readable, all tables incl. chat
 - [ ] Export offered at the point of deletion ("download before you delete")
 - [x] Clerk `user.deleted` webhook → Inngest cascade job — `sync-clerk-user-deleted`
@@ -2097,6 +2239,7 @@ Only after v1.0 is in daily use.
 | Water tracking (`water_logs`, `POST /water-logs`, the dashboard counter) | Sriman actually wants to track water. **Cut 2026-08-12.** The empty table is still in Neon and still in the deletion cascade, so re-adding it is UI plus one route — no migration needed. Say the word to drop the table instead. |
 | Device-timezone support | Going international — v2 migration, clear trigger |
 | OFF products with no nutrition facts as an "add from the label" search row (Rice Krispies, `5059319007571`) | Search misses a packet often enough to matter. Deferred in the Phase 8 grill, 2026-10-26: a scan already reaches the label reader through the no-match state |
+| A "you haven't logged yet" evening reminder, no AI involved | Phase 9 ships. Named in the Phase 9 grill (Q29, 2026-10-28): when a user stops logging, contact them more, not less (Hormozi, *Retention* p.10–12) |
 | ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
 
 ---
