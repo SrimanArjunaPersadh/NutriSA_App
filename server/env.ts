@@ -1,8 +1,10 @@
 import { config } from "dotenv";
 
 // One env file at the project root — the only location Metro reads for
-// EXPO_PUBLIC_* vars, so client and server share it.
-config({ path: ".env" });
+// EXPO_PUBLIC_* vars, so client and server share it. Not on Vercel: there the
+// project's environment variables are already in process.env, and no `.env`
+// is uploaded (`.vercelignore`).
+if (!process.env.VERCEL) config({ path: ".env" });
 
 function required(name: string): string {
   const value = process.env[name];

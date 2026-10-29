@@ -69,8 +69,12 @@ one real packet still owed ·
 **Phase 9 `ai-chat` grilled 2026-10-28** (Q1–Q31, every recommendation taken),
 split into `ai-chat` (server) and `ai-chat-app` (the tab). **The server half is merged
 (#16, `1b452e0`)** (858 tests offline; the real-API eval passed for $0.16); **the
-tab (`ai-chat-app`) is built and reviewed, uncommitted, not yet passed on the device**
-(949 tests offline) · Phases 10–12 not started · v1.1 deferred
+tab (`ai-chat-app`) is merged (#17, `f1a9880`)**; the device check of its last changes
+(fonts, the working checklist, pinned starters) is still owed (949 tests offline then;
+972 after `vercel-deploy`) ·
+**The API is live on Vercel 2026-10-29 (`vercel-deploy`)**: `https://nutrisa-api.vercel.app`,
+`cle1` beside Neon; the phone, Clerk and Inngest all point at it and the laptop no longer
+has to be on; see Phase 2 · Phases 10–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -577,7 +581,13 @@ against real Postgres by `tests/security/write-isolation.test.ts` (29 tests).
       axis of `/nutrisa-review`, 2026-08-16; the salt is now `randomBytes(32)`
       ⚠️ In-memory, therefore per-instance: honest on today's single dev server,
       and it needs shared state (Upstash, or Neon itself) the day this runs on
-      Vercel. Whatever replaces it should keep the interface
+      Vercel. Whatever replaces it should keep the interface. **That day came
+      2026-10-29 (`vercel-deploy`) and the limiter was not replaced:** under Fluid
+      compute the maps are shared by requests on one instance, not across
+      instances, so every cap (writes, 30 label reads and 60 chat turns an hour)
+      is per instance. The money is still bounded: the AI allowance in
+      `ai/gate.ts` is read from `ai_usage` in Neon on every call, and the
+      Anthropic Console limit stands behind it. Shared state stays a Phase 12 job
 
 **Also landed here, not originally listed:**
 
@@ -609,11 +619,59 @@ against real Postgres by `tests/security/write-isolation.test.ts` (29 tests).
       pattern as `tokens.test.ts`. Asserts behaviour rather than equal
       constants: the widest value a column holds is accepted, the next one up is
       refused. Verified it fires by narrowing `MAX_GRAMS` and watching 4 go red
-- [ ] Scaffold Hono app, deploy to Vercel, confirm it responds — *scaffold exists and
+- [x] Scaffold Hono app, deploy to Vercel, confirm it responds — *scaffold exists and
       responds locally. **Not deployed** — it runs on localhost behind ngrok, which is
       dev-only by design. The Vercel half is untouched.* **Deliberately not on the reads
       branch:** ngrok already reaches the iPhone, so nothing about seeing real numbers on
       the dashboard waits for Vercel
+      **Branch `vercel-deploy`, 2026-10-29: deployed and verified.** Production is
+      `https://nutrisa-api.vercel.app` (project `nutri-sa/nutrisa-api`). Verified: `/health`
+      200, protected routes 401, requests run in `cle1`; Inngest Cloud synced (manual keys,
+      Sriman's call) and an unsigned `/api/inngest` is refused; Clerk's test event on the new
+      endpoint verified and ran the sync job; the ngrok webhook is disabled, not deleted. **On
+      the iPhone (Sriman):** the dashboard loads, a weigh-in saved and deleted, and a chat
+      reply streamed word by word. `EXPO_PUBLIC_API_URL` now points at Vercel, the ngrok one
+      kept as a comment for server work. Deploys: `vercel deploy --prod`, run by Sriman.
+      `vercel link` also connected the GitHub repo, which by Vercel's default means a push
+      builds a deploy (`main` to production, any other branch to a Preview); **no git
+      deploy has happened yet**, and Preview has no env vars, so a Preview build would boot
+      and fail. Research in
+      `docs/research/vercel-hono-deploy.md`. What landed:
+      - `server/app.ts` is the app with no listener; `server/index.ts` is the local
+        listener only. Vercel serves `app.ts`'s default export through the Hono preset
+      - `npm run build:server` bundles it with esbuild into `dist-server/index.mjs`:
+        Vercel's own TypeScript build does not resolve `@engine` / `@shared`, and would
+        emit extensionless ESM into a package with no `"type"`
+      - `vercel.json`: `framework: "hono"` pinned (unset, Vercel would fall to "Other" and
+        serve the repo root as static files), region `cle1` beside Neon `us-east-2`
+      - `.vercelignore` is an **allowlist**: the CLI does not read `.gitignore`, so a
+        denylist would have uploaded `.env`, the `.expo` dev log and `/data/` the moment an
+        entry was forgotten. `tests/vercel-deploy.test.ts` keeps it one
+      - Sentry flushes through `waitUntil` after every capture and traced span: its own
+        Vercel flush runs only on Edge, and a suspended instance can drop a queued event.
+        ⚠️ **Sentry is off in production**: no server DSN exists, so `SENTRY_DSN` is
+        unset on Vercel and this flush has never run there. Errors reach the Vercel log
+        only, redacted by `onError` as before
+      - **The Clerk user is parsed before it leaves for Inngest Cloud**
+        (`clerkUserForSync`). inngest's event schemas only check a payload, they do not
+        strip it, so the webhook was sending the whole Clerk user (phone numbers, linked
+        accounts, metadata) to Inngest's event history, where the POPIA cascade cannot
+        reach. Caught by the Privacy axis of `/nutrisa-review`, 2026-10-29;
+        `tests/clerk-sync-payload.test.ts` holds it. Events sent before the fix (the
+        Clerk test event only) stay in Inngest's history until its retention ends
+      - **Two new processors** for the Phase 11 privacy policy: **Vercel** (hosts the API
+        in `cle1`, US; sees every request in transit, including weights, meals, chat and
+        label photos, plus IPs; keeps request logs of method, path, status and console
+        output) and **Inngest Cloud** (US; sees the parsed Clerk slice: id, emails, names,
+        image URL, and a deleted user's id)
+      - Claude's defaults, **not yet Sriman's call**: the in-memory rate limits stay (see
+        the `api-writes` note above), and no `supportsCancellation`, so a stopped chat
+        turn still finishes and is stored as `routes/chat.ts` intends, bounded by the
+        45 s deadline
+      - Open: whether Vercel's request log keeps the query string. If it does,
+        `GET /foods/search?q=` puts what a user searched for beside their IP in a third
+        party's logs (Sentry already strips it). No production search had run by the
+        review; check one log line after the first
 
 ### Security tests (Neon branch, real Postgres — not mocks)
 
@@ -2005,7 +2063,8 @@ recommendation:
       the server mints up front); and `unsourced_numbers` boolean (Q30). Confirm sends
       the minted id to `POST /meal-logs`, so a double tap logs once; a card counts as
       confirmed while that meal log exists, so only Dismiss is stored
-- [x] **Limits (Q11):** one turn ≤ 45 s (Vercel's ceiling is 60), ≤ 4 lookups,
+- [x] **Limits (Q11):** one turn ≤ 45 s (Vercel's ceiling is 300 on Hobby with Fluid compute, checked
+      2026-10-29; the 60 here was out of date), ≤ 4 lookups,
       `max_tokens` 4096 per model call, a message ≤ 2,000 characters, 60 turns per user
       per hour. The general request-size cap stays declined; this one is chat-only
 - [x] **Pricing (Q12):** rate version `2026-10-28` adds `claude-sonnet-5-5` and gives
@@ -2202,7 +2261,13 @@ pictures and the privacy/tests round and asked for the build):**
   reply answers the same message (the server appends that reply)
 - **A5 Starters:** "Log my breakfast" fills the box with "For breakfast I had " and opens
   the keyboard; the other two send at once
-- **A6 Voice:** no mic of our own; the iOS keyboard's dictation covers it
+- **A6 Voice:** no mic of our own; the iOS keyboard's dictation covers it. **Revisited
+  2026-10-29:** a free, on-device hold-to-talk mic is planned in Phase 12 (it needs the
+  dev client). Until then, a one-line tip under a new chat's starters makes the keyboard
+  dictation findable: **"Prefer to talk? Tap the box, then the mic on your keyboard."**
+  Landed with `vercel-deploy`. **Sriman's call,
+  2026-10-29: keyboard dictation (route 3) now; a recorded voice note through a free cloud
+  tier (route 2, Groq's free Whisper) to be revisited later** (see the backlog)
 - **A7 Turn off AI:** a confirm with "Turn off", "Turn off and delete my chats", Cancel;
   the tab returns to the consent screen
 - **A8 Deletes:** "Delete this chat" in the chat header, "Delete all chats" at the foot
@@ -2434,6 +2499,26 @@ Phases 4–11 and could run straight after Phase 3.
 - [ ] Re-test every camera surface on the dev client (different runtime from Expo Go)
 - [ ] Apple's account-deletion requirement: confirm the Phase 11 delete flow is
       reachable in-app, since App Store review demands it for accounts created in-app
+- [ ] **Hold-to-talk voice input in the AI chat** (Sriman, 2026-10-29: "I want it to be
+      completely free"). A mic button beside the message box; hold, talk, release. The
+      iPhone's own speech recognition turns it into text, **forced on-device** so the
+      audio never leaves the phone and nothing is paid per use. The words land in the box
+      for the user to read and send, never sent unseen, so a misheard "15 eggs" cannot
+      become a card without a look. Needs this phase's dev client: a speech module is a
+      native dependency Expo Go does not carry. Rejected for this build: a cloud speech-to-text service
+      (paid per minute, and a new third party hearing users' voices, which would need a
+      POPIA consent change); Claude cannot take the audio itself (its API takes text and
+      images). The free cloud tier is not rejected outright: it is a backlog row with its
+      own trigger. Verify the module and its on-device flag against the SDK's versioned docs
+      when this is built. Replaces A6 ("no mic of our own") once it ships.
+      **Tested 2026-10-29, Sriman wanting $0 at all (no $99 Apple account either):** the
+      browser's Web Speech API inside a web view in Expo Go fails on the iPhone with
+      `service-not-allowed` ("speech recognition service permission check has failed"),
+      because Expo Go does not declare speech-recognition permission (WebKit bug 239816).
+      So the free on-device route needs this phase's own build, which needs the paid
+      account. The throwaway test screen and `react-native-webview` were removed. What is
+      left at $0 inside Expo Go: the keyboard's dictation (A6), or recording in the app and
+      a free cloud tier (Groq's free Whisper, a new third party hearing the audio)
 
 ---
 
@@ -2466,6 +2551,7 @@ Only after v1.0 is in daily use.
 | Device-timezone support | Going international — v2 migration, clear trigger |
 | OFF products with no nutrition facts as an "add from the label" search row (Rice Krispies, `5059319007571`) | Search misses a packet often enough to matter. Deferred in the Phase 8 grill, 2026-10-26: a scan already reaches the label reader through the no-match state |
 | A "you haven't logged yet" evening reminder, no AI involved | Phase 9 ships. Named in the Phase 9 grill (Q29, 2026-10-28): when a user stops logging, contact them more, not less (Hormozi, *Retention* p.10–12) |
+| Hold-to-talk voice notes through a free cloud speech tier (Groq's free Whisper): record in the app, transcribe on the server, words land in the box | Users ask for voice beyond the keyboard mic, **and** Sriman accepts a new third party hearing voice notes (a consent-screen change) and the risk of the free tier ending. Decided 2026-10-29: keyboard dictation first. The free on-device route needs Phase 12's paid build (tested: Expo Go refuses it) |
 | ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
 
 ---

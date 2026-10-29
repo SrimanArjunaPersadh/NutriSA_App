@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node"
+import { waitUntil } from "@vercel/functions"
 
 import { env } from "../env"
 import { redactParams, scrubErrorEvent, scrubRequest } from "./redact"
@@ -135,6 +136,22 @@ export function initSentry(): void {
 }
 
 /**
+ * Sends what was just captured, or a traced span that just ended, before Vercel
+ * can freeze the instance.
+ *
+ * The SDK sends events in the background, and a Vercel function is suspended
+ * once its response is done: an error reported in the last moments of a
+ * request can sit in the queue until the instance is reused, or be lost with
+ * it. Sentry's own Vercel flush only runs on the Edge runtime, and this is Node
+ * (`docs/research/vercel-hono-deploy.md`, Q6). `waitUntil` keeps the instance
+ * alive for the flush; off Vercel it is a no-op and the SDK sends as it always
+ * has.
+ */
+function flushBeforeFreeze(): void {
+  waitUntil(Sentry.flush(2000))
+}
+
+/**
  * Reports an unhandled route error.
  *
  * `userId` is the verified Clerk id and is attached as a tag so failures can be
@@ -145,6 +162,7 @@ export function initSentry(): void {
 export function captureRouteError(err: unknown, userId?: string): void {
   if (!Sentry.isInitialized()) return
   Sentry.captureException(err, userId ? { tags: { userId } } : undefined)
+  flushBeforeFreeze()
 }
 
 /**
@@ -164,13 +182,17 @@ export async function traceLabelRead<T extends { outcome: string }>(
 ): Promise<T> {
   if (!Sentry.isInitialized()) return run()
 
-  return Sentry.startNewTrace(() =>
-    Sentry.startSpan({ name: LABEL_READ_SPAN, op: "ai.label", parentSpan: null }, async (span) => {
-      const result = await run()
-      span.setAttribute("outcome", result.outcome)
-      return result
-    }),
-  )
+  try {
+    return await Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: LABEL_READ_SPAN, op: "ai.label", parentSpan: null }, async (span) => {
+        const result = await run()
+        span.setAttribute("outcome", result.outcome)
+        return result
+      }),
+    )
+  } finally {
+    flushBeforeFreeze()
+  }
 }
 
 /**
@@ -186,13 +208,17 @@ export async function traceChatTurn<T extends { outcome: string }>(
 ): Promise<T> {
   if (!Sentry.isInitialized()) return run()
 
-  return Sentry.startNewTrace(() =>
-    Sentry.startSpan({ name: CHAT_TURN_SPAN, op: "ai.chat", parentSpan: null }, async (span) => {
-      const result = await run()
-      span.setAttribute("outcome", result.outcome)
-      return result
-    }),
-  )
+  try {
+    return await Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: CHAT_TURN_SPAN, op: "ai.chat", parentSpan: null }, async (span) => {
+        const result = await run()
+        span.setAttribute("outcome", result.outcome)
+        return result
+      }),
+    )
+  } finally {
+    flushBeforeFreeze()
+  }
 }
 
 /**
@@ -203,6 +229,7 @@ export async function traceChatTurn<T extends { outcome: string }>(
 export function captureChatFallback(): void {
   if (!Sentry.isInitialized()) return
   Sentry.captureMessage("Chat model unavailable; the turn fell back to the cheaper model", "warning")
+  flushBeforeFreeze()
 }
 
 export { Sentry }

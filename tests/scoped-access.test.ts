@@ -122,7 +122,7 @@ describe("no route takes user_id from the client", () => {
     // The webhook's payload legitimately carries a Clerk user id: it is the
     // event's subject, verified by Svix signature, and it is what the mirror
     // row is keyed on. It is not a session, and it scopes nothing.
-    if (name === "server/index.ts" || name.startsWith("server/inngest/")) return
+    if (name === "server/app.ts" || name.startsWith("server/inngest/")) return
 
     const source = withoutComments(readFileSync(file, "utf8"))
     const offences = SUSPECT.filter((pattern) => pattern.test(source)).map(String)

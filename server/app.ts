@@ -1,0 +1,197 @@
+/**
+ * The API, with no listener. Two things run it:
+ *
+ * - `index.ts`, locally (`npm run server`), which binds a port around it.
+ * - Vercel, through `npm run build:server`: esbuild bundles this file into
+ *   `dist-server/index.mjs` (resolving `@engine` / `@shared`, which Vercel's
+ *   own TypeScript build does not) and the Hono preset serves its default
+ *   export. See `docs/research/vercel-hono-deploy.md`.
+ *
+ * Nothing here may call `serve()`. Inside a function it would bind a port that
+ * nothing reaches, on every cold start.
+ */
+import { Hono } from "hono";
+import { serve as inngestServe } from "inngest/hono";
+import { verifyWebhook } from "@clerk/backend/webhooks";
+
+import type { AppEnv, UserScope } from "./auth/user-scope";
+import { redactParams } from "./observability/redact";
+import { captureRouteError, initSentry } from "./observability/sentry";
+import { foodRoutes } from "./routes/foods";
+import { chatRoutes } from "./routes/chat";
+import { labelRoutes } from "./routes/label";
+import { reads } from "./routes/reads";
+import { writes } from "./routes/writes";
+import {
+  clerkUserCreated,
+  clerkUserDeleted,
+  clerkUserForSync,
+  clerkUserUpdated,
+  inngest,
+} from "./inngest/client";
+import { functions } from "./inngest/functions";
+
+/**
+ * First statement in the module body, which is as early as this can run.
+ *
+ * It is deliberately **not** "before the other imports" — ESM hoists every
+ * import above the first statement regardless of where the call is written, so
+ * moving this line up between the imports would look earlier and change
+ * nothing. Sentry's guidance about initialising first is about OpenTelemetry
+ * auto-instrumentation patching modules as they load, which this server does
+ * not use: the one traced span is the label reader's, started by hand
+ * (`traceLabelRead`), and everything else is `captureException`. If
+ * tracing is ever turned on, this has to move to a separate entry module
+ * preloaded with `node --import`, not merely higher up this file.
+ */
+initSentry();
+
+/**
+ * Typed with `AppEnv` so `onError` can reach the request's `UserScope`. Only
+ * the routes behind `requireUser` ever have one — Hono's types say the variable
+ * is always present, which is true of those routes and not of this app as a
+ * whole, so the handler below treats it as optional on purpose.
+ */
+const app = new Hono<AppEnv>();
+
+app.get("/health", (c) => c.json({ ok: true }));
+
+// Landing route. Without this, clicking the URL in the boot log 404s, which
+// reads as "the server is broken" when it is actually fine.
+app.get("/", (c) =>
+  c.json({
+    service: "nutrisa-api",
+    routes: [
+      "GET /health",
+      "GET /api/day/:date",
+      "GET /api/weight-logs",
+      "GET /api/targets",
+      "POST /api/meal-logs",
+      "DELETE /api/meal-logs/:id",
+      "POST /api/weight-logs",
+      "POST /api/targets",
+      "POST /api/label-reads",
+      "POST /api/webhooks/clerk",
+      "GET|POST|PUT /api/inngest",
+    ],
+  }),
+);
+
+/**
+ * Clerk webhook receiver. Its only job is to verify the signature and enqueue —
+ * the database write happens in the Inngest function so a slow or failing write
+ * can never make Clerk's delivery time out.
+ *
+ * Public by design: authentication here is the Svix signature, not a session.
+ */
+app.post("/api/webhooks/clerk", async (c) => {
+  let evt;
+  try {
+    evt = await verifyWebhook(c.req.raw);
+  } catch (err) {
+    console.error("Clerk webhook verification failed:", err);
+    return c.text("Verification failed", 400);
+  }
+
+  // Svix's message id dedupes redeliveries of the same event.
+  const opts = { id: c.req.header("svix-id") };
+
+  switch (evt.type) {
+    case "user.created":
+      await inngest.send(clerkUserCreated.create({ user: clerkUserForSync(evt.data) }, opts));
+      break;
+
+    case "user.updated":
+      await inngest.send(clerkUserUpdated.create({ user: clerkUserForSync(evt.data) }, opts));
+      break;
+
+    case "user.deleted":
+      // The deleted-object stub types `id` as optional. Without one there is
+      // nothing to delete, so drop it rather than fail the delivery and have
+      // Clerk retry a payload that can never succeed.
+      if (evt.data.id) {
+        await inngest.send(
+          clerkUserDeleted.create({ user: { id: evt.data.id } }, opts),
+        );
+      } else {
+        console.warn("Clerk user.deleted arrived with no id; ignoring");
+      }
+      break;
+
+    // Any other subscribed event is verified and acknowledged, never acted on.
+  }
+
+  return c.text("OK", 200);
+});
+
+const inngestHandler = inngestServe({ client: inngest, functions });
+app.on(["GET", "POST", "PUT"], "/api/inngest", (c) => inngestHandler(c));
+
+/**
+ * The dashboard's read routes, every one behind Clerk session verification.
+ * Mounted under /api so the webhook and Inngest handlers keep their paths.
+ */
+app.route("/api", reads);
+
+/**
+ * The food logger — search, recent foods, barcode lookup, create a food.
+ *
+ * **Before `writes`, and it has to be.** `writes` registers its rate limit as
+ * wildcard middleware under `/api`, so anything mounted after it is metered as a
+ * write, and a search fires on every pause in typing. See `routes/foods.ts`.
+ */
+app.route("/api", foodRoutes);
+
+/**
+ * The label reader. Before `writes` for the same reason as the food routes:
+ * it carries its own limits, and the wildcard write limit must not count it
+ * twice. See `routes/label.ts`.
+ */
+app.route("/api", labelRoutes);
+
+/**
+ * The assistant and its consent and allowance. Before `writes` for the same
+ * reason: reading a chat is not a write, and the routes that change something
+ * carry their own limits. See `routes/chat.ts`.
+ */
+app.route("/api", chatRoutes);
+
+/**
+ * The write routes — same path prefix, same session verification, plus a
+ * per-user rate limit that the reads do not carry. Two routers rather than one
+ * because that limit is the difference between them: a read costs a query, a
+ * write costs a row.
+ */
+app.route("/api", writes);
+
+/**
+ * Unhandled errors.
+ *
+ * The client is told nothing beyond "something broke". A Postgres error
+ * message can quote the failing statement with its parameters interpolated,
+ * and the parameters on this API are weights and macros — so the detail goes to
+ * the log and to Sentry (which scrubs it again on the way out), and never into
+ * a response body.
+ *
+ * The user id is read straight off the context rather than through `getScope`:
+ * this handler also runs for requests that never reached the middleware, and it
+ * must not throw a second time while reporting the first failure.
+ */
+app.onError((err, c) => {
+  const scope: UserScope | undefined = c.get("scope");
+  // Redacted before the log as well as before Sentry: a failed query's message
+  // lists its values after `params:`, and on `food-logger` those include a
+  // food search ("%chicken%") and a new food's macros. Privacy axis of
+  // `/nutrisa-review`, 2026-10-20.
+  console.error(
+    `Unhandled error on ${c.req.method} ${c.req.path}:`,
+    redactParams(err instanceof Error ? (err.stack ?? err.message) : String(err)),
+  );
+  captureRouteError(err, scope?.userId);
+  return c.json(
+    { code: "server-error" as const, message: "Something went wrong." },
+    500,
+  );
+});
+
+export default app;

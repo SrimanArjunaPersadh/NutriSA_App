@@ -112,6 +112,14 @@ export function Starters({
               <Text className="font-barlow-medium text-[15px] text-white">{starter.label}</Text>
             </Pressable>
           ))}
+          {/*
+            Voice at $0 (plan.md, A6, Sriman 2026-10-29): Expo Go refuses the
+            phone's speech recogniser to a web view, so the free way to talk is
+            the iOS keyboard's own mic. This line makes it findable.
+          */}
+          <Text className="mt-[6px] font-chat text-[13.5px] text-textSecondary">
+            Prefer to talk? Tap the box, then the mic on your keyboard.
+          </Text>
         </View>
       )}
     </View>

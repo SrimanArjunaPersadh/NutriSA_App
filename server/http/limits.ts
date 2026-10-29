@@ -36,12 +36,14 @@ import { getScope, type AppEnv } from "../auth/user-scope"
  *
  * ## In-memory, and therefore per-instance
  *
- * Both counters live in this process. On today's single dev server behind ngrok
- * that is the whole picture. On Vercel it is not: each serverless instance gets
- * its own copy, so the effective cap becomes the limit times however many
- * instances are warm, and the counts undercount by the same factor. That is a
- * real limitation and it is the reason a proper limiter needs shared state
- * (Upstash or Neon itself) — which is a Phase 12 concern, not a reason to ship
+ * Both counters live in this process. Locally, on one dev server behind ngrok,
+ * that is the whole picture. On Vercel, where this runs since 2026-10-29, it is
+ * not: Fluid compute shares these maps between requests on one instance but not
+ * across instances, so the effective cap becomes the limit times however many
+ * instances are warm, and the counts undercount by the same factor. The money
+ * caps are not left to this: the AI allowance (`ai/gate.ts`) is read from
+ * `ai_usage` in Neon on every model call. A proper limiter needs shared state
+ * (Upstash or Neon itself), which is a Phase 12 concern, not a reason to ship
  * nothing now. Whatever replaces this should keep the interface below.
  */
 

@@ -1,0 +1,23 @@
+# An allowlist, not a denylist: everything at the root is ignored unless named
+# below. `vercel deploy` uploads this folder and does NOT read .gitignore, so a
+# denylist that forgot one entry would upload it. What is at stake if it did:
+#   .env          every secret the server and app use
+#   .expo/        the dev log, which holds the .env values in plain text
+#   /data/        the Supabase export: real weight and meal history (POPIA)
+#   .scratch/     session handoffs
+# Only the inputs to `npm run build:server` travel. A new top-level folder the
+# server needs must be added here, or the build fails loudly; that is the
+# intended failure, not a silent upload.
+/*
+!server
+!packages
+!package.json
+!package-lock.json
+!tsconfig.json
+!vercel.json
+
+# Re-ignored inside the allowed folders, so an env file added under server/ or
+# packages/ later still never uploads. Deliberately NOT `**/data/`: that would
+# also drop server/data/, the scoped query layer (see the /data/ note in
+# .gitignore for the time an unanchored `data` rule did exactly that).
+**/.env*

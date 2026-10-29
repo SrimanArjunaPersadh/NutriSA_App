@@ -65,3 +65,7 @@ example
 research designs/*/app-store/
 research designs/*/contact-sheet.jpg
 research designs/app-store-meta.json
+
+# The Vercel bundle (npm run build:server) and the CLI's project link.
+dist-server/
+.vercel/
