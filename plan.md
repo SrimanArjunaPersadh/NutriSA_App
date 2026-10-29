@@ -2437,8 +2437,9 @@ searched, word order matters, a typo misses.
 
 **Facts checked 2026-10-29:** Neon offers `pg_trgm` 1.6, `unaccent` 1.1 and
 `fuzzystrmatch` on every Postgres version (neon.com/docs/extensions/pg-extensions).
-Drizzle 0.45 writes the index as `index(...).using("gin", table.col.op("gin_trgm_ops"))`.
-Trigram similarity of "way" and "whey" is 0.125 against a default threshold of 0.3, so a
+Drizzle 0.45 writes the index as `index(...).using("gin", table.col.op("gin_trgm_ops"))`
+**for a plain column only**; an expression index puts the operator class inside the `sql`
+(corrected in the build, `docs/research/drizzle-pg-trgm-search.md`). Trigram similarity of "way" and "whey" is 0.125 against a default threshold of 0.3, so a
 sound-alike or a synonym is the model's to match, not the database's. Cronometer ranks
 search by the user's own frequent and recent foods (its staff, on its forum).
 
@@ -2459,23 +2460,70 @@ search by the user's own frequent and recent foods (its staff, on its forum).
 - **Q35:** the coach and the Nutrition search box both get it; OFF's search is unchanged
 - **Q36 Keyboard:** drag the chat down to hide it (`keyboardDismissMode="interactive"`),
   tap the messages to hide it, `keyboardShouldPersistTaps="handled"` so a card's Confirm
-  works on the first tap. Confirm the cause on the iPhone before changing it
+  works on the first tap. Confirm the cause on the iPhone before changing it.
+  **Confirmed 2026-10-29:** both props were already on the thread (#17), and a tap on a
+  message did hide it. Two gaps: a new chat's starters were a plain `View`, nothing to
+  tap or drag (now a `ScrollView` with the same props); and `interactive` only moves once
+  the finger reaches the keyboard's top edge, past the box, so a flick did nothing (now
+  `on-drag`, both views). The keyboard covers the native tab bar, hence "no tabs"
+
+**Build, 2026-10-29.** What the code does, and where it parted from the grill:
+- `packages/engine/src/search.ts`: `searchWords` (filler and amounts dropped, plurals cut to
+  a stem, accents off, at most 6 words), `wordsMatched` (prefix of a name word, or
+  `word_similarity` ≥ 0.6), `rankSearchCandidates` (Q32's order). `server/data/foods.ts`
+  `searchLocalFoods` fetches up to 100 candidates through the index (`LIKE '%word%'` or
+  `word <% name`), then the engine decides and orders; logged lines and rows are ranked
+  together. `mostLoggedFoods` for (c). History is `foodHistory` in `server/food/rows.ts`
+- **Brand:** `foods` has no brand column; a cached OFF product's brand is already in its
+  name (`foodDisplayName`), so the name is searched and "usn" finds it. No new column
+- **Threshold stays 0.6**, the database default. The engine's `wordSimilarity` is
+  `pg_trgm`'s own formula (best run of consecutive trigrams, Jaccard), checked pair by pair
+  against Postgres on the `test` branch. 0.6 catches "sourdogh" (0.67), "brocoli" (0.7);
+  not "chiken" or "yogurt" for yoghurt (both 0.5), and "wey" (0.29) never. Lower would
+  need `pg_trgm.word_similarity_threshold` set for the database: **open, Sriman's call**
+- Migrations `0005_search_extensions` (custom: both extensions and an `IMMUTABLE`
+  `nutrisa_unaccent` wrapper, since `unaccent` is `STABLE`) and `0006_foods_name_trgm`
+  (the GIN index). **Applied to the `test` branch statement by statement, and to the main
+  database with `npm run db:migrate` at Sriman's OK, 2026-10-29** (its log now holds 7)
+- (b) "each query keeps the 2,000-character cap" is built as each query held to the
+  Nutrition box's own cap, `MAX_FOOD_QUERY_CHARS` (100), as before; the strict tool schema
+  takes no `maxItems`, so the server refuses a 4th query
 
 Tests:
-- [ ] **Q44 offline:** the tokenizer ("a scoop of whey protein" → whey, protein; numbers,
+- [x] **Q44 offline:** the tokenizer ("a scoop of whey protein" → whey, protein; numbers,
       units, punctuation, accents; **an all-filler query falls back to recent foods**);
       the engine ranking (words > history > origin > fixed tie-break); 3 queries count as
-      one lookup, a miss returns the top 10, each query keeps the 2,000-character cap
-- [ ] **Q45 real Postgres** (security suite; the `pg_trgm` migration applied to the
-      `test` branch too): ~25 phrases with the expected hit, incl. "a scoop of whey
-      protein", "usn", "hardcor whey", "whey hardcore", "sourdough toast", "2 eggs",
-      "creme fraiche", and one that must find nothing
-- [ ] **Q42:** a fuzzy match never returns another user's private food (the trigram
-      clause goes through `selectVisibleFoods`)
-- [ ] **Q45 eval** (~$0.15, Sriman's OK first): the 16 logging prompts plus "a scoop of
-      whey protein", "my USN shake", "way protein", "hardcor whey", "protein shake",
-      "a scoop of protein" against a faked list holding USN Hardcore Whey; all 6 make the
-      right card
+      one lookup, a miss returns the top 10, each query keeps its cap
+      (`packages/engine/src/search.test.ts`, `tests/chat-turn.test.ts`, `tests/food-rows.test.ts`)
+- [x] **Q45 real Postgres** (`tests/security/food-search.test.ts`): 26 phrases with the
+      expected hit, incl. "a scoop of whey protein", "usn", "hardcor whey", "whey hardcore",
+      "sourdough toast", "2 eggs", "creme fraiche", and "a dragonfruit", which finds nothing
+      ("dragonfruit smoothie" found the peanut butter's "smooth", 0.67, correctly); 12
+      engine-vs-Postgres similarity pairs; history first; all-filler → recent
+- [x] **Q42:** B's fuzzy searches return none of A's foods, and B's typo still finds the
+      shared row. The chat suite's miss hands B only B's own most-logged foods (none)
+- [x] **Q45 eval**, $0.153 all told: the 16 logging prompts plus the 6 whey phrases, **22 of
+      22 cards right**, nothing unsourced, no fallback; "dragonfruit smoothie" made no card.
+      A first run hit an API blip (one timeout, then instant errors on both models) and was
+      re-run. (d) is not needed
+- **Review, `/nutrisa-review since main`, 2026-10-29:** Standards no hard violations;
+  Privacy 0 high, 0 medium, 2 low; Spec three calls for Sriman (below). Fixed in the same
+  session: `like()` in place of raw SQL, the query count from `MAX_SEARCH_QUERIES` in the
+  tool text, the chat suite now seeds a meal of A's so B's empty most-logged list proves
+  isolation, the phrase table checks the top 3 and has two typo-only phrases. Left as
+  judgement calls: `foodHistory`'s count sits in `server/food/rows.ts`, beside the older
+  `atSlot` count, not in the engine; `ORDER BY word_similarity` picks which 100 candidates
+  the engine sees
+- **Answered by Sriman, 2026-10-29:** (1) `on-drag` kept; (2) 100 per query kept; (3) 0.6
+  left as is; (4) yes: the consent now adds "If a search finds nothing, it also sees the
+  foods you log most." (`ConsentPanel.tsx`); (5) skipped
+- **Were open:** (1) Q36 `on-drag` in place of the grill's `interactive`, decided
+  from the iPhone check; (2) Q44's "2,000-character cap" built as the search box's 100 per
+  query; (3) the 0.6 threshold ("chiken", "wey" miss); (4) the miss list sends the 10
+  most-logged foods, with servings, to Anthropic, which the consent's "your foods" covers
+  loosely: say "the foods you log most"? (5) Spec noted 3 of the 6 eval phrases reach the
+  card through the miss list, where the faked whey is ranked first; one more case with it
+  lower would test the choice (~$0.01)
 - [ ] **Q46 iPhone:** the keyboard hides by drag and tap, Confirm on the first tap, tabs
       reachable; "a scoop of whey protein" typed and dictated; the Nutrition box finds
       "whey"

@@ -193,18 +193,13 @@ export function readMealItems(value: unknown): DayMealItem[] {
  * is the engine's `slotOfMeal`, the same rule the day view groups by, so a food
  * shows up as "usual" at exactly the meal the user sees it under.
  *
- * ## `query`: your foods first in search
- *
- * With a query, only names containing it qualify. `searchFoods` puts these
- * ahead of every database hit, which is MyNetDiary's "your foods first"
- * (`research designs/mynetdiary/notes.md`).
+ * Search does not filter this list; it ranks `foodHistory` instead.
  */
 export function recentFoodsFromMeals(
   meals: readonly { name?: string; loggedTime?: string | null; items: unknown }[],
   limit: number,
-  options: { slot?: MealSlot; query?: string } = {},
+  options: { slot?: MealSlot } = {},
 ): Food[] {
-  const needle = options.query?.trim().toLowerCase() ?? ""
   const found = new Map<string, { food: Food; atSlot: number }>()
 
   for (const meal of meals) {
@@ -214,27 +209,12 @@ export function recentFoodsFromMeals(
 
     for (const item of parseMealItems(meal.items)) {
       if (!item.portion) continue
-      const key = item.name.trim().toLowerCase()
-      if (key.length === 0 || (needle.length > 0 && !key.includes(needle))) continue
+      const key = foodKey(item.name)
+      if (key.length === 0) continue
 
       let entry = found.get(key)
       if (!entry) {
-        entry = {
-          food: {
-            id: null,
-            name: item.name.trim(),
-            brand: null,
-            barcode: null,
-            origin: "recent",
-            unit: item.portion.unit,
-            per: toMacros(item.portion.per),
-            serving: { quantity: item.portion.quantity, label: null },
-            // Last time's unit too: a banana logged as 1 banana comes back as one.
-            ...(item.portion.measure ? { measure: item.portion.measure } : {}),
-            imageUrl: null,
-          },
-          atSlot: 0,
-        }
+        entry = { food: recentFood(item.name, item.portion), atSlot: 0 }
         found.set(key, entry)
       }
       // Once per meal: two lines of rice in one dinner is still one dinner.
@@ -250,6 +230,75 @@ export function recentFoodsFromMeals(
   const ranked = [...found.values()]
   if (options.slot !== undefined) ranked.sort((a, b) => b.atSlot - a.atSlot)
   return ranked.slice(0, limit).map((entry) => entry.food)
+}
+
+/** How a user has logged one food, by name: what search ranks by (Q32). */
+export type FoodHistory = {
+  /** The newest line with a portion, as a recent food; null if none had one. */
+  food: Food | null
+  /** Meals that held it. Two lines of rice in one dinner is one. */
+  timesLogged: number
+  /** The newest of those meals' days. */
+  lastLogged: string
+}
+
+/**
+ * Every food in `meals`, keyed by `foodKey`, with how often and how lately it
+ * was logged. `meals` must arrive newest first, as for `recentFoodsFromMeals`,
+ * and already cut to the window that counts (the last 90 days).
+ *
+ * A line without a portion still counts: a migrated "Oats" line is still
+ * evidence the user eats oats, and lifts an "Oats" row in search. It just
+ * cannot be offered itself, having nothing to scale (`food` stays null).
+ */
+export function foodHistory(
+  meals: readonly { date: string; items: unknown }[],
+): Map<string, FoodHistory> {
+  const history = new Map<string, FoodHistory>()
+
+  for (const meal of meals) {
+    const counted = new Set<string>()
+    for (const item of parseMealItems(meal.items)) {
+      const key = foodKey(item.name)
+      if (key.length === 0) continue
+
+      let entry = history.get(key)
+      if (!entry) {
+        entry = { food: null, timesLogged: 0, lastLogged: meal.date }
+        history.set(key, entry)
+      }
+      if (!entry.food && item.portion) entry.food = recentFood(item.name, item.portion)
+      if (!counted.has(key)) {
+        counted.add(key)
+        entry.timesLogged += 1
+      }
+    }
+  }
+
+  return history
+}
+
+/** One name, however it was typed: trimmed and lower-cased. */
+export function foodKey(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+type LinePortion = NonNullable<ReturnType<typeof parseMealItems>[number]["portion"]>
+
+function recentFood(name: string, portion: LinePortion): Food {
+  return {
+    id: null,
+    name: name.trim(),
+    brand: null,
+    barcode: null,
+    origin: "recent",
+    unit: portion.unit,
+    per: toMacros(portion.per),
+    serving: { quantity: portion.quantity, label: null },
+    // Last time's unit too: a banana logged as 1 banana comes back as one.
+    ...(portion.measure ? { measure: portion.measure } : {}),
+    imageUrl: null,
+  }
 }
 
 /**

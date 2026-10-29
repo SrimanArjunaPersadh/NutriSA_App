@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { asc, eq, inArray } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
+import { addDays, currentLoggingDay } from "@engine"
 import { parseSseChunk, type ChatEvent } from "@shared"
 
 /**
@@ -195,6 +196,31 @@ beforeAll(async () => {
     }),
   )
 
+  const granolaLine = {
+    name: `${TAG} secret granola`,
+    qty: "60 g",
+    kcal: 270,
+    pro: 6,
+    carb: 36,
+    fat: 11,
+    portion: { quantity: 60, unit: "g", per: { kcal: 450, pro: 10, carb: 60, fat: 18 } },
+  }
+  // And a meal of A's with it, so A has a most-logged list for B's miss to
+  // leak (food-search, Q33 c). Three days back: inside the 90, not today.
+  await setup("A's meal", () =>
+    db.insert(schema.mealLogs).values({
+      id: randomUUID(),
+      userId: ids.userA,
+      date: addDays(currentLoggingDay(), -3),
+      name: "Breakfast",
+      kcal: 270,
+      pro: 6,
+      carb: 36,
+      fat: 11,
+      items: [granolaLine],
+    }),
+  )
+
   conversationA = uuidv7()
   model.queue = [{ text: "Hello A." }]
   const opened = await sendTurn("token-a", conversationA, "Hi coach")
@@ -307,7 +333,7 @@ describe("one user cannot reach another's chat", () => {
 describe("lookups and cards stay inside the user's own data", () => {
   it("does not find another user's private food, and cannot put it on a card", async () => {
     model.queue = [
-      { toolUses: [{ id: "t1", name: "search_foods", input: { query: `${TAG} secret granola` } }] },
+      { toolUses: [{ id: "t1", name: "search_foods", input: { queries: [`${TAG} secret granola`] } }] },
       {
         toolUses: [
           { id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", count: null, servings: 1, amount: null, unit: null }] } },
@@ -320,7 +346,11 @@ describe("lookups and cards stay inside the user's own data", () => {
     const res = await sendTurn("token-b", conversation, "log my granola")
     expect(res.status).toBe(200)
 
-    expect(toolResultsIn(requestsBefore + 1)).toEqual([{ query: `${TAG} secret granola`, foods: [] }])
+    // A miss also hands over B's most-logged foods (food-search, Q33 c): B's
+    // own, of which there are none, and never A's granola, which A has logged.
+    expect(toolResultsIn(requestsBefore + 1)).toEqual([
+      { results: [{ query: `${TAG} secret granola`, foods: [] }], noMatch: true, mostLogged: [] },
+    ])
     expect(JSON.stringify(toolResultsIn(requestsBefore + 2))).toContain("was not returned by search_foods")
     expect(res.events.some((event) => event.type === "proposal")).toBe(false)
     const reply = (await messagesOf(conversation)).find((row) => row.role === "assistant")
@@ -336,7 +366,7 @@ describe("lookups and cards stay inside the user's own data", () => {
   it("confirms a card through POST /meal-logs, once, and only for its owner", async () => {
     // A's own private food, found by A, proposed, confirmed.
     model.queue = [
-      { toolUses: [{ id: "t1", name: "search_foods", input: { query: `${TAG} secret granola` } }] },
+      { toolUses: [{ id: "t1", name: "search_foods", input: { queries: [`${TAG} secret granola`] } }] },
       {
         toolUses: [
           { id: "t2", name: "propose_meal_log", input: { slot: "Breakfast", items: [{ ref: "f1", count: null, servings: null, amount: 60, unit: "g" }] } },
@@ -366,7 +396,7 @@ describe("lookups and cards stay inside the user's own data", () => {
 
   it("lets only the owner dismiss a card", async () => {
     model.queue = [
-      { toolUses: [{ id: "t1", name: "search_foods", input: { query: `${TAG} secret granola` } }] },
+      { toolUses: [{ id: "t1", name: "search_foods", input: { queries: [`${TAG} secret granola`] } }] },
       {
         toolUses: [
           { id: "t2", name: "propose_meal_log", input: { slot: "Snack", items: [{ ref: "f1", count: null, servings: null, amount: 30, unit: "g" }] } },

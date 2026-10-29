@@ -21,6 +21,8 @@ import {
 } from "@engine"
 import {
   foodDisplayName,
+  foodQuerySchema,
+  MAX_FOOD_QUERY_CHARS,
   writeMealSchema,
   type ChatProposal,
   type ChatToolName,
@@ -32,7 +34,7 @@ import {
 
 import type { UserScope } from "../auth/user-scope"
 import { readDaySummary } from "../data/day"
-import { searchLocalFoods } from "../data/foods"
+import { mostLoggedFoods, searchLocalFoods } from "../data/foods"
 import { listSavedMeals } from "../data/saved-meals"
 import { readWeightSeries } from "../data/weight"
 import { uuidv7 } from "../db/uuidv7"
@@ -77,6 +79,12 @@ export const LOOKBACK_PHRASE = `${LOOKBACK_DAYS} days`
 
 /** Results per search, enough to choose from without filling the context. */
 const SEARCH_RESULTS = 8
+
+/** Searches per `search_foods` call, one lookup against the turn's cap (Q33 b). */
+export const MAX_SEARCH_QUERIES = 3
+
+/** The user's usual foods handed back when a search finds nothing (Q33 c). */
+const MOST_LOGGED_ON_MISS = 10
 
 /** A food or meal name, as the model sees it (Q18). */
 const NAME_CHARS = 80
@@ -158,11 +166,18 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_foods",
     description:
-      "Search the user's foods, recent meal lines and the shared food list. Each result has a reference (f1, f2, ...) that propose_meal_log accepts, a unit, one serving, and its naturalUnit when it is counted in things (a slice of bread, an egg, a glass of milk) with the grams or ml of one.",
+      `Search the user's foods, recent meal lines and the shared food list. Search the food's key word, not the whole phrase: 'whey' for 'a scoop of whey protein', 'eggs' for 'two fried eggs'. Give up to ${MAX_SEARCH_QUERIES} queries in one call, such as the food word, the brand and a broader word ('whey', 'USN', 'protein'); they cost one lookup. If nothing matches, the result also lists the foods the user logs most: use one only when it is clearly what they meant, otherwise search again with the brand or a broader word before saying it was not found. Each result has a reference (f1, f2, ...) that propose_meal_log accepts, a unit, one serving, and its naturalUnit when it is counted in things (a slice of bread, an egg, a glass of milk) with the grams or ml of one.`,
     input_schema: {
       type: "object",
-      properties: { query: { type: "string", description: "A food name, e.g. 'eggs' or 'oats'." } },
-      required: ["query"],
+      properties: {
+        queries: {
+          type: "array",
+          // At most 3, checked by the server: strict tool schemas do not take maxItems.
+          items: { type: "string" },
+          description: `One to ${MAX_SEARCH_QUERIES} searches, e.g. ['whey', 'USN'].`,
+        },
+      },
+      required: ["queries"],
       additionalProperties: false,
     },
     strict: true,
@@ -203,7 +218,7 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
 
 const dateArgs = z.object({ date: z.string() })
 const trendArgs = z.object({ days: z.number().int().positive().max(36_500).nullable() })
-const searchArgs = z.object({ query: z.string().trim().min(1).max(100) })
+const searchArgs = z.object({ queries: z.array(foodQuerySchema).min(1).max(MAX_SEARCH_QUERIES) })
 const proposeArgs = z.object({
   slot: z.enum(MEAL_SLOTS),
   items: z
@@ -253,8 +268,12 @@ export async function runTool(ctx: ToolContext, name: string, input: unknown): P
       return ok(await savedMealsResult(ctx))
     case "search_foods": {
       const args = searchArgs.safeParse(input)
-      if (!args.success) return fail("Expected { query: a food name }.")
-      return ok(await searchResult(ctx, args.data.query))
+      if (!args.success) {
+        return fail(
+          `Expected { queries: 1 to ${MAX_SEARCH_QUERIES} food names, each up to ${MAX_FOOD_QUERY_CHARS} characters }.`,
+        )
+      }
+      return ok(await searchResult(ctx, args.data.queries))
     }
     case "propose_meal_log": {
       const args = proposeArgs.safeParse(input)
@@ -374,24 +393,49 @@ async function savedMealsResult(ctx: ToolContext) {
   }
 }
 
-async function searchResult(ctx: ToolContext, query: string) {
-  const { foods } = await searchLocalFoods(ctx.scope, query)
+/**
+ * Each query searched in turn (Q33 b), every food given a reference. A food
+ * found by two of the queries keeps the reference the first gave it.
+ *
+ * When nothing at all is found, the user's most-logged foods come back too
+ * (Q33 c): "my usual shake" names no food, but the shake is in that list.
+ */
+async function searchResult(ctx: ToolContext, queries: readonly string[]) {
+  const given = new Map<string, string>()
+  const results = []
+  for (const query of queries) {
+    const { foods } = await searchLocalFoods(ctx.scope, query)
+    results.push({ query, foods: foods.slice(0, SEARCH_RESULTS).map((food) => foodResult(ctx, food, given)) })
+  }
+
+  if (results.some((result) => result.foods.length > 0)) return { results }
+
+  const usual = await mostLoggedFoods(ctx.scope, MOST_LOGGED_ON_MISS)
   return {
-    query,
-    foods: foods.slice(0, SEARCH_RESULTS).map((food) => {
-      const ref = `f${countRefs(ctx, "food") + 1}`
-      ctx.refs.set(ref, { kind: "food", food })
-      const unit = unitOf(food)
-      const measure = measureOf(food)
-      return {
-        ref,
-        name: name(foodDisplayName(food.name, food.brand)),
-        unit,
-        serving: { quantity: food.serving.quantity, label: food.serving.label },
-        servingMacros: scalePortion(food.per, food.serving.quantity, unit),
-        naturalUnit: measure ? { name: measure.noun, [unit]: measure.grams } : null,
-      }
-    }),
+    results,
+    noMatch: true,
+    mostLogged: usual.map((food) => foodResult(ctx, food, given)),
+  }
+}
+
+function foodResult(ctx: ToolContext, food: Food, given: Map<string, string>) {
+  const shown = name(foodDisplayName(food.name, food.brand))
+  const key = `${food.origin}:${food.id ?? ""}:${shown.toLowerCase()}`
+  let ref = given.get(key)
+  if (!ref) {
+    ref = `f${countRefs(ctx, "food") + 1}`
+    ctx.refs.set(ref, { kind: "food", food })
+    given.set(key, ref)
+  }
+  const unit = unitOf(food)
+  const measure = measureOf(food)
+  return {
+    ref,
+    name: shown,
+    unit,
+    serving: { quantity: food.serving.quantity, label: food.serving.label },
+    servingMacros: scalePortion(food.per, food.serving.quantity, unit),
+    naturalUnit: measure ? { name: measure.noun, [unit]: measure.grams } : null,
   }
 }
 

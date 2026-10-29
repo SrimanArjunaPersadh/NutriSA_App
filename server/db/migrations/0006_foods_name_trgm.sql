@@ -1,0 +1,1 @@
+CREATE INDEX "foods_name_trgm_idx" ON "foods" USING gin (nutrisa_unaccent(lower("name")) gin_trgm_ops);

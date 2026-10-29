@@ -36,6 +36,20 @@
       "when": 1793150509893,
       "tag": "0004_massive_the_enforcers",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793284150551,
+      "tag": "0005_search_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793284167591,
+      "tag": "0006_foods_name_trgm",
+      "breakpoints": true
     }
   ]
 }

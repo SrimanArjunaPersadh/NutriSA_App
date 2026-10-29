@@ -41,6 +41,10 @@ import { uuidv7 } from "@/lib/uuid"
  * The tab's view runs under the native tab bar, so the box is lifted by the
  * same offset as every pinned bar (`usePinnedBarOffset`), and by the
  * keyboard's height while it is up.
+ *
+ * The keyboard covers the native tab bar, so whatever shows above the box must
+ * be able to hide it: a tap on empty space or any drag down (Q36). Without
+ * that, the only way out of the tab was Chats.
  */
 export function AssistantChat() {
   const router = useRouter()
@@ -134,7 +138,10 @@ export function AssistantChat() {
         className="flex-1"
         contentContainerClassName="px-[16px] pb-[16px]"
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
+        // "on-drag", not "interactive": interactive only starts once the finger
+        // reaches the keyboard's top edge, and the box sits between the two, so
+        // an ordinary flick down did nothing (Q36, iPhone 2026-10-29).
+        keyboardDismissMode="on-drag"
         onScroll={(event) => {
           const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
           atBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 48
@@ -158,11 +165,18 @@ export function AssistantChat() {
   } else if (!fresh && detail.isError) {
     body = <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
   } else {
-    // A new chat, or a stored one with no messages: the starters.
+    // A new chat, or a stored one with no messages: the starters. A scroll view
+    // only so that a tap or a drag on the empty space hides the keyboard, as in
+    // the thread; as a plain View it had nothing to hide it with (Q36).
     body = (
-      <View className="flex-1 px-[16px]">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="flex-grow px-[16px]"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <Starters onSend={send} onFill={fill} paused={rung === "exhausted"} />
-      </View>
+      </ScrollView>
     )
   }
 

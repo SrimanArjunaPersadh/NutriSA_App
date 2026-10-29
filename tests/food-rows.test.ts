@@ -6,6 +6,8 @@ import { foodDisplayName as displayName } from "@shared"
 import {
   foodFromOff,
   foodFromRow,
+  foodHistory,
+  foodKey,
   likePattern,
   readMealItems,
   recentFoodsFromMeals,
@@ -287,12 +289,50 @@ describe("recentFoodsFromMeals", () => {
     })
   })
 
-  it("keeps only names containing the query", () => {
-    const meals = [{ items: [item("Greek yogurt", 170), item("Granola", 40), item("Yogurt, plain", 100)] }]
-    expect(recentFoodsFromMeals(meals, 10, { query: " YOG" }).map((food) => food.name)).toEqual([
-      "Greek yogurt",
-      "Yogurt, plain",
-    ])
+})
+
+describe("foodHistory", () => {
+  const item = (name: string, quantity?: number) => ({
+    name,
+    qty: quantity === undefined ? "1 scoop" : `${quantity} g`,
+    kcal: 1,
+    pro: 1,
+    carb: 1,
+    fat: 1,
+    ...(quantity === undefined
+      ? {}
+      : { portion: { quantity, unit: "g", per: { kcal: 380, pro: 70, carb: 10, fat: 6 } } }),
+  })
+
+  // Newest first, as search reads them.
+  const meals = [
+    { date: "2026-10-28", items: [item("USN Hardcore Whey", 30), item("usn hardcore whey ", 30)] },
+    { date: "2026-10-27", items: [item("USN Hardcore Whey", 45), item("Oats")] },
+    { date: "2026-10-20", items: [item("Oats", 40)] },
+  ]
+
+  it("counts each meal once and keeps the newest day", () => {
+    const whey = foodHistory(meals).get("usn hardcore whey")
+    expect(whey?.timesLogged).toBe(2)
+    expect(whey?.lastLogged).toBe("2026-10-28")
+  })
+
+  it("offers the newest line that has a portion", () => {
+    expect(foodHistory(meals).get("usn hardcore whey")?.food?.serving.quantity).toBe(30)
+    // The 27th's oats had no portion; the 20th's did.
+    const oats = foodHistory(meals).get("oats")
+    expect(oats?.food?.serving.quantity).toBe(40)
+    expect(oats?.timesLogged).toBe(2)
+    expect(oats?.lastLogged).toBe("2026-10-27")
+  })
+
+  it("keeps a food with no portion anywhere, with nothing to offer", () => {
+    const history = foodHistory([{ date: "2026-10-01", items: [item("Migrated toast")] }])
+    expect(history.get("migrated toast")).toEqual({ food: null, timesLogged: 1, lastLogged: "2026-10-01" })
+  })
+
+  it("keys a name however it was typed", () => {
+    expect(foodKey("  USN Hardcore Whey ")).toBe("usn hardcore whey")
   })
 })
 
