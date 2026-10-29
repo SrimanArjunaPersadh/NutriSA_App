@@ -2202,7 +2202,13 @@ pictures and the privacy/tests round and asked for the build):**
   reply answers the same message (the server appends that reply)
 - **A5 Starters:** "Log my breakfast" fills the box with "For breakfast I had " and opens
   the keyboard; the other two send at once
-- **A6 Voice:** no mic of our own; the iOS keyboard's dictation covers it
+- **A6 Voice:** no mic of our own; the iOS keyboard's dictation covers it. **Revisited
+  2026-10-29:** a free, on-device hold-to-talk mic is planned in Phase 12 (it needs the
+  dev client). Until then, a one-line tip under a new chat's starters makes the keyboard
+  dictation findable: **"Prefer to talk? Tap the box, then the mic on your keyboard."**
+  Landed with `vercel-deploy`. **Sriman's call,
+  2026-10-29: keyboard dictation (route 3) now; a recorded voice note through a free cloud
+  tier (route 2, Groq's free Whisper) to be revisited later** (see the backlog)
 - **A7 Turn off AI:** a confirm with "Turn off", "Turn off and delete my chats", Cancel;
   the tab returns to the consent screen
 - **A8 Deletes:** "Delete this chat" in the chat header, "Delete all chats" at the foot
@@ -2434,6 +2440,26 @@ Phases 4–11 and could run straight after Phase 3.
 - [ ] Re-test every camera surface on the dev client (different runtime from Expo Go)
 - [ ] Apple's account-deletion requirement: confirm the Phase 11 delete flow is
       reachable in-app, since App Store review demands it for accounts created in-app
+- [ ] **Hold-to-talk voice input in the AI chat** (Sriman, 2026-10-29: "I want it to be
+      completely free"). A mic button beside the message box; hold, talk, release. The
+      iPhone's own speech recognition turns it into text, **forced on-device** so the
+      audio never leaves the phone and nothing is paid per use. The words land in the box
+      for the user to read and send, never sent unseen, so a misheard "15 eggs" cannot
+      become a card without a look. Needs this phase's dev client: a speech module is a
+      native dependency Expo Go does not carry. Rejected for this build: a cloud speech-to-text service
+      (paid per minute, and a new third party hearing users' voices, which would need a
+      POPIA consent change); Claude cannot take the audio itself (its API takes text and
+      images). The free cloud tier is not rejected outright: it is a backlog row with its
+      own trigger. Verify the module and its on-device flag against the SDK's versioned docs
+      when this is built. Replaces A6 ("no mic of our own") once it ships.
+      **Tested 2026-10-29, Sriman wanting $0 at all (no $99 Apple account either):** the
+      browser's Web Speech API inside a web view in Expo Go fails on the iPhone with
+      `service-not-allowed` ("speech recognition service permission check has failed"),
+      because Expo Go does not declare speech-recognition permission (WebKit bug 239816).
+      So the free on-device route needs this phase's own build, which needs the paid
+      account. The throwaway test screen and `react-native-webview` were removed. What is
+      left at $0 inside Expo Go: the keyboard's dictation (A6), or recording in the app and
+      a free cloud tier (Groq's free Whisper, a new third party hearing the audio)
 
 ---
 
@@ -2466,6 +2492,7 @@ Only after v1.0 is in daily use.
 | Device-timezone support | Going international — v2 migration, clear trigger |
 | OFF products with no nutrition facts as an "add from the label" search row (Rice Krispies, `5059319007571`) | Search misses a packet often enough to matter. Deferred in the Phase 8 grill, 2026-10-26: a scan already reaches the label reader through the no-match state |
 | A "you haven't logged yet" evening reminder, no AI involved | Phase 9 ships. Named in the Phase 9 grill (Q29, 2026-10-28): when a user stops logging, contact them more, not less (Hormozi, *Retention* p.10–12) |
+| Hold-to-talk voice notes through a free cloud speech tier (Groq's free Whisper): record in the app, transcribe on the server, words land in the box | Users ask for voice beyond the keyboard mic, **and** Sriman accepts a new third party hearing voice notes (a consent-screen change) and the risk of the free tier ending. Decided 2026-10-29: keyboard dictation first. The free on-device route needs Phase 12's paid build (tested: Expo Go refuses it) |
 | ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
 
 ---
