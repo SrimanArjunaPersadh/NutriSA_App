@@ -1,6 +1,8 @@
 # server/
 
-Dev-only API. Two unrelated jobs live here.
+The API. Locally it runs behind ngrok (`npm run server`, below); in production
+it is one Vercel function in `cle1`, built by `npm run build:server` (see
+"Deploying" at the end). Two unrelated jobs live here.
 
 **Reads** (branch `api-scope-and-reads`) — the dashboard's data, behind Clerk
 session verification:
@@ -185,10 +187,11 @@ on. A green "Succeeded" in Clerk therefore means *accepted*, not *applied*.
 | `db/retry.ts` | Retries transient `fetch failed` transport errors |
 | `inngest/client.ts` | Inngest client + the three `clerk/user.*` event types (zod) |
 | `inngest/functions.ts` | The three sync jobs, plus the shared `upsertUser` helper |
-| `index.ts` | Hono app: `/`, `/health`, `/api/*`, `/api/webhooks/clerk`, `/api/inngest` |
+| `app.ts` | Hono app: `/`, `/health`, `/api/*`, `/api/webhooks/clerk`, `/api/inngest`. No listener; Vercel serves its default export |
+| `index.ts` | The local listener around `app.ts` (`npm run server`). Never deployed |
 
 `client.ts` declares *what events exist*; `functions.ts` declares *what happens
-when they fire*; `index.ts` is only the HTTP edge. Nothing in `index.ts` touches
+when they fire*; `app.ts` is only the HTTP edge. Nothing in `app.ts` touches
 the database.
 
 ## The isolation rule, and what enforces it
@@ -238,8 +241,9 @@ Three things keep that true as the code grows, and none of them is a code review
 
 ## Notes
 
-- **Dev only.** `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` are deliberately
-  unset, which puts the SDK in dev mode against `127.0.0.1:8288`.
+- **Locally**, `INNGEST_DEV` puts the SDK in dev mode against `127.0.0.1:8288`
+  and the two Inngest keys stay unset. inngest v4 defaults to cloud mode, so it
+  is `INNGEST_DEV`, not the missing keys, that keeps a local run local.
   `GET /api/inngest` reports `"mode":"dev"` and `"function_count":3`.
 - `INNGEST_DEV` is pinned to an explicit `http://127.0.0.1:8288` rather than `1`.
   The bare form resolves `localhost`, which fails to connect on Windows and
@@ -268,3 +272,23 @@ Three things keep that true as the code grows, and none of them is a code review
   Phase 11 POPIA deletion cascade and the data export. Any new user-scoped
   **table** must be deleted in `sync-clerk-user-deleted` in the same branch that
   creates it.
+
+## Deploying
+
+```
+npm run build:server   esbuild server/app.ts -> dist-server/index.mjs
+                       (@engine / @shared inlined; npm packages stay external)
+vercel.json            framework "hono", output dist-server, region cle1
+.vercelignore          allowlist: only server/, packages/ and the package and
+                       ts configs upload. Never .env, .expo/ or /data/
+```
+
+Vercel's own TypeScript build cannot resolve the `@engine` / `@shared` aliases,
+which is why the bundle exists. Full reasoning, with sources:
+`docs/research/vercel-hono-deploy.md`.
+
+Production environment variables: `DATABASE_URL`, `CLERK_SECRET_KEY`,
+`CLERK_WEBHOOK_SIGNING_SECRET` (the **Vercel** endpoint's secret, not ngrok's),
+`ANTHROPIC_API_KEY`, `OFF_USER_AGENT`, `SENTRY_DSN`,
+`SENTRY_ENVIRONMENT=production`, `INNGEST_SIGNING_KEY`, `INNGEST_EVENT_KEY`.
+**Never `INNGEST_DEV`**, and never `INNGEST_STREAMING` (the Hono adapter throws).

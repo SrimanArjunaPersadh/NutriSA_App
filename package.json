@@ -16,6 +16,8 @@
     "@sentry/node": "^10.70.0",
     "@sentry/react-native": "~8.28.0",
     "@tanstack/react-query": "^5.101.4",
+    "@vercel/functions": "^3.10.4",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "expo": "~58.0.19",
     "expo-auth-session": "~58.0.14",
@@ -56,8 +58,8 @@
     "@types/node": "^26.2.0",
     "@types/react": "~19.3.0",
     "babel-preset-expo": "~58.0.0",
-    "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "0.25.12",
     "prettier-plugin-tailwindcss": "^0.5.14",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.11",
@@ -72,6 +74,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "server": "tsx watch server/index.ts",
+    "build:server": "esbuild server/app.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist-server/index.mjs",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -80,5 +83,8 @@
     "migrate:supabase:dry": "tsx scripts/migrate-supabase-to-neon.ts --dry-run",
     "test:security": "vitest run --config vitest.security.config.mts"
   },
-  "private": true
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  }
 }
