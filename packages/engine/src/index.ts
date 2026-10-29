@@ -88,6 +88,19 @@ export {
 export { kcalFromKj, KJ_PER_KCAL, MEAL_SLOTS, mealNameFor, slotOfMeal, type MealSlot } from "./foods"
 
 export {
+  rankSearchCandidates,
+  searchText,
+  searchWords,
+  wordSimilarity,
+  wordsMatched,
+  FUZZY_WORD_THRESHOLD,
+  MAX_SEARCH_WORDS,
+  SEARCH_FILLER_WORDS,
+  type SearchCandidate,
+  type SearchOrigin,
+} from "./search"
+
+export {
   averageDailyIntake,
   type AverageIntake,
   type DayIntake,

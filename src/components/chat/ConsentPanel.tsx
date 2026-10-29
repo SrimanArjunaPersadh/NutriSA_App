@@ -16,7 +16,7 @@ import { saveErrorMessage, type SaveWording } from "@/lib/save-message"
  */
 
 const POINTS = [
-  "Each message goes to Anthropic in the US with today's food log and your targets, so the coach can answer. When it looks up other days, your weight or your foods, those go too. Label photos go there as well.",
+  "Each message goes to Anthropic in the US with today's food log and your targets, so the coach can answer. When it looks up other days, your weight or your foods, those go too. If a search finds nothing, it also sees the foods you log most. Label photos go there as well.",
   "Your name and email are never sent.",
   "Anthropic doesn't train on it and deletes it within 30 days. A message its safety checks flag can be kept for up to 2 years.",
   "Your chats stay in NutriSA until you delete them, or 12 months after you last used one.",

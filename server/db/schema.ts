@@ -237,6 +237,18 @@ export const foods = pgTable(
       .on(sql`coalesce(${table.userId}, '')`, table.barcode)
       .where(sql`${table.barcode} IS NOT NULL`),
     /**
+     * Food search (`food-search`, Q31): trigrams of the name, lower-cased and
+     * without accents, for word-prefix `LIKE` and typo-tolerant `<%`. A query
+     * must repeat this exact expression (`server/data/foods.ts`,
+     * `searchableName`) or the planner will not use it.
+     *
+     * The operator class is inside the `sql`: `.op()` exists only on a plain
+     * column. `nutrisa_unaccent` and both extensions come from the hand-written
+     * migration 0005, which drizzle-kit does not know about
+     * (`docs/research/drizzle-pg-trgm-search.md`).
+     */
+    index("foods_name_trgm_idx").using("gin", sql`nutrisa_unaccent(lower(${table.name})) gin_trgm_ops`),
+    /**
      * Exactly one of per100 / per_unit. A row with both is ambiguous about
      * which one the quantity multiplies, and a row with neither cannot produce
      * a macro at all — either way the engine would have to guess, and it must
