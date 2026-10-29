@@ -72,9 +72,12 @@ split into `ai-chat` (server) and `ai-chat-app` (the tab). **The server half is 
 tab (`ai-chat-app`) is merged (#17, `f1a9880`)**; the device check of its last changes
 (fonts, the working checklist, pinned starters) is still owed (949 tests offline then;
 972 after `vercel-deploy`) ·
-**The API is live on Vercel 2026-10-29 (`vercel-deploy`)**: `https://nutrisa-api.vercel.app`,
-`cle1` beside Neon; the phone, Clerk and Inngest all point at it and the laptop no longer
-has to be on; see Phase 2 · Phases 10–12 not started · v1.1 deferred
+**The API is live on Vercel 2026-10-29 (`vercel-deploy`, merged #18, `a9f3389`)**:
+`https://nutrisa-api.vercel.app`, `cle1` beside Neon; the phone, Clerk and Inngest all
+point at it and the laptop no longer has to be on; see Phase 2 · **Phase 10
+`weekly-report` grilled 2026-10-29** (Q1–Q47, every recommendation taken), no code yet;
+the grill added **`food-search`**, built first (see its section before Phase 10) ·
+Phases 11–12 not started · v1.1 deferred
 
 ### The next three branches — decided 2026-08-14
 
@@ -2419,15 +2422,194 @@ Built 2026-10-28, **not yet seen on the phone**:
 
 ---
 
+## Branch `food-search` — before Phase 10
+
+**Goal:** a search that finds the food you meant, in the coach and in the Nutrition
+search box. Plus the AI tab's keyboard trap.
+
+**Grilled 2026-10-29 inside the Phase 10 grill (Q30–Q36, tests Q42/Q44–Q47); Sriman took
+every recommendation.** Found on the iPhone: a food saved as "USN Hardcore Whey" was not
+found by "a scoop of whey protein" in chat. **Cause:** both halves of `searchLocalFoods`
+match the whole query as one literal substring of the name only:
+`ilike(foods.name, likePattern(query))` (`server/data/foods.ts`) and
+`key.includes(needle)` (`recentFoodsFromMeals`, `server/food/rows.ts`). Brand is not
+searched, word order matters, a typo misses.
+
+**Facts checked 2026-10-29:** Neon offers `pg_trgm` 1.6, `unaccent` 1.1 and
+`fuzzystrmatch` on every Postgres version (neon.com/docs/extensions/pg-extensions).
+Drizzle 0.45 writes the index as `index(...).using("gin", table.col.op("gin_trgm_ops"))`.
+Trigram similarity of "way" and "whey" is 0.125 against a default threshold of 0.3, so a
+sound-alike or a synonym is the model's to match, not the database's. Cronometer ranks
+search by the user's own frequent and recent foods (its staff, on its forum).
+
+- **Q30 Order:** its own branch, built **before** `weekly-report`
+- **Q31 Matching:** the query split into words; filler dropped (a, of, some, my, scoop,
+  cup, slice, g, ml, numbers); a food qualifies when **any** word prefixes a word of its
+  **name or brand** ("hard" finds Hardcore, "usn" the brand); `pg_trgm` for typos
+  ("hardcor", "wey") behind a GIN index; `unaccent`. One function serves both halves
+- **Q32 Ranking:** words matched, then the user's history (times logged in the last 90
+  days, then recency), then own > shared > cached OFF, then name. The score is an engine
+  function: the order is a number the user sees
+- **Q33 The coach:** (a) the tool description says search the key word and retry with
+  the brand or a broader word; (b) `search_foods` takes up to 3 queries, one lookup
+  against the cap of 4; (c) a miss also returns the user's 10 most-logged foods. (d),
+  the top 30 names with every message, is the fallback if the eval still misses
+- **Q34:** no synonym list (the model is the synonym layer); no pgvector (a new embeddings
+  processor, a consent change, for a few hundred rows). Backlog row below
+- **Q35:** the coach and the Nutrition search box both get it; OFF's search is unchanged
+- **Q36 Keyboard:** drag the chat down to hide it (`keyboardDismissMode="interactive"`),
+  tap the messages to hide it, `keyboardShouldPersistTaps="handled"` so a card's Confirm
+  works on the first tap. Confirm the cause on the iPhone before changing it
+
+Tests:
+- [ ] **Q44 offline:** the tokenizer ("a scoop of whey protein" → whey, protein; numbers,
+      units, punctuation, accents; **an all-filler query falls back to recent foods**);
+      the engine ranking (words > history > origin > fixed tie-break); 3 queries count as
+      one lookup, a miss returns the top 10, each query keeps the 2,000-character cap
+- [ ] **Q45 real Postgres** (security suite; the `pg_trgm` migration applied to the
+      `test` branch too): ~25 phrases with the expected hit, incl. "a scoop of whey
+      protein", "usn", "hardcor whey", "whey hardcore", "sourdough toast", "2 eggs",
+      "creme fraiche", and one that must find nothing
+- [ ] **Q42:** a fuzzy match never returns another user's private food (the trigram
+      clause goes through `selectVisibleFoods`)
+- [ ] **Q45 eval** (~$0.15, Sriman's OK first): the 16 logging prompts plus "a scoop of
+      whey protein", "my USN shake", "way protein", "hardcor whey", "protein shake",
+      "a scoop of protein" against a faked list holding USN Hardcore Whey; all 6 make the
+      right card
+- [ ] **Q46 iPhone:** the keyboard hides by drag and tap, Confirm on the first tap, tabs
+      reachable; "a scoop of whey protein" typed and dictated; the Nutrition box finds
+      "whey"
+- [ ] **Q47 gate:** tsc clean, vitest green, security suite green in one run, eval passed,
+      `/nutrisa-review since main`
+
+---
+
 ## Phase 10 — `weekly-report`
 
-- [ ] Inngest cron, weekly, SAST-aware
-- [ ] Engine assembles the full metric pack **before** the model is called
-- [ ] Model narrates precomputed numbers only — no arithmetic
-- [ ] Report persisted and viewable in-app
-- [ ] Handles a sparse week (few logs) without inventing a trend
+**Goal:** a Sunday-evening look back at the week and one thing to focus on next, every
+number from the engine.
+
+**Grilled 2026-10-29 (Q1–Q29, Q37–Q47); Sriman took every recommendation.** Built after
+`food-search`. Designs picked from drawn options:
+https://claude.ai/artifact/Vk49cNwPpj2Se7VL2LZwZp
+
+What it is:
+- **Q1 Job:** a look back and one focus; the focus names only figures in the pack
+- **Q2 Week:** Sunday to Saturday (the week strip's `weekOf` default), made Sunday 18:00
+  SAST, cron `TZ=Africa/Johannesburg 0 18 * * 0`; never includes the logging day
+- **Q3 The pack**, built by the engine before any model call: days logged of 7; average
+  kcal and protein over **days logged**, each against the targets in effect on those
+  days; days on target; trend at week end against the previous week end (trend to trend);
+  weigh-ins that week; the streak on Saturday night; the goal month, only when
+  `projectTrend` gives one; last week's days logged, average kcal and trend change. Carbs
+  and fat averages are shown, not narrated
+- **Q4 On target:** within ±10% of that day's kcal target, one engine constant, logged
+  days only
+- **Q5 Thin weeks:** averages and target comparisons need ≥3 logged days; a weight change
+  needs ≥2 weigh-ins in the week (otherwise the carry-forward invents one); nothing
+  logged and no weigh-in is `empty`, with no model call. The engine sets an `allowed`
+  flag per claim
+- **Q6 Model:** Sonnet 5.5 at effort low, Haiku on overload; counts toward the $5; at $4
+  Haiku; at $5 figures only
+- **Q7 Number check:** `number-check.ts` with the narration slice as the only source; a
+  miss retries once, then figures only; both calls in `ai_usage`
+- **Q8 Frozen:** a report is what was known at Sunday 18:00. Table `weekly_reports`,
+  `UNIQUE (user_id, week_start)`: the pack as computed, the summary, status
+  (`pending` / `ready` / `figures_only` / `empty`), model, `seen`, created_at
+- **Q9 Job:** the cron fans out one event per user with any log or weigh-in ever; a
+  per-user function, retries 3, concurrency-limited; the insert is
+  `ON CONFLICT (user_id, week_start) DO NOTHING`
+- **Q10:** an All weeks list, newest first; no backfill
+- **Q11, Q12:** no push, no "ask the coach about this week" (both backlog rows)
+- **Q13 Voice:** the chat coach's voice and Q31 safety rules; ≤90 words, plain text;
+  went well, slipped, one focus; a part with no data is left out
+
+Design:
+- **Q14:** a **Weekly report** tile, first in the Dashboard's Insights row, always there;
+  a copper "New" dot until opened; opens the latest; "All weeks" in the report's header
+- **Q15:** layout A: the coach's paragraph, "Focus this week" on a `secondary` panel,
+  then "The numbers" as rows with last week's figure under each
+- **Q16 States, as drawn:** a thin row says "Needs 3 logged days" / "Needs 2 weigh-ins";
+  at $5 "No written summary this week. This month's AI allowance is used up. It resets on
+  1 <month>. Your numbers are all here."; a failed check "No written summary this week."
+  with no reason; empty "Nothing logged that week. One meal today starts a new week." and
+  Log a meal; All weeks rows show days logged and trend change, `ok` down, `danger` up;
+  loading and error are the shared components
+- **Q17:** "New" clears when that report is opened
+- **Q18:** Source Serif 4 for the coach's words, Barlow for every number and label
+
+Privacy:
+- **Q19 No consent:** figures only, no model call; "AI features are off, so there's no
+  written summary." with Turn on
+- **Q20 The narration slice** is all the model receives: days logged, averages and
+  targets, the on-target count, the trend **change**, weigh-ins, streak, last week's
+  comparisons, the goal **month**, the `allowed` flags. Never the trend weight, the goal
+  weight, a name, an email, an id or a food name. Numbers, booleans, enums and dates
+  only, so there is no injected text
+- **Q21:** the consent screen gains "Once a week, your week's totals (days logged, average
+  calories and protein, change in trend weight) go to Anthropic to write your weekly
+  summary." No re-ask flow; Sriman is the only consenter. Phase 11's notice gains it
+- **Q22 Inngest sees ids, statuses and counts only.** The event is `{ userId, weekStart }`;
+  step 1 computes the pack and saves a `pending` row, step 2 calls the model, checks and
+  writes. A write that fails after a good model call pays again (~$0.005): accepted, to
+  keep health data out of Inngest's US history, which the cascade cannot reach
+- **Q23:** the job reads through `scopeForJob(clerkId)`; see `docs/adr/0001`
+- **Q24:** "Turn off and delete my chats" becomes "Turn off and delete my chats and
+  summaries": it blanks the summaries and keeps the figures
+- **Q25:** kept until the account is deleted
+- **Q26:** cascading FK, named in `sync-clerk-user-deleted`'s list and in the Phase 11
+  export list, in this branch
+- **Q27 Deleted mid-run:** the FK refuses the insert and the run ends as "user gone"
+  (`NonRetriableError`); an `ai_usage` row lost that way is under a cent
+- **Q28:** every step rethrows fixed text with class and code only (a Postgres CHECK
+  error quotes the row, and Inngest keeps error messages); Sentry gets the outcome; the
+  log gets step names and milliseconds; SDK messages are never forwarded
+- **Q29:** `seen` is a boolean, not a timestamp; never on device storage; the cache is
+  keyed by user and cleared on sign-out
+
+Tests:
+- **Q37:** each step's work is an exported plain function, driven by a fake `step` that
+  memoises and fails on demand; no `@inngest/test`
+- **Q38:** `weekStart` is computed **once**, at fan-out, and carried in the event; a retry
+  at Monday 00:30 reports the same week
+
+Build:
+- [ ] Inngest cron, weekly, SAST-aware (Q2, Q9, Q38)
+- [ ] Engine assembles the full metric pack **before** the model is called (Q3–Q5, Q20)
+- [ ] Model narrates precomputed numbers only — no arithmetic (Q7, Q13)
+- [ ] Report persisted and viewable in-app (Q8, Q14–Q18)
+- [ ] Handles a sparse week (few logs) without inventing a trend (Q5)
 - [ ] Writes to `ai_usage` with `feature='weekly_report'`
-- [ ] Retries and failure handling verified — this is genuine enqueue-only work
+- [ ] Retries and failure handling verified — this is genuine enqueue-only work (Q22,
+      Q27, Q28, Q40)
+- [ ] `scopeForJob` and its import guard (Q23)
+- [ ] Consent line (Q21), the renamed "Turn off" option (Q24), the cascade and export
+      lists (Q26)
+- [ ] **Q39 engine tests:** 2,070 and 2,530 in, 2,069 and 2,531 out; a mid-week target
+      change; unlogged days neither; 2 vs 3 days, 1 vs 2 weigh-ins, empty; the
+      carry-forward trap; a thin or missing last week; no goal month when away, flat or
+      past a year; one real week with −9.0 kg, its figures hand-checked by Sriman
+- [ ] **Q40:** a ledger read failure retries the step, then saves figures only; never a
+      blind model call
+- [ ] **Q41 offline job tests:** the request body holds no name, email, Clerk id, report
+      id, trend weight, goal weight or food name; no step result holds a figure or text;
+      a "Failing row contains" error leaves as fixed text; unsourced → one retry →
+      figures only, both in `ai_usage`; the trend weight in a summary is flagged; no
+      consent, no call; $4 Haiku; $5 no call; overload Haiku; a second run writes
+      nothing; user gone, no retry; a failure's Sentry event holds no figures or text
+- [ ] **Q42 security suite:** `scopeForJob` refuses an unknown id; A's report comes from
+      A's rows while B logs the same days; B reading A's report is a 404 and B cannot set
+      A's `seen`; forged tokens on every report route; deletion removes `weekly_reports`;
+      "delete my chats and summaries" blanks only the caller's; no insert after
+      deletion; only `server/inngest/` imports `scopeForJob`
+- [ ] **Q43 eval** (~$0.10, Sriman's OK first): ~12 made-up weeks; zero unsourced
+      numbers, ≤90 words, no trend weight, no em dash; the 950 and 1,100 kcal weeks are
+      not praised and say "talk to a doctor", read by hand
+- [ ] **Q46:** after the deploy, invoke the function from Inngest Cloud for Sriman's user
+      and the last full week; read it on the iPhone; New clears; the sign-out wipe; 44pt;
+      **open the run's history and confirm it holds no figures and no text**
+- [ ] **Q47 gate:** tsc clean, vitest green, security suite green in one run, eval passed,
+      `/nutrisa-review since main`
 
 ---
 
@@ -2445,8 +2627,11 @@ Built 2026-10-28, **not yet seen on the phone**:
       within 30 days and does not train on them by default; content its safety systems
       flag can be kept up to 2 years; no zero-retention arrangement applies. Cover the
       POPIA s72 cross-border transfer before this ships. Phase 9's AI consent
-      (`profiles.ai_consent_at`) is the consent for this transfer
-- [ ] **Export** — all data, machine-readable, all tables incl. chat
+      (`profiles.ai_consent_at`) is the consent for this transfer. From Phase 10 it also
+      receives a weekly narration slice (Q20: counts, averages, targets, the trend
+      change; no weight, no ids)
+- [ ] **Export** — all data, machine-readable, all tables incl. chat and
+      `weekly_reports` (Phase 10, Q26)
 - [ ] Export offered at the point of deletion ("download before you delete")
 - [x] Clerk `user.deleted` webhook → Inngest cascade job — `sync-clerk-user-deleted`
       shipped 2026-08-11 with the create/update sync
@@ -2552,6 +2737,10 @@ Only after v1.0 is in daily use.
 | OFF products with no nutrition facts as an "add from the label" search row (Rice Krispies, `5059319007571`) | Search misses a packet often enough to matter. Deferred in the Phase 8 grill, 2026-10-26: a scan already reaches the label reader through the no-match state |
 | A "you haven't logged yet" evening reminder, no AI involved | Phase 9 ships. Named in the Phase 9 grill (Q29, 2026-10-28): when a user stops logging, contact them more, not less (Hormozi, *Retention* p.10–12) |
 | Hold-to-talk voice notes through a free cloud speech tier (Groq's free Whisper): record in the app, transcribe on the server, words land in the box | Users ask for voice beyond the keyboard mic, **and** Sriman accepts a new third party hearing voice notes (a consent-screen change) and the risk of the free tier ending. Decided 2026-10-29: keyboard dictation first. The free on-device route needs Phase 12's paid build (tested: Expo Go refuses it) |
+| Push notification when the weekly report is ready | A user misses reports because nothing tells them one arrived. Needs Expo's push service (a new processor) and stored push tokens. Cut in the Phase 10 grill (Q11), 2026-10-29 |
+| "Ask the coach about this week" from a report | Users ask the coach about their week and it can only say the app doesn't show that. Widens what chat sends Anthropic (Q16) again. Cut in the Phase 10 grill (Q12) |
+| The user's top 30 food names with every chat message (`food-search` Q33 (d)) | The `food-search` eval still misses foods after (a) to (c). About 150 tokens a message, and food names on every turn |
+| Vector search over foods (pgvector plus an embeddings provider) | Misses persist after (d). A new processor and a consent change; Anthropic has no embeddings model. Cut in the Phase 10 grill (Q34) |
 | ~~Apple Developer Program + EAS dev client~~ | *Promoted to **Phase 12** — it's a real v1 requirement, not a cut. Deferred on cost, not scope.* |
 
 ---

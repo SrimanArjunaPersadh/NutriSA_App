@@ -94,7 +94,8 @@ branch review. These are the ones that most often get violated by default:
   calculates.
 - **Four states on every surface**: empty, loading, error, happy. No exceptions.
 - **`user_id` is never accepted from the client.** It is derived server-side from the
-  verified Clerk token and injected through the scoped query layer.
+  verified Clerk token and injected through the scoped query layer. A background job with
+  no session gets its scope from `scopeForJob` (`docs/adr/0001`).
 - **One time authority.** All dates come from `currentLoggingDay()` (Africa/Johannesburg).
   No stray `new Date()`, no client-supplied day key.
 - **Dark only.** No light theme, no toggle, no `dark:` variants. Tokens are fixed in `plan.md`.
